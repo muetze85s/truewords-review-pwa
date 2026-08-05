@@ -1,6 +1,9 @@
 name: Deploy private Review Server
 
 on:
+  push:
+    branches:
+      - agent/server-synchronization
   workflow_dispatch:
 
 permissions:
@@ -12,6 +15,7 @@ concurrency:
 
 jobs:
   validate-and-deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-review]')
     runs-on: ubuntu-latest
     environment: review-server
     steps:
