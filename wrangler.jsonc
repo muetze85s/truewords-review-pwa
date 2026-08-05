@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "truewords-review-sync",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-06",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "truewords-review-sync-db"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DATA",
+      "bucket_name": "truewords-review-sync-data"
+    }
+  ],
+  "vars": {
+    "ACTIVE_DATASET_ID": "philena-2026"
+  }
+}
