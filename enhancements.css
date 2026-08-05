@@ -1,0 +1,95 @@
+/* Bedienverbesserungen für die Situationsprüfung. */
+header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
+}
+
+.tw-section-label {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #0c1524;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.tw-completed {
+  border-top: 2px solid var(--line);
+  background: #0b1422;
+}
+
+.tw-completed > summary {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 11px 12px;
+  cursor: pointer;
+  background: #132038;
+  color: #c7d6eb;
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.tw-completed-list .sit {
+  opacity: .72;
+}
+
+.tw-completed-list .sit.active {
+  opacity: 1;
+}
+
+@media (max-width: 760px) {
+  header {
+    position: sticky !important;
+    top: 0 !important;
+    align-items: center !important;
+    flex-direction: row !important;
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  header .logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  header .eyebrow {
+    display: none;
+  }
+
+  header h1 {
+    font-size: 15px;
+    white-space: nowrap;
+  }
+
+  header .actions {
+    flex: 1;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  header .actions > * {
+    flex: 0 0 auto;
+    padding: 7px 9px;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .list {
+    max-height: 48vh !important;
+    overflow: auto !important;
+  }
+
+  .messages {
+    max-height: calc(100vh - 185px) !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
