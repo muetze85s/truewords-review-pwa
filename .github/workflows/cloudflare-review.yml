@@ -54,6 +54,41 @@ jobs:
           test -f migrations/0001_review_sync.sql
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
+      - name: Ensure workers.dev account subdomain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/subdomain"
+          status=$(curl --silent --show-error \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --output /tmp/workers-subdomain.json \
+            --write-out '%{http_code}' \
+            "$api")
+
+          subdomain=""
+          if [ "$status" = "200" ]; then
+            subdomain=$(node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/workers-subdomain.json','utf8'));process.stdout.write(x.result?.subdomain||'')")
+          fi
+
+          if [ -z "$subdomain" ]; then
+            candidate="truewords-review-${CLOUDFLARE_ACCOUNT_ID:0:8}"
+            curl --fail --silent --show-error \
+              --request PUT \
+              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data "{\"subdomain\":\"${candidate}\"}" \
+              --output /tmp/workers-subdomain.json \
+              "$api"
+            subdomain=$(node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/workers-subdomain.json','utf8'));process.stdout.write(x.result?.subdomain||'')")
+          fi
+
+          test -n "$subdomain"
+          echo "WORKERS_SUBDOMAIN=$subdomain" >> "$GITHUB_ENV"
+          echo "REVIEW_SERVER_URL=https://truewords-review-sync.${subdomain}.workers.dev" >> "$GITHUB_ENV"
+          echo "workers.dev account subdomain is ready."
+
       - name: Deploy Worker and provision D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,6 +107,18 @@ jobs:
           printf '%s' "$LENA_REVIEW_TOKEN" | npx wrangler secret put LENA_REVIEW_TOKEN
           printf '%s' "$ADMIN_REVIEW_TOKEN" | npx wrangler secret put ADMIN_REVIEW_TOKEN
 
+      - name: Enable Worker on workers.dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":false}' \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/truewords-review-sync/subdomain"
+
       - name: Apply D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -80,5 +127,7 @@ jobs:
 
       - name: Verify deployed health endpoint
         run: |
-          curl --fail --silent --show-error --retry 8 --retry-delay 5 \
-            https://review.truewords-paaruebersetzer.online/api/health
+          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+            "${REVIEW_SERVER_URL}/api/health"
+          echo
+          echo "REVIEW_SERVER_URL=${REVIEW_SERVER_URL}"
