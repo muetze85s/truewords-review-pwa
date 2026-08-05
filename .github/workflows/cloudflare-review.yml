@@ -1,9 +1,6 @@
 name: Deploy private Review Server
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -15,7 +12,6 @@ concurrency:
 
 jobs:
   validate-and-deploy:
-    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'agent/server-synchronization'
     runs-on: ubuntu-latest
     environment: review-server
     steps:
@@ -87,7 +83,6 @@ jobs:
           test -n "$subdomain"
           echo "WORKERS_SUBDOMAIN=$subdomain" >> "$GITHUB_ENV"
           echo "REVIEW_SERVER_URL=https://truewords-review-sync.${subdomain}.workers.dev" >> "$GITHUB_ENV"
-          echo "workers.dev account subdomain is ready."
 
       - name: Deploy Worker and provision D1
         env:
