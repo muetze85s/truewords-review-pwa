@@ -141,7 +141,7 @@
 
     const mineOpen = [];
     const mineDone = [];
-    const other = [];
+    const otherButtons = [];
 
     buttons
       .sort((a, b) => Number(a.dataset.sit) - Number(b.dataset.sit))
@@ -149,16 +149,16 @@
         const owner = ownerFor(button);
         const mine = owner === current;
         decorate(button, owner, !mine);
-        if (!mine) other.push(button);
+        if (!mine) otherButtons.push(button);
         else if (isCompleted(button)) mineDone.push(button);
         else mineOpen.push(button);
       });
 
     const ownLabel = sectionLabel(`Meine offenen Situationen · ${current} (${mineOpen.length})`);
-    const done = detailsSection('tw-completed', 'Meine erledigten Situationen', mineDone, false);
-    const other = detailsSection('tw-other-reviewer', `${otherReviewer()}s Bereich · nur Übersicht`, other, false);
+    const doneSection = detailsSection('tw-completed', 'Meine erledigten Situationen', mineDone, false);
+    const otherSection = detailsSection('tw-other-reviewer', `${otherReviewer()}s Bereich · nur Übersicht`, otherButtons, false);
 
-    list.replaceChildren(ownLabel, ...mineOpen, done, other);
+    list.replaceChildren(ownLabel, ...mineOpen, doneSection, otherSection);
   }
 
   function schedule() {
