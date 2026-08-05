@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-worker.mjs",
-    "check": "node --check server-sync.js && node --check scripts/build-worker.mjs && tsc --noEmit",
+    "check": "node --check server-sync.js && node --check scripts/build-worker.mjs && node --check scripts/import-review-data.mjs && tsc --noEmit",
     "dev": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
+    "import:data": "node scripts/import-review-data.mjs",
     "db:migrate:local": "wrangler d1 migrations apply truewords-review-sync-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply truewords-review-sync-db --remote"
   },
