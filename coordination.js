@@ -29,7 +29,7 @@
     const sorted = [...buttons].sort((a, b) => situationId(a) - situationId(b));
     const splitIndex = Math.ceil(sorted.length / 2);
     const philipp = sorted.slice(0, splitIndex);
-    const lena = sorted.slice(splitIndex).reverse();
+    const lena = sorted.slice(splitIndex);
     const owner = new Map();
     philipp.forEach(button => owner.set(button, 'Philipp'));
     lena.forEach(button => owner.set(button, 'Lena'));
@@ -42,8 +42,8 @@
     const lFirst = situationId(plan.lena[0]);
     const lLast = situationId(plan.lena.at(-1));
 
-    if (!plan.lena.length) return `Philipp prüft ${pFirst}–${pLast} von vorne.`;
-    return `Philipp ${pFirst}–${pLast} vorwärts · Lena ${lFirst}–${lLast} rückwärts`;
+    if (!plan.lena.length) return `Philipp prüft ${pFirst}–${pLast} chronologisch.`;
+    return `Philipp ${pFirst}–${pLast} chronologisch · Lena ${lFirst}–${lLast} chronologisch`;
   }
 
   function setReviewer(name) {
@@ -107,7 +107,7 @@
     overlay.innerHTML = `
       <div class="tw-reviewer-dialog" role="dialog" aria-modal="true" aria-labelledby="tw-reviewer-title">
         <h2 id="tw-reviewer-title">Wer prüft gerade?</h2>
-        <p>${planText(plan)}. So arbeitet ihr von beiden Enden aufeinander zu.</p>
+        <p>${planText(plan)}. Beide prüfen ihren Abschnitt in zeitlicher Reihenfolge.</p>
         <div class="tw-reviewer-dialog-actions">
           <button type="button" data-tw-reviewer="Philipp">Ich bin Philipp</button>
           <button type="button" data-tw-reviewer="Lena">Ich bin Lena</button>
