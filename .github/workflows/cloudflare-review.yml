@@ -127,7 +127,10 @@ jobs:
 
       - name: Verify deployed health endpoint
         run: |
-          curl --fail --silent --show-error --retry 12 --retry-delay 5 \
+          sleep 30
+          curl --fail --silent --show-error \
+            --retry 36 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 10 --max-time 20 \
             "${REVIEW_SERVER_URL}/api/health"
           echo
           echo "REVIEW_SERVER_URL=${REVIEW_SERVER_URL}"
