@@ -6,6 +6,9 @@
 
   let scheduled = false;
   let advanceAfterSave = false;
+  let autoCreateAfterBoundary = false;
+  let autoCreateDeadline = 0;
+  let autoCreateRunning = false;
 
   function isCompleted(button) {
     const text = button.querySelector('small')?.textContent || '';
@@ -18,6 +21,7 @@
     requestAnimationFrame(() => {
       scheduled = false;
       organizeSituationList();
+      autoCreateRange();
     });
   }
 
@@ -62,7 +66,37 @@
     }
   }
 
+  function autoCreateRange() {
+    if (!autoCreateAfterBoundary || autoCreateRunning) return;
+    if (Date.now() > autoCreateDeadline) {
+      autoCreateAfterBoundary = false;
+      return;
+    }
+
+    const makeButton = app.querySelector('#make');
+    if (!makeButton || makeButton.disabled) return;
+
+    autoCreateAfterBoundary = false;
+    autoCreateRunning = true;
+    makeButton.click();
+    setTimeout(() => {
+      autoCreateRunning = false;
+    }, 0);
+  }
+
   app.addEventListener('click', event => {
+    const boundaryButton = event.target.closest('[data-start], [data-end]');
+    if (boundaryButton) {
+      autoCreateAfterBoundary = true;
+      autoCreateDeadline = Date.now() + 60000;
+      return;
+    }
+
+    if (event.target.closest('#reset, #selectRange')) {
+      autoCreateAfterBoundary = false;
+      return;
+    }
+
     const saveButton = event.target.closest('#saveMeta');
     if (!saveButton) return;
     const status = app.querySelector('#status')?.value;
