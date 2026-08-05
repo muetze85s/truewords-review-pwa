@@ -21,17 +21,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate files
+      - name: Validate source files
         run: |
           test -f index.html
           test -f manifest.webmanifest
           test -f icon.svg
           test -f sw.js
+          test -f enhancements.css
+          test -f enhancements.js
           python -m json.tool manifest.webmanifest >/dev/null
           node --check sw.js
+          node --check enhancements.js
           awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html > /tmp/review-app.js
           node --check /tmp/review-app.js
-          ! grep -H "Philena_chat" index.html manifest.webmanifest icon.svg sw.js README.md
+          ! grep -H "Philena_chat" index.html manifest.webmanifest icon.svg sw.js enhancements.css enhancements.js README.md
+
+      - name: Prepare public site
+        run: |
+          rm -rf site
+          mkdir site
+          cp index.html manifest.webmanifest icon.svg sw.js enhancements.css enhancements.js .nojekyll site/
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('site/index.html')
+          html = path.read_text(encoding='utf-8')
+          html = html.replace('</head>', '  <link rel="stylesheet" href="./enhancements.css">\n</head>', 1)
+          html = html.replace('</body>', '  <script src="./enhancements.js"></script>\n</body>', 1)
+          path.write_text(html, encoding='utf-8')
+          PY
+          grep -q 'enhancements.css' site/index.html
+          grep -q 'enhancements.js' site/index.html
+          ! grep -R "Philena_chat" site
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -39,7 +59,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: .
+          path: site
 
   deploy:
     environment:
