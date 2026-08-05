@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "truewords-review-sync",
-  "main": "src/worker.ts",
+  "main": "src/worker-d1.ts",
   "compatibility_date": "2026-08-06",
   "workers_dev": false,
   "routes": [
@@ -20,12 +20,6 @@
     {
       "binding": "DB",
       "database_name": "truewords-review-sync-db"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "DATA",
-      "bucket_name": "truewords-review-sync-data"
     }
   ],
   "vars": {
