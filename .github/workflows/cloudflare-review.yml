@@ -22,7 +22,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Validate required secrets
         env:
@@ -46,6 +45,7 @@ jobs:
           npm run check
           npm run build
           test -f dist/index.html
+          test -f dist/admin.html
           test -f dist/server-sync.js
           test -f migrations/0001_review_sync.sql
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
