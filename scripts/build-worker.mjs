@@ -5,6 +5,9 @@ const root = resolve(process.cwd());
 const dist = resolve(root, 'dist');
 const files = [
   'index.html',
+  'admin.html',
+  'admin-upload.css',
+  'admin-upload.js',
   'manifest.webmanifest',
   'icon.svg',
   'sw.js',
