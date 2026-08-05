@@ -1,0 +1,104 @@
+:root {
+  color-scheme: dark;
+  --bg: #08101c;
+  --panel: #101a2b;
+  --line: #2b3a55;
+  --text: #edf3ff;
+  --muted: #9fb0ca;
+  --accent: #1f5fae;
+  --good: #4dd4a7;
+  --bad: #ff7b86;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #07101c, #0d1727);
+  color: var(--text);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.card {
+  width: min(680px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 24px 70px #0009;
+}
+
+h1 { margin: 4px 0 12px; font-size: clamp(24px, 5vw, 36px); }
+p { margin: 0; }
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.intro, .privacy { color: var(--muted); line-height: 1.5; }
+
+form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input, button {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+}
+
+input {
+  background: #0c1524;
+  color: var(--text);
+}
+
+button {
+  margin-top: 4px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+button:disabled { opacity: .55; cursor: wait; }
+small { color: var(--muted); line-height: 1.35; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.status {
+  margin-top: 16px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0c1524;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.status[data-state="working"] { border-color: #526f9f; color: #cfe0ff; }
+.status[data-state="ok"] { border-color: #2c7b65; color: #8ff1d2; }
+.status[data-state="error"] { border-color: #8a3e4a; color: #ffb8c0; }
+.privacy { margin-top: 12px; font-size: 12px; }
+
+@media (max-width: 640px) {
+  .page { place-items: start center; padding: 12px; }
+  .card { padding: 18px; border-radius: 14px; }
+  .grid { grid-template-columns: 1fr; }
+}
