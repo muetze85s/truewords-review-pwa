@@ -1,0 +1,19 @@
+{
+  "name": "TrueWords Situationsprüfung 2026",
+  "short_name": "TW Prüfung",
+  "description": "Lokale Prüfung und Zuordnung von Gesprächssituationen aus dem Jahr 2026.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#08101c",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
