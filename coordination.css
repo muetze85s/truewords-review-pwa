@@ -1,0 +1,132 @@
+/* Feste Arbeitsaufteilung zwischen Philipp und Lena. */
+.tw-reviewer-bar {
+  position: sticky;
+  top: 116px;
+  z-index: 85;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1040px;
+  margin: -4px auto 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #0b1422f2;
+  color: var(--muted);
+  backdrop-filter: blur(10px);
+}
+
+.tw-reviewer-bar strong {
+  color: var(--text);
+}
+
+.tw-reviewer-bar button {
+  padding: 7px 12px;
+  border-radius: 999px;
+}
+
+.tw-reviewer-bar button.active {
+  background: #1f5fae;
+  border-color: #4d8bd5;
+  color: #fff;
+}
+
+.tw-reviewer-rule {
+  font-size: 12px;
+}
+
+.tw-owner-badge {
+  display: inline-block !important;
+  margin: 5px 0 0 !important;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #233553;
+  color: #dce8fb !important;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tw-other-reviewer {
+  border-top: 2px solid var(--line);
+  background: #0a121f;
+}
+
+.tw-other-reviewer > summary {
+  padding: 12px;
+  cursor: pointer;
+  background: #101a2b;
+  color: var(--muted);
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.tw-other-reviewer .sit {
+  opacity: .55;
+}
+
+.tw-other-reviewer .sit.active {
+  opacity: 1;
+}
+
+.tw-reviewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #02060ddd;
+  backdrop-filter: blur(8px);
+}
+
+.tw-reviewer-dialog {
+  width: min(440px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #101a2b;
+  box-shadow: 0 24px 70px #000b;
+  text-align: center;
+}
+
+.tw-reviewer-dialog h2 {
+  margin-bottom: 10px;
+}
+
+.tw-reviewer-dialog p {
+  margin-bottom: 18px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.tw-reviewer-dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.tw-reviewer-dialog-actions button {
+  padding: 13px;
+  background: #1f5fae;
+  border-color: #4d8bd5;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .tw-reviewer-bar {
+    top: 101px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    margin-bottom: 7px;
+    padding: 6px 8px;
+    white-space: nowrap;
+  }
+
+  .tw-reviewer-rule {
+    display: none;
+  }
+
+  .tw-reviewer-dialog-actions {
+    grid-template-columns: 1fr;
+  }
+}
