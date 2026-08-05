@@ -1,0 +1,40 @@
+name: Validate Review Server Branch
+
+on:
+  push:
+    branches:
+      - agent/server-synchronization
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm install
+
+      - name: Check and build
+        run: |
+          npm run check
+          npm run build
+          test -f dist/index.html
+          test -f dist/server-sync.js
+          test -f dist/server-sync.css
+          grep -q 'server-sync.js' dist/index.html
+          grep -q 'server-sync.css' dist/index.html
+          ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
+
+      - name: Wrangler dry run
+        run: npx wrangler deploy --dry-run
