@@ -1,0 +1,108 @@
+.tw-server-login {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 10, 18, .88);
+  backdrop-filter: blur(12px);
+}
+
+.tw-server-login-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #101a2b;
+  box-shadow: 0 24px 70px #000a;
+}
+
+.tw-server-login-card p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.tw-server-login-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tw-server-login-card input,
+.tw-server-login-card select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0c1524;
+  color: var(--text);
+}
+
+.tw-server-error {
+  padding: 10px 12px;
+  border: 1px solid #8a3e4a;
+  border-radius: 9px;
+  background: #3f2028;
+  color: #ffd5d8;
+}
+
+.tw-server-status {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 250;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #101a2bef;
+  color: var(--muted);
+  font-size: 12px;
+  box-shadow: 0 8px 24px #0007;
+  backdrop-filter: blur(10px);
+}
+
+.tw-server-status[data-state="ok"] {
+  border-color: #2c7b65;
+  color: #8ff1d2;
+}
+
+.tw-server-status[data-state="working"] {
+  border-color: #526f9f;
+  color: #cfe0ff;
+}
+
+.tw-server-status[data-state="error"] {
+  border-color: #8a3e4a;
+  color: #ffb8c0;
+}
+
+.tw-server-note {
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: #132038;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .tw-server-login {
+    align-items: start;
+    padding-top: max(24px, env(safe-area-inset-top));
+  }
+
+  .tw-server-login-card {
+    padding: 18px;
+  }
+
+  .tw-server-status {
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    max-width: calc(100vw - 16px);
+  }
+}
