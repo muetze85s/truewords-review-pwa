@@ -5,20 +5,21 @@ CREATE TABLE IF NOT EXISTS review_datasets (
   name TEXT NOT NULL,
   year INTEGER NOT NULL,
   dataset_hash TEXT NOT NULL UNIQUE,
-  r2_key TEXT NOT NULL UNIQUE,
+  chat_meta_json TEXT NOT NULL,
   annotations_json TEXT NOT NULL,
+  owners_json TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1,
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS review_owners (
+CREATE TABLE IF NOT EXISTS review_chat_chunks (
   dataset_id TEXT NOT NULL,
-  situation_id INTEGER NOT NULL,
-  assigned_to TEXT NOT NULL CHECK (assigned_to IN ('Philipp', 'Lena')),
+  chunk_index INTEGER NOT NULL,
+  messages_json TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (dataset_id, situation_id),
+  PRIMARY KEY (dataset_id, chunk_index),
   FOREIGN KEY (dataset_id) REFERENCES review_datasets(id) ON DELETE CASCADE
 );
 
@@ -36,5 +37,5 @@ CREATE TABLE IF NOT EXISTS review_events (
 CREATE INDEX IF NOT EXISTS idx_review_events_dataset_created
   ON review_events(dataset_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_review_owners_reviewer
-  ON review_owners(dataset_id, assigned_to, situation_id);
+CREATE INDEX IF NOT EXISTS idx_review_chat_chunks_dataset
+  ON review_chat_chunks(dataset_id, chunk_index);
