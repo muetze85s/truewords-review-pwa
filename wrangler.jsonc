@@ -3,13 +3,8 @@
   "name": "truewords-review-sync",
   "main": "src/worker-d1.ts",
   "compatibility_date": "2026-08-05",
-  "workers_dev": false,
-  "routes": [
-    {
-      "pattern": "review.truewords-paaruebersetzer.online",
-      "custom_domain": true
-    }
-  ],
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
