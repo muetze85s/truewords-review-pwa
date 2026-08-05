@@ -31,7 +31,7 @@ jobs:
           node --check sw.js
           awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html > /tmp/review-app.js
           node --check /tmp/review-app.js
-          ! grep -R "Philena_chat" . --exclude-dir=.git
+          ! grep -H "Philena_chat" index.html manifest.webmanifest icon.svg sw.js README.md
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
