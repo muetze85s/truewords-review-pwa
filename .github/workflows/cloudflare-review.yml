@@ -1,0 +1,75 @@
+name: Deploy private Review Server
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truewords-review-server
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate required secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PHILIPP_REVIEW_TOKEN: ${{ secrets.PHILIPP_REVIEW_TOKEN }}
+          LENA_REVIEW_TOKEN: ${{ secrets.LENA_REVIEW_TOKEN }}
+          ADMIN_REVIEW_TOKEN: ${{ secrets.ADMIN_REVIEW_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$PHILIPP_REVIEW_TOKEN"
+          test -n "$LENA_REVIEW_TOKEN"
+          test -n "$ADMIN_REVIEW_TOKEN"
+
+      - name: Install
+        run: npm install
+
+      - name: Validate source
+        run: |
+          npm run check
+          npm run build
+          test -f dist/index.html
+          test -f dist/server-sync.js
+          test -f migrations/0001_review_sync.sql
+          ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
+
+      - name: Deploy Worker and provision bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Configure private access tokens
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PHILIPP_REVIEW_TOKEN: ${{ secrets.PHILIPP_REVIEW_TOKEN }}
+          LENA_REVIEW_TOKEN: ${{ secrets.LENA_REVIEW_TOKEN }}
+          ADMIN_REVIEW_TOKEN: ${{ secrets.ADMIN_REVIEW_TOKEN }}
+        run: |
+          printf '%s' "$PHILIPP_REVIEW_TOKEN" | npx wrangler secret put PHILIPP_REVIEW_TOKEN
+          printf '%s' "$LENA_REVIEW_TOKEN" | npx wrangler secret put LENA_REVIEW_TOKEN
+          printf '%s' "$ADMIN_REVIEW_TOKEN" | npx wrangler secret put ADMIN_REVIEW_TOKEN
+
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 migrations apply truewords-review-sync-db --remote
