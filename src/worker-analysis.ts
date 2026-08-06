@@ -26,7 +26,10 @@ type OwnerAssignment = {
   schemaVersion?: unknown;
   strategy?: unknown;
   oddSituationOwner?: unknown;
+  situationCount?: unknown;
+  splitIndex?: unknown;
   owners?: unknown;
+  [key: string]: unknown;
 };
 
 type AnnotationPayload = {
