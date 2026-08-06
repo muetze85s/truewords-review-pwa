@@ -1,9 +1,11 @@
-const CACHE = 'truewords-review-pwa-server-v2';
+const CACHE = 'truewords-review-pwa-server-v3';
 const FILES = [
-  './',
-  './index.html',
   './manifest.webmanifest',
   './icon.svg',
+  './portal.css',
+  './login.js',
+  './account-setup.js',
+  './upload.js',
   './enhancements.css',
   './enhancements.js',
   './coordination.css',
@@ -33,22 +35,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Private chat and review state must never be cached by the service worker.
-  if (url.pathname.startsWith('/api/')) {
+  // Private API responses and authenticated HTML pages must never enter Cache Storage.
+  if (url.pathname.startsWith('/api/') || request.mode === 'navigate') {
     event.respondWith(fetch(request));
-    return;
-  }
-
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put('./index.html', copy));
-          return response;
-        })
-        .catch(() => caches.match('./index.html')),
-    );
     return;
   }
 
