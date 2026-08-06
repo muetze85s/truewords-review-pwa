@@ -1,0 +1,41 @@
+name: Clean duplicate account timezone helpers once
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'agent/server-synchronization'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/server-synchronization
+          fetch-depth: 0
+
+      - name: Normalize helpers
+        run: node scripts/cleanup-account-timezone-v10.mjs
+
+      - name: Validate
+        run: |
+          node --check review.js
+          test "$(grep -c 'function accountTimeZone' review.js)" = "1"
+          test "$(grep -c 'function accountTimeLabel' review.js)" = "1"
+
+      - name: Commit cleanup
+        run: |
+          if git diff --quiet; then
+            echo "Already clean"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add review.js
+          git commit -m "Normalize account timezone helpers"
+          git push origin HEAD:agent/server-synchronization
