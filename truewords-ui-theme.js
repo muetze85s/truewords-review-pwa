@@ -86,6 +86,7 @@
       || document.querySelector('.header .account')
       || document.querySelector('.card .account')
       || document.body;
+    if (!host) return;
     host.append(themeControl());
     applyTheme();
   }
