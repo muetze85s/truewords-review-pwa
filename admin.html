@@ -13,7 +13,7 @@
     <section class="card">
       <div class="eyebrow">Einmalige Einrichtung</div>
       <h1>Bereinigten Rohchat einspielen</h1>
-      <p class="intro">Der vollständige bereinigte Telegram-Chat wird unverändert an den privaten Cloudflare-Worker übertragen. Die Jahresauswahl erfolgt anschließend in der Prüf-PWA. Es werden keine KI-Vorschläge importiert und keine Chatdateien in GitHub gespeichert.</p>
+      <p class="intro">Der vollständige bereinigte Telegram-Chat wird in kleinen geprüften Datenblöcken an den privaten Cloudflare-Worker übertragen. Die Jahresauswahl erfolgt anschließend in der Prüf-PWA. Es werden keine KI-Vorschläge importiert und keine Chatdateien in GitHub gespeichert.</p>
 
       <form id="upload-form">
         <label>
@@ -41,8 +41,17 @@
         <button id="submit" type="submit">Bereinigten Rohchat auf Server laden</button>
       </form>
 
+      <section id="progress-wrap" class="progress-wrap" hidden aria-live="polite">
+        <div class="progress-head">
+          <span id="progress-label">Import wird vorbereitet</span>
+          <strong id="progress-percent">0 %</strong>
+        </div>
+        <progress id="progress" max="100" value="0">0 %</progress>
+        <div id="progress-detail" class="progress-detail"></div>
+      </section>
+
       <div id="status" class="status" role="status" aria-live="polite">Noch nichts übertragen.</div>
-      <p class="privacy">Der Zugangscode wird nicht gespeichert. Der Import legt einen leeren Prüfstand an; Segmentierungs- und Analysevorschläge entstehen später als getrennte Versionen.</p>
+      <p class="privacy">Der Zugangscode wird nicht gespeichert. Der Import legt einen leeren Prüfstand an; Segmentierungs- und Analysevorschläge entstehen später als getrennte Versionen. Während des Imports diese Seite geöffnet lassen.</p>
     </section>
   </main>
   <script src="./admin-upload.js"></script>
