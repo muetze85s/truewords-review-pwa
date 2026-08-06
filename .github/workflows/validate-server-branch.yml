@@ -58,11 +58,17 @@ jobs:
           grep -q 'worker-source-integrity.ts' wrangler.jsonc
           grep -q 'philena-2026-pilot-v2' wrangler.jsonc
           grep -q 'pilot-v2.js' dist/upload.html
-          grep -q 'Test 2 erzeugen und starten' dist/upload.html
+          grep -q 'Rohchat und KI-Vorschläge hochladen' dist/upload.html
+          grep -q 'KI-Vorselektionsdatei auswählen' dist/upload.html
+          grep -q 'Weiter ohne Upload' dist/upload.html
+          grep -q 'PRESELECTION_SITUATIONS = 28' dist/upload.js
+          grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
+          grep -q 'PRESELECTION_SHA256' dist/upload.js
+          ! grep -q 'generatePilot(prepared' dist/upload.js
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
-      - name: Test pilot two coverage and placeholders
+      - name: Test lossless 2026 preparation and placeholders
         run: |
           node --input-type=module <<'EOF'
           import fs from 'node:fs';
@@ -111,13 +117,6 @@ jobs:
           if (prepared.reviewEvents[1].text !== 'Text bleibt unverändert') throw new Error('TEXT_CHANGED');
           if (prepared.reviewEvents[2].text !== '[Anruf · 4 Min.]') throw new Error(`CALL_PLACEHOLDER_WRONG:${prepared.reviewEvents[2].text}`);
           if (prepared.reviewEvents[3].text !== '[Video gesendet · 43 Sek.]') throw new Error('VIDEO_PLACEHOLDER_WRONG');
-
-          const annotations = pilot.generatePilot(prepared, pilot.EXPECTED_SHA256);
-          if (annotations.situations.length !== 29) throw new Error('SITUATION_COUNT_WRONG');
-          if (Object.keys(annotations.assignments).length !== 250) throw new Error('ASSIGNMENT_COUNT_WRONG');
-          if (annotations.preselection.coveragePercent !== 100) throw new Error('COVERAGE_WRONG');
-          if (annotations.preselection.silentLosses !== 0) throw new Error('PILOT_SILENT_LOSS');
-          if (annotations.preselection.includesMetadataPlaceholders !== true) throw new Error('PLACEHOLDER_FLAG_MISSING');
           EOF
 
       - name: Wrangler dry run
