@@ -7,6 +7,7 @@ const files = [
   'index.html',
   'review.html',
   'review.css',
+  'truewords-theme.css',
   'review.js',
   'admin.html',
   'admin-upload.css',
