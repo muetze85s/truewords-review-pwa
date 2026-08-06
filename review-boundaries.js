@@ -16,13 +16,13 @@
     const right = numericMessageId(rightElement);
     if (left === null || right === null || right <= left + 1) return null;
 
-    const missing = right - left - 1;
+    const distance = right - left;
     const notice = document.createElement('div');
     notice.className = 'export-gap-notice';
     notice.setAttribute('role', 'note');
     notice.innerHTML = `
-      <strong>ID-Sprung von ${left} auf ${right}</strong>
-      <span>${missing} Zwischen-ID${missing === 1 ? '' : 's'} (${left + 1}–${right - 1}) ${missing === 1 ? 'ist' : 'sind'} im geladenen Rohchat nicht vorhanden. Die Prüfansicht blendet an dieser Stelle nichts zusätzlich aus.</span>`;
+      <strong>Telegram-ID-Sprung von ${left} auf ${right}</strong>
+      <span>Der numerische Abstand beträgt ${distance}. Telegram-IDs sind nicht lückenlos und beweisen daher keine ${distance - 1} fehlenden Nachrichten. Im aktuell geladenen Prüfdatensatz ist zwischen diesen beiden Datensätzen kein weiteres Ereignis gespeichert.</span>`;
     return notice;
   }
 
