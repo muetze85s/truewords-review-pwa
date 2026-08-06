@@ -1,4 +1,4 @@
-import portalWorker from './worker-auth-fast';
+import portalWorker from './worker-chat-stream';
 
 interface Env {
   DB: D1Database;
