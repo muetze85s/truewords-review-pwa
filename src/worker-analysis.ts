@@ -9,6 +9,8 @@ interface Env {
   ADMIN_REVIEW_TOKEN?: string;
 }
 
+type Owner = 'Philipp' | 'Lena';
+
 type Situation = {
   id: number;
   label?: string;
@@ -16,7 +18,15 @@ type Situation = {
   kind?: string;
   status?: string;
   createdAt?: string;
+  sourceStartId?: string | number;
   [key: string]: unknown;
+};
+
+type OwnerAssignment = {
+  schemaVersion?: unknown;
+  strategy?: unknown;
+  oddSituationOwner?: unknown;
+  owners?: unknown;
 };
 
 type AnnotationPayload = {
@@ -27,6 +37,8 @@ type AnnotationPayload = {
   exportedAt?: string;
   situations: Situation[];
   assignments: Record<string, number>;
+  owners?: Record<string, Owner>;
+  ownerAssignment?: OwnerAssignment;
   events?: unknown[];
   preselection?: unknown;
   [key: string]: unknown;
@@ -37,8 +49,6 @@ type DatasetRow = {
   name: string;
   dataset_hash: string;
 };
-
-type Owner = 'Philipp' | 'Lena';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -82,17 +92,14 @@ function isAnnotationPayload(value: unknown): value is AnnotationPayload {
   if (!value || typeof value !== 'object') return false;
   const payload = value as Partial<AnnotationPayload>;
   return (
-    typeof payload.schemaVersion === 'string' &&
-    Array.isArray(payload.situations) &&
-    !!payload.assignments &&
-    typeof payload.assignments === 'object'
+    typeof payload.schemaVersion === 'string'
+    && Array.isArray(payload.situations)
+    && !!payload.assignments
+    && typeof payload.assignments === 'object'
   );
 }
 
-function normalizeAnnotations(
-  payload: AnnotationPayload,
-  dataset: DatasetRow,
-): AnnotationPayload {
+function normalizeAnnotations(payload: AnnotationPayload, dataset: DatasetRow): AnnotationPayload {
   const situations = payload.situations
     .map((situation) => ({
       ...situation,
@@ -115,7 +122,7 @@ function normalizeAnnotations(
 
   return {
     ...payload,
-    schemaVersion: 'truewords-manual-segmentation/v2',
+    schemaVersion: payload.schemaVersion,
     datasetHash: dataset.dataset_hash,
     datasetLabel: dataset.name,
     situations,
@@ -124,12 +131,69 @@ function normalizeAnnotations(
   };
 }
 
-function ownersFor(situations: Situation[]): Record<string, Owner> {
-  const sorted = [...situations].sort((a, b) => Number(a.id) - Number(b.id));
+function chronologicalSituations(situations: Situation[]): Situation[] {
+  return [...situations].sort((left, right) => {
+    const leftStart = Number(left.sourceStartId);
+    const rightStart = Number(right.sourceStartId);
+    if (Number.isFinite(leftStart) && Number.isFinite(rightStart) && leftStart !== rightStart) {
+      return leftStart - rightStart;
+    }
+    return Number(left.id) - Number(right.id);
+  });
+}
+
+function expectedOwners(situations: Situation[]): Record<string, Owner> {
+  const sorted = chronologicalSituations(situations);
   const splitAt = Math.ceil(sorted.length / 2);
   return Object.fromEntries(
-    sorted.map((situation, index) => [String(situation.id), index < splitAt ? 'Philipp' : 'Lena']),
+    sorted.map((situation, index) => [
+      String(situation.id),
+      index < splitAt ? 'Philipp' : 'Lena',
+    ]),
   );
+}
+
+function explicitOwners(payload: AnnotationPayload): Record<string, Owner> | null {
+  const assignment = payload.ownerAssignment;
+  if (!assignment) return null;
+  if (
+    assignment.schemaVersion !== 'truewords-owner-assignment/v1'
+    || assignment.strategy !== 'chronological-half-split'
+    || assignment.oddSituationOwner !== 'Philipp'
+    || !assignment.owners
+    || typeof assignment.owners !== 'object'
+    || Array.isArray(assignment.owners)
+  ) {
+    throw new Error('Die Prüfaufteilung in der KI-Datei ist ungültig.');
+  }
+
+  const supplied = assignment.owners as Record<string, unknown>;
+  const expected = expectedOwners(payload.situations);
+  const expectedIds = Object.keys(expected).sort();
+  const suppliedIds = Object.keys(supplied).sort();
+  if (JSON.stringify(expectedIds) !== JSON.stringify(suppliedIds)) {
+    throw new Error('Die Prüfaufteilung deckt nicht exakt alle Situationen ab.');
+  }
+
+  for (const [id, owner] of Object.entries(expected)) {
+    if (supplied[id] !== owner) {
+      throw new Error(`Situation ${id} ist nicht gemäß Halbteilungsregel ${owner} zugeordnet.`);
+    }
+    if (payload.owners?.[id] && payload.owners[id] !== owner) {
+      throw new Error(`Die Owner-Angaben für Situation ${id} widersprechen sich.`);
+    }
+  }
+  return expected;
+}
+
+function ownersFor(payload: AnnotationPayload): {
+  owners: Record<string, Owner>;
+  source: 'explicit-owner-assignment' | 'legacy-half-split';
+} {
+  const explicit = explicitOwners(payload);
+  return explicit
+    ? { owners: explicit, source: 'explicit-owner-assignment' }
+    : { owners: expectedOwners(payload.situations), source: 'legacy-half-split' };
 }
 
 async function importAnalysisVersion(request: Request, env: Env): Promise<Response> {
@@ -158,11 +222,28 @@ async function importAnalysisVersion(request: Request, env: Env): Promise<Respon
   `).bind(body.datasetId).first<DatasetRow>();
   if (!dataset) return error('Der Rohchat-Datensatz wurde nicht gefunden.', 404);
 
-  const annotations = normalizeAnnotations(body.annotations, dataset);
+  let annotations: AnnotationPayload;
+  let ownerResult: ReturnType<typeof ownersFor>;
+  try {
+    annotations = normalizeAnnotations(body.annotations, dataset);
+    ownerResult = ownersFor(annotations);
+  } catch (caught) {
+    return error(caught instanceof Error ? caught.message : 'Prüfaufteilung ist ungültig.', 409);
+  }
+
   if (!annotations.situations.length) return error('Die Vorschlagsdatei enthält keine Situationen.');
   if (!Object.keys(annotations.assignments).length) return error('Die Vorschlagsdatei enthält keine Zuordnungen.');
 
-  const owners = ownersFor(annotations.situations);
+  annotations.ownerAssignment = {
+    schemaVersion: 'truewords-owner-assignment/v1',
+    strategy: 'chronological-half-split',
+    oddSituationOwner: 'Philipp',
+    situationCount: annotations.situations.length,
+    splitIndex: Math.ceil(annotations.situations.length / 2),
+    owners: ownerResult.owners,
+  };
+  annotations.owners = ownerResult.owners;
+
   const label = String(body.label || body.versionId).slice(0, 240);
   const source = String(body.source || 'pilot-v1').slice(0, 120);
   const parameters = body.parameters && typeof body.parameters === 'object'
@@ -203,7 +284,7 @@ async function importAnalysisVersion(request: Request, env: Env): Promise<Respon
       UPDATE review_datasets
       SET annotations_json = ?1, owners_json = ?2, revision = revision + 1, updated_at = ?3
       WHERE id = ?4
-    `).bind(JSON.stringify(annotations), JSON.stringify(owners), now, dataset.id),
+    `).bind(JSON.stringify(annotations), JSON.stringify(ownerResult.owners), now, dataset.id),
     env.DB.prepare(`
       INSERT INTO review_events (dataset_id, reviewer, action, payload_json)
       VALUES (?1, 'Admin', 'analysis_version_activated', ?2)
@@ -213,6 +294,8 @@ async function importAnalysisVersion(request: Request, env: Env): Promise<Respon
       source,
       situations: annotations.situations.length,
       assignments: Object.keys(annotations.assignments).length,
+      ownerAssignmentSource: ownerResult.source,
+      owners: ownerResult.owners,
     })),
   ]);
 
@@ -223,9 +306,10 @@ async function importAnalysisVersion(request: Request, env: Env): Promise<Respon
     label,
     situations: annotations.situations.length,
     assignments: Object.keys(annotations.assignments).length,
+    ownerAssignmentSource: ownerResult.source,
     split: {
-      Philipp: Object.values(owners).filter((owner) => owner === 'Philipp').length,
-      Lena: Object.values(owners).filter((owner) => owner === 'Lena').length,
+      Philipp: Object.values(ownerResult.owners).filter((owner) => owner === 'Philipp').length,
+      Lena: Object.values(ownerResult.owners).filter((owner) => owner === 'Lena').length,
     },
   }, 201);
 }
