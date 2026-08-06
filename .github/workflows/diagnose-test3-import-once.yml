@@ -1,0 +1,70 @@
+name: Diagnose Test 3 import once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-test3-import-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install
+
+      - name: Read import state without chat content
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command "
+            SELECT id, name, year, dataset_hash, revision, is_active, created_at, updated_at,
+                   length(chat_meta_json) AS chat_meta_bytes,
+                   length(annotations_json) AS annotations_bytes,
+                   length(owners_json) AS owners_bytes
+            FROM review_datasets
+            WHERE id = 'philena-2026-pilot-v3-unseen';
+
+            SELECT dataset_id, upload_id, expected_chunks, expected_messages, dataset_hash, started_at, updated_at
+            FROM review_import_sessions
+            WHERE dataset_id = 'philena-2026-pilot-v3-unseen';
+
+            SELECT dataset_id, COUNT(*) AS chunks, COALESCE(SUM(message_count), 0) AS messages,
+                   MIN(chunk_index) AS first_chunk, MAX(chunk_index) AS last_chunk
+            FROM review_chat_chunks
+            WHERE dataset_id = 'philena-2026-pilot-v3-unseen'
+            GROUP BY dataset_id;
+
+            SELECT id, dataset_id, label, source, schema_version, is_active, created_at, updated_at,
+                   length(parameters_json) AS parameters_bytes,
+                   length(annotations_json) AS annotations_bytes
+            FROM review_analysis_versions
+            WHERE dataset_id = 'philena-2026-pilot-v3-unseen'
+            ORDER BY updated_at DESC;
+
+            SELECT id, dataset_id, reviewer, action, created_at, length(payload_json) AS payload_bytes
+            FROM review_events
+            WHERE dataset_id = 'philena-2026-pilot-v3-unseen'
+            ORDER BY id DESC LIMIT 20;
+
+            PRAGMA foreign_key_check;
+          " > test3-import-diagnosis.json
+
+      - name: Upload diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: test3-import-diagnosis
+          path: test3-import-diagnosis.json
+          retention-days: 2
