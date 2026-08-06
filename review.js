@@ -2,6 +2,7 @@
   'use strict';
 
   const app = document.getElementById('review-app');
+  const SHOW_COMPLETED_KEY = 'truewords-review/show-completed';
   const state = {
     user: null,
     dataset: null,
@@ -12,6 +13,8 @@
     modified: new Set(),
     dirty: false,
     saving: false,
+    showCompleted: sessionStorage.getItem(SHOW_COMPLETED_KEY) === '1',
+    scrollTarget: null,
     pollTimer: null,
   };
 
@@ -110,6 +113,10 @@
     return ['confirmed', 'corrected', 'unclear'].includes(value) ? value : 'open';
   }
 
+  function isDone(item) {
+    return ['confirmed', 'corrected'].includes(statusValue(item));
+  }
+
   function statusLabel(item) {
     return {
       open: 'Offen',
@@ -119,14 +126,34 @@
     }[statusValue(item)];
   }
 
+  function openSituations() {
+    return situations().filter((item) => !isDone(item));
+  }
+
+  function completedSituations() {
+    return situations().filter(isDone);
+  }
+
+  function listSituations() {
+    return state.showCompleted
+      ? [...openSituations(), ...completedSituations()]
+      : openSituations();
+  }
+
   function selectedSituation() {
     return situation(state.selectedId);
   }
 
   function firstOwnSelection() {
-    const mine = situations().filter((item) => isMine(item.id));
-    const open = mine.find((item) => statusValue(item) === 'open' || statusValue(item) === 'unclear');
-    return Number((open || mine[0] || situations()[0])?.id || 0) || null;
+    const mine = openSituations().filter((item) => isMine(item.id));
+    const preferred = mine.find((item) => statusValue(item) === 'open' || statusValue(item) === 'unclear');
+    return Number((preferred || mine[0] || openSituations()[0])?.id || 0) || null;
+  }
+
+  function nextOwnOpenSituation(currentId) {
+    const mine = openSituations().filter((item) => isMine(item.id));
+    const currentIndex = mine.findIndex((item) => Number(item.id) === Number(currentId));
+    return mine.slice(currentIndex + 1)[0] || mine[0] || openSituations()[0] || null;
   }
 
   function ownerStats() {
@@ -139,7 +166,7 @@
       if (!result[assignedOwner]) return;
       result[assignedOwner].situations += 1;
       result[assignedOwner].messages += situationMessages(item.id).length;
-      if (['confirmed', 'corrected'].includes(statusValue(item))) result[assignedOwner].done += 1;
+      if (isDone(item)) result[assignedOwner].done += 1;
     });
     return result;
   }
@@ -151,29 +178,49 @@
     element.dataset.state = status;
   }
 
-  function situationButton(item) {
+  function cleanLabel(item) {
+    return String(item.label || `Situation ${item.id}`)
+      .replace(/^KI-Vorschlag\s*\d*\s*·?\s*/iu, '');
+  }
+
+  function situationRow(item) {
     const messages = situationMessages(item.id);
     const first = messages[0];
     const last = messages.at(-1);
     const currentOwner = owner(item.id);
     const mine = isMine(item.id);
     const active = Number(item.id) === Number(state.selectedId);
-    const label = String(item.label || `Situation ${item.id}`);
+    const done = isDone(item);
+    const changed = state.modified.has(Number(item.id));
+    const canConfirm = mine && messages.length && !done;
+    const checkLabel = done
+      ? `${statusLabel(item)}. Zum Korrigieren Situation öffnen.`
+      : canConfirm
+        ? `Situation ${item.id} bestätigen`
+        : `Situation ${item.id} wird von ${currentOwner} geprüft`;
+
     return `
-      <button type="button"
-        class="situation-button status-${statusValue(item)} ${active ? 'active' : ''} ${mine ? '' : 'other-owner'}"
-        data-situation-id="${Number(item.id)}">
-        <span class="situation-title">${Number(item.id)} · ${escapeHtml(label.replace(/^KI-Vorschlag\s*\d*\s*·?\s*/iu, ''))}</span>
-        <span class="situation-meta">${messages.length} Nachrichten · ${escapeHtml(statusLabel(item))}</span>
-        <span class="situation-range">${first ? `${escapeHtml(formatDate(first.date))} – ${escapeHtml(formatDate(last.date))}` : 'Keine Nachrichten zugeordnet'}</span>
-        <span class="owner-badge ${mine ? 'mine' : ''}">${escapeHtml(currentOwner)}</span>
-      </button>`;
+      <div class="situation-row status-${statusValue(item)} ${active ? 'active' : ''} ${mine ? '' : 'other-owner'}">
+        <button type="button"
+          class="situation-check ${done ? 'done' : ''} ${changed ? 'changed' : ''}"
+          data-confirm-id="${Number(item.id)}"
+          aria-label="${escapeHtml(checkLabel)}"
+          title="${escapeHtml(checkLabel)}"
+          ${canConfirm ? '' : 'disabled'}>${done ? '✓' : ''}</button>
+        <button type="button" class="situation-button" data-situation-id="${Number(item.id)}">
+          <span class="situation-title">${Number(item.id)} · ${escapeHtml(cleanLabel(item))}</span>
+          <span class="situation-meta">${messages.length} Nachrichten · ${escapeHtml(statusLabel(item))}</span>
+          <span class="situation-range">${first ? `${escapeHtml(formatDate(first.date))} – ${escapeHtml(formatDate(last.date))}` : 'Keine Nachrichten zugeordnet'}</span>
+          <span class="owner-badge ${mine ? 'mine' : ''}">${escapeHtml(currentOwner)}</span>
+        </button>
+      </div>`;
   }
 
   function messageCard(message, context = false) {
     const text = textValue(message?.text) || `[${message?.media_type || message?.file || 'Nachricht ohne Text'}]`;
     return `
-      <article class="message ${isOwnMessage(message) ? 'mine' : ''} ${context ? 'context' : ''}">
+      <article class="message ${isOwnMessage(message) ? 'mine' : ''} ${context ? 'context' : ''}"
+        data-message-id="${escapeHtml(messageId(message))}">
         <div class="message-meta">
           <strong>${escapeHtml(speaker(message))}</strong>
           <span>${escapeHtml(formatDate(message?.date))}</span>
@@ -232,20 +279,90 @@
     };
   }
 
-  function renderWorkspace() {
-    const selected = selectedSituation();
-    if (!selected) {
-      renderError('Keine Situation ist auswählbar.');
-      return;
-    }
+  function emptyChatPanel() {
+    const ownOpen = openSituations().filter((item) => isMine(item.id)).length;
+    const message = ownOpen
+      ? 'Wähle links eine offene Situation aus.'
+      : 'Alle dir zugeordneten Situationen sind bestätigt. Über „Erledigte anzeigen“ kannst du sie später erneut öffnen und korrigieren.';
+    return `
+      <section class="panel chat-panel empty-chat">
+        <div class="empty-chat-content">
+          <div class="empty-check">✓</div>
+          <h2>${ownOpen ? 'Situation auswählen' : 'Eigener Prüfbereich abgeschlossen'}</h2>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      </section>`;
+  }
+
+  function chatPanel(selected) {
+    if (!selected) return emptyChatPanel();
 
     const messages = situationMessages(selected.id);
     const context = contextMessages(selected.id);
     const capabilities = boundaryCapabilities(selected.id);
     const mine = isMine(selected.id);
-    const stats = ownerStats();
     const changed = state.modified.has(Number(selected.id));
     const note = String(selected.note || 'KI-Vorschlag zur manuellen Grenzprüfung.');
+
+    return `
+      <section class="panel chat-panel">
+        <div class="chat-head">
+          <div>
+            <div class="eyebrow">Situation ${Number(selected.id)}</div>
+            <h2>${escapeHtml(String(selected.label || `Situation ${selected.id}`))}</h2>
+            <p>${escapeHtml(short(note, 220))}</p>
+          </div>
+          <div class="head-badges">
+            <span class="owner-badge ${mine ? 'mine' : ''}">${escapeHtml(owner(selected.id))}</span>
+            <span class="status-badge">${escapeHtml(statusLabel(selected))}</span>
+          </div>
+        </div>
+
+        <div class="boundary-box">
+          <div class="boundary-row">
+            <strong>Anfang</strong>
+            <span class="boundary-value">${messages[0] ? escapeHtml(formatDate(messages[0].date)) : 'leer'}</span>
+            <button type="button" data-boundary="start-earlier" ${capabilities.startEarlier ? '' : 'disabled'}>← früher</button>
+            <button type="button" data-boundary="start-later" ${capabilities.startLater ? '' : 'disabled'}>später →</button>
+          </div>
+          <div class="boundary-row">
+            <strong>Ende</strong>
+            <span class="boundary-value">${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1).date)) : 'leer'}</span>
+            <button type="button" data-boundary="end-earlier" ${capabilities.endEarlier ? '' : 'disabled'}>← früher</button>
+            <button type="button" data-boundary="end-later" ${capabilities.endLater ? '' : 'disabled'}>später →</button>
+          </div>
+        </div>
+
+        <div class="message-list" id="message-list">
+          ${context.before ? '<div class="context-label">Nachricht davor</div>' + messageCard(context.before, true) : ''}
+          <div class="context-label">Diese Situation · ${messages.length} Nachrichten</div>
+          ${messages.length ? messages.map((message) => messageCard(message)).join('') : '<p>Dieser Situation sind keine Nachrichten zugeordnet.</p>'}
+          ${context.after ? '<div class="context-label">Nachricht danach</div>' + messageCard(context.after, true) : ''}
+        </div>
+
+        <div class="review-actions">
+          <div class="review-note">
+            ${mine
+              ? changed
+                ? 'Grenze geändert. Das Häkchen links oder diese Schaltfläche speichert die Situation als korrigiert.'
+                : isDone(selected)
+                  ? 'Diese Situation ist erledigt. Verschiebe Anfang oder Ende, um sie erneut zu korrigieren.'
+                  : 'Bestätigen über das Häkchen links in der Situationsliste oder hier.'
+              : `Nur Ansicht: Diese Situation wird von ${escapeHtml(owner(selected.id))} geprüft.`}
+          </div>
+          <button id="confirm" class="confirm" type="button" ${mine && messages.length && !isDone(selected) ? '' : 'disabled'}>
+            ${changed ? 'Korrigiert bestätigen' : 'Situation bestätigen'}
+          </button>
+        </div>
+      </section>`;
+  }
+
+  function renderWorkspace() {
+    const selected = selectedSituation();
+    const stats = ownerStats();
+    const open = openSituations();
+    const completed = completedSituations();
+    const visible = listSituations();
 
     app.innerHTML = `
       <div class="app-shell">
@@ -261,16 +378,22 @@
           </nav>
         </header>
         <div class="summarybar">
-          <span><strong>${escapeHtml(state.dataset.name)}</strong> · Pilot mit ${situations().length} Situationen</span>
-          <span>Philipp: ${stats.Philipp.situations} Situationen / ${stats.Philipp.messages} Nachrichten · Lena: ${stats.Lena.situations} / ${stats.Lena.messages}</span>
+          <span><strong>${escapeHtml(state.dataset.name)}</strong> · ${open.length} offen / ${situations().length} gesamt</span>
+          <span>Philipp: ${stats.Philipp.done}/${stats.Philipp.situations} erledigt · Lena: ${stats.Lena.done}/${stats.Lena.situations}</span>
           <span id="sync-status" class="sync-status" data-state="${state.dirty ? 'working' : 'ok'}">${state.dirty ? 'Änderungen noch nicht bestätigt' : `Synchronisiert · Revision ${state.dataset.revision}`}</span>
         </div>
 
         <main class="review-grid">
           <aside class="panel situation-panel">
             <div class="panel-head">
-              <div><div class="eyebrow">Alle Vorschläge</div><h2>Situationen</h2></div>
-              <span class="count-pill">${situations().length}</span>
+              <div><div class="eyebrow">Offene Vorschläge</div><h2>Situationen</h2></div>
+              <span class="count-pill">${open.length}</span>
+            </div>
+            <div class="list-controls">
+              <span>Häkchen links = bestätigen</span>
+              <button id="toggle-completed" type="button" class="secondary small">
+                ${state.showCompleted ? 'Erledigte ausblenden' : `Erledigte anzeigen (${completed.length})`}
+              </button>
             </div>
             <div class="list-legend">
               <span class="legend-item"><i class="legend-dot open"></i> offen</span>
@@ -278,82 +401,80 @@
               <span class="legend-item"><i class="legend-dot corrected"></i> korrigiert</span>
               <span class="legend-item"><i class="legend-dot unclear"></i> unklar</span>
             </div>
-            <div class="situation-list">${situations().map(situationButton).join('')}</div>
+            <div class="situation-list">
+              ${visible.length ? visible.map(situationRow).join('') : '<div class="list-empty">Keine offenen Situationen mehr.</div>'}
+            </div>
           </aside>
 
-          <section class="panel chat-panel">
-            <div class="chat-head">
-              <div>
-                <div class="eyebrow">Situation ${Number(selected.id)}</div>
-                <h2>${escapeHtml(String(selected.label || `Situation ${selected.id}`))}</h2>
-                <p>${escapeHtml(short(note, 220))}</p>
-              </div>
-              <div class="head-badges">
-                <span class="owner-badge ${mine ? 'mine' : ''}">${escapeHtml(owner(selected.id))}</span>
-                <span class="status-badge">${escapeHtml(statusLabel(selected))}</span>
-              </div>
-            </div>
-
-            <div class="boundary-box">
-              <div class="boundary-row">
-                <strong>Anfang</strong>
-                <span class="boundary-value">${messages[0] ? escapeHtml(formatDate(messages[0].date)) : 'leer'}</span>
-                <button type="button" data-boundary="start-earlier" ${capabilities.startEarlier ? '' : 'disabled'}>← früher</button>
-                <button type="button" data-boundary="start-later" ${capabilities.startLater ? '' : 'disabled'}>später →</button>
-              </div>
-              <div class="boundary-row">
-                <strong>Ende</strong>
-                <span class="boundary-value">${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1).date)) : 'leer'}</span>
-                <button type="button" data-boundary="end-earlier" ${capabilities.endEarlier ? '' : 'disabled'}>← früher</button>
-                <button type="button" data-boundary="end-later" ${capabilities.endLater ? '' : 'disabled'}>später →</button>
-              </div>
-            </div>
-
-            <div class="message-list" id="message-list">
-              ${context.before ? '<div class="context-label">Nachricht davor</div>' + messageCard(context.before, true) : ''}
-              <div class="context-label">Diese Situation · ${messages.length} Nachrichten</div>
-              ${messages.length ? messages.map((message) => messageCard(message)).join('') : '<p>Dieser Situation sind keine Nachrichten zugeordnet.</p>'}
-              ${context.after ? '<div class="context-label">Nachricht danach</div>' + messageCard(context.after, true) : ''}
-            </div>
-
-            <div class="review-actions">
-              <div class="review-note">
-                ${mine
-                  ? changed
-                    ? 'Grenze geändert. Mit einem Klick als korrigiert speichern.'
-                    : 'Grenzen prüfen und mit einem Klick bestätigen.'
-                  : `Nur Ansicht: Diese Situation wird von ${escapeHtml(owner(selected.id))} geprüft.`}
-              </div>
-              <button id="confirm" class="confirm" type="button" ${mine && messages.length ? '' : 'disabled'}>
-                ${changed ? 'Korrigiert bestätigen' : 'Situation bestätigen'}
-              </button>
-            </div>
-          </section>
+          ${chatPanel(selected)}
         </main>
       </div>`;
 
     bindWorkspace();
-    requestAnimationFrame(() => {
-      document.querySelector(`.situation-button[data-situation-id="${Number(selected.id)}"]`)?.scrollIntoView({ block: 'nearest' });
-    });
+    requestAnimationFrame(restoreScrollPosition);
+  }
+
+  function restoreScrollPosition() {
+    const selectedButton = document.querySelector(`.situation-button[data-situation-id="${Number(state.selectedId)}"]`);
+    selectedButton?.scrollIntoView({ block: 'nearest' });
+
+    if (!state.scrollTarget) return;
+    const target = [...document.querySelectorAll('#message-list [data-message-id]')]
+      .find((element) => element.dataset.messageId === state.scrollTarget.messageId);
+    const list = document.getElementById('message-list');
+    if (target && list) {
+      if (state.scrollTarget.edge === 'end') {
+        list.scrollTop = Math.max(0, target.offsetTop + target.offsetHeight - list.clientHeight + 18);
+      } else {
+        list.scrollTop = Math.max(0, target.offsetTop - 18);
+      }
+      target.classList.add('boundary-focus');
+      setTimeout(() => target.classList.remove('boundary-focus'), 900);
+    }
+    state.scrollTarget = null;
   }
 
   function bindWorkspace() {
     document.getElementById('logout')?.addEventListener('click', signOut);
+    document.getElementById('toggle-completed')?.addEventListener('click', () => {
+      state.showCompleted = !state.showCompleted;
+      sessionStorage.setItem(SHOW_COMPLETED_KEY, state.showCompleted ? '1' : '0');
+      if (!state.showCompleted && selectedSituation() && isDone(selectedSituation())) {
+        state.selectedId = firstOwnSelection();
+      }
+      renderWorkspace();
+    });
+
     document.querySelectorAll('[data-situation-id]').forEach((button) => {
       button.addEventListener('click', () => {
         state.selectedId = Number(button.dataset.situationId);
+        state.scrollTarget = null;
         renderWorkspace();
       });
     });
+
+    document.querySelectorAll('[data-confirm-id]').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const id = Number(button.dataset.confirmId);
+        if (!id || button.disabled) return;
+        state.selectedId = id;
+        await confirmSituation(id);
+      });
+    });
+
     document.querySelectorAll('[data-boundary]').forEach((button) => {
       button.addEventListener('click', () => shiftBoundary(button.dataset.boundary));
     });
-    document.getElementById('confirm')?.addEventListener('click', confirmSelected);
+    document.getElementById('confirm')?.addEventListener('click', () => confirmSituation(Number(state.selectedId)));
   }
 
   function markModified(...ids) {
-    ids.filter(Boolean).forEach((id) => state.modified.add(Number(id)));
+    ids.filter(Boolean).forEach((id) => {
+      const item = situation(id);
+      if (item && isDone(item)) item.status = 'open';
+      state.modified.add(Number(id));
+    });
     state.dirty = true;
   }
 
@@ -402,6 +523,12 @@
 
     if (!movedMessage) return;
     markModified(id, destinationId && destinationId !== id ? destinationId : 0);
+
+    const updated = situationMessages(id);
+    const boundaryMessage = action.startsWith('end') ? updated.at(-1) : updated[0];
+    state.scrollTarget = boundaryMessage
+      ? { messageId: messageId(boundaryMessage), edge: action.startsWith('end') ? 'end' : 'start' }
+      : null;
     renderWorkspace();
   }
 
@@ -426,9 +553,10 @@
     }
   }
 
-  async function confirmSelected() {
-    const item = selectedSituation();
-    if (!item || !isMine(item.id) || state.saving) return;
+  async function confirmSituation(id) {
+    const item = situation(id);
+    if (!item || !isMine(item.id) || state.saving || isDone(item)) return;
+    if (!situationMessages(item.id).length) return;
 
     const corrected = state.modified.has(Number(item.id));
     item.status = corrected ? 'corrected' : 'confirmed';
@@ -447,16 +575,15 @@
     try {
       await saveState();
       state.modified.delete(Number(item.id));
-      const mine = situations().filter((candidate) => isMine(candidate.id));
-      const currentIndex = mine.findIndex((candidate) => Number(candidate.id) === Number(item.id));
-      const next = mine.slice(currentIndex + 1).find((candidate) => !['confirmed', 'corrected'].includes(statusValue(candidate)))
-        || mine.find((candidate) => !['confirmed', 'corrected'].includes(statusValue(candidate)))
-        || item;
-      state.selectedId = Number(next.id);
+      const next = nextOwnOpenSituation(item.id);
+      state.selectedId = next ? Number(next.id) : null;
+      state.scrollTarget = null;
       renderWorkspace();
     } catch (caught) {
+      item.status = corrected ? 'open' : 'open';
       setSync(caught?.message || 'Speichern fehlgeschlagen.', 'error');
       alert(caught?.message || 'Die Bestätigung konnte nicht gespeichert werden.');
+      renderWorkspace();
     }
   }
 
@@ -469,6 +596,7 @@
       state.annotations = result.annotations;
       state.owners = result.owners || state.owners;
       state.dataset.revision = remoteRevision;
+      if (state.selectedId && !situation(state.selectedId)) state.selectedId = firstOwnSelection();
       renderWorkspace();
       setSync(`Aktualisiert · Revision ${remoteRevision}`, 'ok');
     } catch (caught) {
@@ -509,6 +637,7 @@
       state.selectedId = firstOwnSelection();
       state.modified.clear();
       state.dirty = false;
+      state.scrollTarget = null;
       renderWorkspace();
       clearInterval(state.pollTimer);
       state.pollTimer = setInterval(poll, 15000);
