@@ -1,0 +1,87 @@
+name: Deploy owner and theme update once
+
+on:
+  push:
+    branches:
+      - agent/server-synchronization
+    paths:
+      - .github/workflows/deploy-owner-theme-once.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truewords-review-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PHILIPP_REVIEW_TOKEN: ${{ secrets.PHILIPP_REVIEW_TOKEN }}
+          LENA_REVIEW_TOKEN: ${{ secrets.LENA_REVIEW_TOKEN }}
+          ADMIN_REVIEW_TOKEN: ${{ secrets.ADMIN_REVIEW_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$PHILIPP_REVIEW_TOKEN"
+          test -n "$LENA_REVIEW_TOKEN"
+          test -n "$ADMIN_REVIEW_TOKEN"
+
+      - name: Validate and build
+        run: |
+          npm install
+          npm run check
+          npm run build
+          test -f dist/truewords-ui-theme.js
+          test -f dist/truewords-ui-theme.css
+          grep -q 'pilot-v3-unseen-fullsource-owners' dist/upload.js
+          grep -q 'explicit-owner-assignment' src/worker-analysis.ts
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Configure access tokens
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PHILIPP_REVIEW_TOKEN: ${{ secrets.PHILIPP_REVIEW_TOKEN }}
+          LENA_REVIEW_TOKEN: ${{ secrets.LENA_REVIEW_TOKEN }}
+          ADMIN_REVIEW_TOKEN: ${{ secrets.ADMIN_REVIEW_TOKEN }}
+        run: |
+          printf '%s' "$PHILIPP_REVIEW_TOKEN" | npx wrangler secret put PHILIPP_REVIEW_TOKEN
+          printf '%s' "$LENA_REVIEW_TOKEN" | npx wrangler secret put LENA_REVIEW_TOKEN
+          printf '%s' "$ADMIN_REVIEW_TOKEN" | npx wrangler secret put ADMIN_REVIEW_TOKEN
+
+      - name: Enable workers.dev and migrate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data '{"enabled":true,"previews_enabled":false}' \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/truewords-review-sync/subdomain"
+          npx wrangler d1 migrations apply truewords-review-sync-db --remote
+
+      - name: Verify health
+        run: |
+          sleep 25
+          curl --fail --silent --show-error \
+            --retry 24 --retry-delay 5 --retry-all-errors \
+            "https://truewords-review-sync.truewords-review-896be42e.workers.dev/api/health"
