@@ -1,0 +1,51 @@
+name: Diagnose Test 3 import schema once
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/diagnose-test3-import-schema-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-schema:
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Inspect schema only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command "
+            SELECT type, name, tbl_name, sql
+            FROM sqlite_master
+            WHERE name IN (
+              'review_datasets',
+              'review_chat_chunks',
+              'review_import_sessions',
+              'review_analysis_versions',
+              'review_events'
+            ) OR tbl_name IN (
+              'review_datasets',
+              'review_chat_chunks',
+              'review_import_sessions',
+              'review_analysis_versions',
+              'review_events'
+            )
+            ORDER BY tbl_name, type, name;
+          " > test3-import-schema.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test3-import-schema
+          path: test3-import-schema.json
+          retention-days: 2
