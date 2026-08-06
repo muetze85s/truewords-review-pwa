@@ -438,3 +438,109 @@ button.small { padding: 7px 9px; font-size: 11px; }
   .review-actions { align-items: stretch; flex-direction: column; }
   .review-actions button.confirm { width: 100%; min-width: 0; }
 }
+
+/* Situation membership visibility */
+.message-list {
+  background: #07111f;
+}
+.context-zone {
+  margin: 6px 4px 14px;
+  padding: 8px 10px 10px;
+  border: 1px dashed #52627b;
+  border-radius: 13px;
+  background: #0a1320;
+}
+.context-zone.after { margin-top: 14px; margin-bottom: 2px; }
+.context-zone .context-label {
+  margin: 0 0 6px;
+  color: #8493aa;
+}
+.situation-zone {
+  position: relative;
+  margin: 10px 0 14px;
+  padding: 0 12px 12px;
+  overflow: hidden;
+  border: 2px solid #4d93e8;
+  border-radius: 17px;
+  background: #10243e;
+  box-shadow: 0 0 0 4px #4d93e81f, 0 16px 36px #0005;
+}
+.situation-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 -12px 10px;
+  padding: 10px 12px;
+  background: #1f5fae;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+.situation-boundary strong {
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+.situation-boundary.end {
+  margin: 12px -12px -12px;
+  border-top: 1px solid #5fe0b7;
+  background: #174738;
+  color: #c8ffed;
+}
+.situation-messages {
+  padding: 2px 2px 0;
+}
+.situation-zone .message.assigned {
+  border-width: 2px;
+  border-color: #496b96;
+  background: #142840;
+  box-shadow: 0 3px 10px #0004;
+}
+.situation-zone .message.assigned.mine {
+  border-color: #4d93e8;
+  background: #15365e;
+}
+.membership-badge,
+.context-badge {
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.membership-badge {
+  background: #1f5fae;
+  color: #fff;
+}
+.context-badge {
+  border: 1px solid #59677a;
+  background: #111b29;
+  color: #8e9caf;
+}
+.context-zone .message.context {
+  opacity: .48;
+  filter: saturate(.55);
+  border-style: dashed;
+  background: #0b1420;
+}
+.context-zone .message.context.mine {
+  background: #102239;
+}
+
+@media (max-width: 680px) {
+  .situation-boundary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .situation-boundary strong { text-align: left; }
+  .membership-badge,
+  .context-badge {
+    width: 100%;
+    margin-left: 0;
+    text-align: center;
+  }
+}

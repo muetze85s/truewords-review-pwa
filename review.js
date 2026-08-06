@@ -214,15 +214,19 @@
       </div>`;
   }
 
-  function messageCard(message, context = false) {
+  function messageCard(message, context = false, index = 0, total = 0) {
     const text = textValue(message?.text) || `[${message?.media_type || message?.file || 'Nachricht ohne Text'}]`;
+    const membership = context
+      ? '<span class="context-badge">Nur Kontext</span>'
+      : `<span class="membership-badge">Teil der Situation · ${index}/${total}</span>`;
     return `
-      <article class="message ${isOwnMessage(message) ? 'mine' : ''} ${context ? 'context' : ''}"
+      <article class="message ${isOwnMessage(message) ? 'mine' : ''} ${context ? 'context' : 'assigned'}"
         data-message-id="${escapeHtml(messageId(message))}">
         <div class="message-meta">
           <strong>${escapeHtml(speaker(message))}</strong>
           <span>${escapeHtml(formatDate(message?.date))}</span>
           <span>ID ${escapeHtml(messageId(message))}</span>
+          ${membership}
         </div>
         <div class="message-text">${escapeHtml(text)}</div>
       </article>`;
@@ -332,10 +336,33 @@
         </div>
 
         <div class="message-list" id="message-list">
-          ${context.before ? '<div class="context-label">Nachricht davor</div>' + messageCard(context.before, true) : ''}
-          <div class="context-label">Diese Situation · ${messages.length} Nachrichten</div>
-          ${messages.length ? messages.map((message) => messageCard(message)).join('') : '<p>Dieser Situation sind keine Nachrichten zugeordnet.</p>'}
-          ${context.after ? '<div class="context-label">Nachricht danach</div>' + messageCard(context.after, true) : ''}
+          ${context.before ? `
+            <section class="context-zone before" aria-label="Kontext vor der Situation">
+              <div class="context-label">Nur Kontext · Nachricht davor</div>
+              ${messageCard(context.before, true)}
+            </section>` : ''}
+
+          <section class="situation-zone" aria-label="Nachrichten der Situation ${Number(selected.id)}">
+            <div class="situation-boundary start">
+              <span>Situation ${Number(selected.id)} beginnt</span>
+              <strong>${messages.length} Nachrichten gehören zu dieser Situation</strong>
+            </div>
+            <div class="situation-messages">
+              ${messages.length
+                ? messages.map((message, index) => messageCard(message, false, index + 1, messages.length)).join('')
+                : '<p>Dieser Situation sind keine Nachrichten zugeordnet.</p>'}
+            </div>
+            <div class="situation-boundary end">
+              <span>Situation ${Number(selected.id)} endet</span>
+              <strong>${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1).date)) : 'ohne Nachrichten'}</strong>
+            </div>
+          </section>
+
+          ${context.after ? `
+            <section class="context-zone after" aria-label="Kontext nach der Situation">
+              <div class="context-label">Nur Kontext · Nachricht danach</div>
+              ${messageCard(context.after, true)}
+            </section>` : ''}
         </div>
 
         <div class="review-actions">
