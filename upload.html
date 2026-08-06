@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Daten vorbereiten</title>
+  <link rel="stylesheet" href="./portal.css">
+</head>
+<body>
+  <main class="page">
+    <div class="shell">
+      <section class="card">
+        <div class="header">
+          <div>
+            <div class="eyebrow">Philipps Bereich</div>
+            <h1>Daten vorbereiten</h1>
+            <p class="intro">Rohchat und KI-Vorschläge können gemeinsam oder einzeln eingespielt werden.</p>
+          </div>
+          <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
+        </div>
+      </section>
+
+      <form id="upload-form">
+        <section class="card upload-card">
+          <div class="eyebrow">Optional</div>
+          <h2>Bereinigter Rohchat</h2>
+          <p class="muted">Nur auswählen, wenn der Rohchat neu oder aktualisiert eingespielt werden soll.</p>
+          <label style="margin-top:14px">
+            <span>Rohchat-Datei</span>
+            <input id="chat-file" type="file" accept=".json,application/json">
+          </label>
+        </section>
+
+        <section class="card upload-card">
+          <div class="eyebrow">Optional</div>
+          <h2>KI- oder Algorithmusvorschläge</h2>
+          <p class="muted">Die Vorschläge werden als eigene Analyseversion gespeichert und aktiviert.</p>
+          <label style="margin-top:14px">
+            <span>Vorschlagsdatei</span>
+            <input id="analysis-file" type="file" accept=".json,application/json">
+          </label>
+          <div class="grid" style="margin-top:12px">
+            <label>
+              <span>Versions-ID</span>
+              <input id="version-id" value="pilot-v1" pattern="[A-Za-z0-9._-]{3,80}">
+            </label>
+            <label>
+              <span>Anzeigename</span>
+              <input id="version-label" value="Pilot v1 · lokale Heuristik">
+            </label>
+          </div>
+        </section>
+
+        <input id="dataset-id" type="hidden" value="philena-2026">
+        <input id="dataset-name" type="hidden" value="Philipp & Lena · bereinigter Rohchat 2021–2026">
+
+        <section class="card">
+          <div class="actions">
+            <button id="submit" class="primary" type="submit">Ausgewählte Daten hochladen</button>
+            <button id="skip" class="secondary" type="button">Ohne Upload zur Prüfung</button>
+          </div>
+          <div id="progress-wrap" class="progress-wrap" hidden>
+            <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
+            <progress id="progress" max="100" value="0"></progress>
+            <div id="progress-detail" class="progress-detail"></div>
+          </div>
+          <div id="status" class="status" role="status" aria-live="polite">Dateien auswählen oder direkt zur Prüfung wechseln.</div>
+        </section>
+      </form>
+    </div>
+  </main>
+  <script src="./upload.js"></script>
+</body>
+</html>
