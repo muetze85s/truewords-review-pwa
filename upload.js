@@ -3,12 +3,14 @@
 
   const MAX_CHUNK_BYTES = 260_000;
   const ORIGINAL_SOURCE_SHA256 = '5bb863d1b1a68e0ada83933bc069fbb923cd4d98074308bcbdb47581b7791822';
-  const LOSSLESS_2026_SHA256 = '0501361af7e9fec8ba7ba24da45256db98479cfb600d1de30ece64c5ef057b44';
-  const PRESELECTION_SHA256 = '0c4409bcf000157d038e8cefc66b022409189579c47669ad98444852d1e9c24e';
+  const PRESELECTION_SHA256 = 'fce30f5883eeef31d5e5bb565fa6904a2ab3e3a56ac462bca692212a4fdc7a2c';
   const ORIGINAL_SOURCE_EVENTS = 73_946;
-  const REVIEW_EVENTS = 2_494;
-  const PRESELECTION_SITUATIONS = 28;
+  const REVIEW_YEAR_EVENTS = 2_494;
+  const TEST_EVENTS = 335;
+  const PRESELECTION_SITUATIONS = 12;
   const PRESELECTION_ASSIGNMENTS = 335;
+  const DATASET_ID = 'philena-2026-pilot-v3-unseen';
+  const VERSION_ID = 'pilot-v3-unseen-fullsource-userfile';
 
   const form = document.getElementById('upload-form');
   const rawInput = document.getElementById('raw-file');
@@ -108,78 +110,12 @@
     }
   }
 
-  function losslessChatFromOriginal(chat, pilot, sourceFileName) {
-    const prepared = pilot.prepareOriginalChat(chat);
-    const reviewEvents = prepared.reviewEvents;
-    if (reviewEvents.length !== REVIEW_EVENTS) {
-      throw new Error(`Der Originalexport enthält nicht exakt ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026.`);
-    }
-    if (prepared.chat.truewordsTimelinePreservation.silentLosses !== 0) {
-      throw new Error('Integritätsfehler: Die verlustfreie Aufbereitung hat Ereignisse verloren.');
-    }
-
-    return {
-      schemaVersion: 'truewords-lossless-chat/v2',
-      datasetHash: ORIGINAL_SOURCE_SHA256,
-      datasetLabel: 'Philipp Sellin · 2026 · verlustfreier Ereignisstrom',
-      source: {
-        fileName: sourceFileName,
-        chatName: chat.name,
-        chatType: chat.type,
-        chatId: chat.id,
-        sourceEvents: ORIGINAL_SOURCE_EVENTS,
-        sourceSha256: ORIGINAL_SOURCE_SHA256,
-      },
-      scope: {
-        year: 2026,
-        events: reviewEvents.length,
-        firstEventId: String(reviewEvents[0]?.id ?? ''),
-        lastEventId: String(reviewEvents.at(-1)?.id ?? ''),
-        firstDate: reviewEvents[0]?.date,
-        lastDate: reviewEvents.at(-1)?.date,
-      },
-      integrity: {
-        silentLosses: 0,
-        preservedEvents: reviewEvents.length,
-        normalTextUnchanged: true,
-        mediaAndServiceEventsPreserved: true,
-        replyReferencesPreserved: true,
-      },
-      messages: reviewEvents,
-    };
-  }
-
-  function validateLosslessChat(chat) {
-    if (!chat || chat.schemaVersion !== 'truewords-lossless-chat/v2') {
-      throw new Error('Die Rohchat-Datei ist nicht der verlustfreie Test-2-Rohchat.');
-    }
-    if (chat.datasetHash !== ORIGINAL_SOURCE_SHA256) {
-      throw new Error('Der Rohchat gehört nicht zum bekannten Telegram-Originalexport.');
-    }
-    if (!Array.isArray(chat.messages) || chat.messages.length !== REVIEW_EVENTS) {
-      throw new Error(`Der Rohchat muss exakt ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026 enthalten.`);
-    }
-    if (Number(chat.integrity?.silentLosses) !== 0) {
-      throw new Error('Der Rohchat meldet stille Verluste und wird abgelehnt.');
-    }
-    const ids = new Set();
-    for (const message of chat.messages) {
-      const id = String(message?.id ?? '');
-      if (!id || ids.has(id)) throw new Error('Der Rohchat enthält fehlende oder doppelte Telegram-IDs.');
-      ids.add(id);
-      if (message?.truewords_timeline_preserved !== true) {
-        throw new Error(`Ereignis ${id} ist nicht als chronologisch erhalten markiert.`);
-      }
-    }
-    return ids;
-  }
-
-  function validatePreselection(annotations, messageIds) {
-    if (!annotations || annotations.schemaVersion !== 'truewords-manual-segmentation/v2') {
-      throw new Error('Die KI-Vorselektionsdatei hat nicht das erwartete Test-2-Format.');
+  function validatePreselection(annotations) {
+    if (!annotations || annotations.schemaVersion !== 'truewords-manual-segmentation/v3-unseen') {
+      throw new Error('Die KI-Vorselektionsdatei hat nicht das erwartete Test-3-Format.');
     }
     if (annotations.datasetHash !== ORIGINAL_SOURCE_SHA256) {
-      throw new Error('Rohchat und KI-Vorselektion gehören nicht zur selben Quelle.');
+      throw new Error('Die KI-Vorselektion gehört nicht zum vollständigen Telegram-Originalexport.');
     }
     if (!Array.isArray(annotations.situations) || annotations.situations.length !== PRESELECTION_SITUATIONS) {
       throw new Error(`Die KI-Vorselektion muss exakt ${PRESELECTION_SITUATIONS} Situationen enthalten.`);
@@ -202,18 +138,124 @@
       throw new Error(`Die KI-Vorselektion muss exakt ${PRESELECTION_ASSIGNMENTS} Ereigniszuordnungen enthalten.`);
     }
     for (const [messageId, situationId] of assignments) {
-      if (!messageIds.has(String(messageId))) {
-        throw new Error(`Zugeordnetes Ereignis ${messageId} fehlt im verlustfreien Rohchat.`);
-      }
       if (!situationIds.has(Number(situationId))) {
         throw new Error(`Ereignis ${messageId} verweist auf eine unbekannte Situation.`);
       }
     }
 
+    const filter = annotations.testFilter;
+    const selection = filter?.selection;
+    if (filter?.schemaVersion !== 'truewords-test-filter/v1') {
+      throw new Error('Der Testfilter fehlt in der KI-Vorselektionsdatei.');
+    }
+    if (
+      filter?.source?.sourceSha256 !== ORIGINAL_SOURCE_SHA256
+      || Number(filter?.source?.sourceEvents) !== ORIGINAL_SOURCE_EVENTS
+    ) {
+      throw new Error('Der integrierte Testfilter verweist nicht auf den vollständigen Telegram-Originalexport.');
+    }
+    if (selection?.mode !== 'exact_event_ids' || !Array.isArray(selection?.eventIds)) {
+      throw new Error('Der integrierte Testfilter enthält keine exakte Ereignisliste.');
+    }
+    const eventIds = selection.eventIds.map(String);
+    if (eventIds.length !== TEST_EVENTS || new Set(eventIds).size !== TEST_EVENTS) {
+      throw new Error(`Der Testfilter muss exakt ${TEST_EVENTS} eindeutige Ereignisse enthalten.`);
+    }
+    if (
+      String(selection.firstEventId) !== eventIds[0]
+      || String(selection.lastEventId) !== eventIds.at(-1)
+      || Number(selection.eventCount) !== TEST_EVENTS
+    ) {
+      throw new Error('Start, Ende und Ereigniszahl des Testfilters sind inkonsistent.');
+    }
+
+    const assignedOrExcluded = new Set([
+      ...Object.keys(annotations.assignments).map(String),
+      ...Object.keys(annotations.messageOverrides || {}).map(String),
+    ]);
+    for (const eventId of eventIds) {
+      if (!assignedOrExcluded.has(eventId)) {
+        throw new Error(`Testereignis ${eventId} ist weder einer Situation noch dem Kontext zugeordnet.`);
+      }
+    }
+    if (assignedOrExcluded.size !== TEST_EVENTS) {
+      throw new Error('Die KI-Datei enthält Zuordnungen außerhalb des integrierten Testfilters.');
+    }
+
     const integrity = annotations.preselection?.integrity;
-    if (integrity?.silentLosses !== 0 || integrity?.allPilotEventsAssigned !== true) {
+    if (
+      Number(integrity?.silentLosses) !== 0
+      || integrity?.allNonExcludedEventsAssigned !== true
+      || integrity?.fullOriginalRequired !== true
+    ) {
       throw new Error('Die KI-Vorselektion besteht ihre Integritätsprüfung nicht.');
     }
+
+    return { eventIds, situationIds };
+  }
+
+  function filteredChatFromOriginal(original, pilot, sourceFileName, annotations) {
+    if (!Array.isArray(original.messages) || original.messages.length !== ORIGINAL_SOURCE_EVENTS) {
+      throw new Error(`Der Telegram-Originalexport muss exakt ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Exportereignisse enthalten.`);
+    }
+
+    const prepared = pilot.prepareOriginalChat(original);
+    const reviewEvents = prepared.reviewEvents;
+    if (reviewEvents.length !== REVIEW_YEAR_EVENTS) {
+      throw new Error(`Der Originalexport enthält nicht exakt ${REVIEW_YEAR_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026.`);
+    }
+    if (prepared.chat.truewordsTimelinePreservation.silentLosses !== 0) {
+      throw new Error('Integritätsfehler: Die verlustfreie Aufbereitung hat Ereignisse verloren.');
+    }
+
+    const { eventIds } = validatePreselection(annotations);
+    const selectedSet = new Set(eventIds);
+    const selectedMessages = reviewEvents.filter((message) => selectedSet.has(String(message.id)));
+    const selectedIds = selectedMessages.map((message) => String(message.id));
+
+    if (selectedMessages.length !== TEST_EVENTS) {
+      const found = new Set(selectedIds);
+      const missing = eventIds.filter((id) => !found.has(id));
+      throw new Error(`Der vollständige Rohchat enthält nicht alle Testereignisse. Fehlend: ${missing.slice(0, 5).join(', ') || 'unbekannt'}.`);
+    }
+    if (selectedIds.some((id, index) => id !== eventIds[index])) {
+      throw new Error('Die Ereignisreihenfolge im Testfilter stimmt nicht mit dem Originalchat überein.');
+    }
+
+    return {
+      schemaVersion: 'truewords-lossless-chat/v3-unseen',
+      datasetHash: ORIGINAL_SOURCE_SHA256,
+      datasetLabel: 'Philipp & Lena · Test 3 · ungesehener verlustfreier Ereignisstrom',
+      source: {
+        fileName: sourceFileName,
+        chatName: original.name,
+        chatType: original.type,
+        chatId: original.id,
+        sourceEvents: ORIGINAL_SOURCE_EVENTS,
+        sourceSha256: ORIGINAL_SOURCE_SHA256,
+      },
+      scope: {
+        purpose: 'unseen-validation',
+        selectionMode: 'exact_event_ids',
+        year: 2026,
+        reviewYearEvents: REVIEW_YEAR_EVENTS,
+        events: selectedMessages.length,
+        firstEventId: selectedIds[0],
+        lastEventId: selectedIds.at(-1),
+        firstDate: selectedMessages[0]?.date,
+        lastDate: selectedMessages.at(-1)?.date,
+      },
+      integrity: {
+        silentLosses: 0,
+        preservedEvents: selectedMessages.length,
+        selectedEventsExpected: TEST_EVENTS,
+        normalTextUnchanged: true,
+        mediaAndServiceEventsPreserved: true,
+        replyReferencesPreserved: true,
+        fullOriginalVerified: true,
+      },
+      messages: selectedMessages,
+    };
   }
 
   async function inspectFiles() {
@@ -224,11 +266,11 @@
     if (!rawFile && !preselectionFile) {
       detectedFiles.textContent = 'Noch keine Datei ausgewählt.';
       detectedFiles.dataset.state = 'idle';
-      setStatus('Rohchat und KI-Vorselektionsdatei auswählen.');
+      setStatus('Vollständigen Rohchat und KI-Vorselektionsdatei auswählen.');
       return;
     }
     if (!rawFile || !preselectionFile) {
-      const missing = rawFile ? 'KI-Vorselektionsdatei' : 'verlustfreien Rohchat';
+      const missing = rawFile ? 'KI-Vorselektionsdatei' : 'vollständigen Telegram-Originalexport';
       detectedFiles.textContent = `Noch den ${missing} auswählen.`;
       detectedFiles.dataset.state = 'idle';
       setStatus(`Beide Dateien sind erforderlich. Es fehlt: ${missing}.`);
@@ -236,14 +278,14 @@
     }
 
     submit.disabled = true;
-    detectedFiles.textContent = 'Rohchat und KI-Vorselektion werden vollständig geprüft …';
+    detectedFiles.textContent = 'Originalexport, KI-Vorschläge und integrierter Testfilter werden geprüft …';
     detectedFiles.dataset.state = 'working';
     setStatus('Beide Dateien werden lokal gelesen, gehasht und gegeneinander geprüft …', 'working');
     setProgress(1, 'Dateien werden gelesen …', `${rawFile.name} · ${preselectionFile.name}`);
 
     try {
       const pilot = window.TRUEWORDS_PILOT_V2;
-      if (!pilot) throw new Error('Test-2-Logik wurde nicht geladen. Seite neu laden.');
+      if (!pilot) throw new Error('Verlustfreie Importlogik wurde nicht geladen. Seite neu laden.');
 
       const [rawText, preselectionText] = await Promise.all([
         rawFile.text(),
@@ -255,25 +297,24 @@
         sha256Hex(preselectionText),
       ]);
 
-      let chat;
-      if (rawFileHash === ORIGINAL_SOURCE_SHA256) {
-        const original = parseJson(rawText, 'Der Telegram-Originalexport');
-        if (!Array.isArray(original.messages) || original.messages.length !== ORIGINAL_SOURCE_EVENTS) {
-          throw new Error('Der Telegram-Originalexport enthält nicht exakt 73.946 Exportereignisse.');
-        }
-        chat = losslessChatFromOriginal(original, pilot, rawFile.name);
-      } else if (rawFileHash === LOSSLESS_2026_SHA256) {
-        chat = parseJson(rawText, 'Der verlustfreie Rohchat');
-      } else {
-        throw new Error('Falscher Rohchat: Weder der vollständige Telegram-Originalexport noch die bereitgestellte verlustfreie 2026-Datei wurde erkannt.');
+      if (rawFileHash !== ORIGINAL_SOURCE_SHA256) {
+        throw new Error('Falscher Rohchat: Für jeden Test ist immer der vollständige, unveränderte Telegram-Originalexport erforderlich.');
+      }
+      if (preselectionFileHash !== PRESELECTION_SHA256) {
+        throw new Error('Falsche KI-Vorselektionsdatei: Verwende die Test-3-Datei mit integriertem Testfilter.');
       }
 
-      if (preselectionFileHash !== PRESELECTION_SHA256) {
-        throw new Error('Falsche KI-Vorselektionsdatei: SHA-256 stimmt nicht mit der bereitgestellten Test-2-Datei überein.');
-      }
+      const original = parseJson(rawText, 'Der Telegram-Originalexport');
       const annotations = parseJson(preselectionText, 'Die KI-Vorselektionsdatei');
-      const messageIds = validateLosslessChat(chat);
-      validatePreselection(annotations, messageIds);
+      validatePreselection(annotations);
+      const chat = filteredChatFromOriginal(original, pilot, rawFile.name, annotations);
+      const messageIds = new Set(chat.messages.map((message) => String(message.id)));
+
+      for (const messageId of Object.keys(annotations.assignments)) {
+        if (!messageIds.has(String(messageId))) {
+          throw new Error(`Zugeordnetes Ereignis ${messageId} fehlt im Testfenster des vollständigen Rohchats.`);
+        }
+      }
 
       selected = {
         rawFile,
@@ -286,18 +327,19 @@
       };
 
       detectedFiles.innerHTML = `
-        <div><strong>Verlustfreier Rohchat:</strong> ${escapeHtml(rawFile.name)} · ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse</div>
+        <div><strong>Vollständiger Rohchat:</strong> ${escapeHtml(rawFile.name)} · ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Exportereignisse</div>
+        <div><strong>Integrierter Testfilter:</strong> IDs ${escapeHtml(chat.scope.firstEventId)}–${escapeHtml(chat.scope.lastEventId)} · ${TEST_EVENTS} Ereignisse</div>
         <div><strong>KI-Vorselektion:</strong> ${escapeHtml(preselectionFile.name)} · ${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Zuordnungen</div>
-        <div><strong>Integrität:</strong> gemeinsame Quelle bestätigt · stille Verluste: 0 · Platzhalter enthalten</div>`;
+        <div><strong>Integrität:</strong> Originalquelle bestätigt · stille Verluste: 0 · Platzhalter enthalten</div>`;
       detectedFiles.dataset.state = 'ok';
-      setProgress(8, 'Test 2 ist vorbereitet', 'Rohchat und KI-Vorschläge sind lokal geprüft');
-      setStatus('Beide Dateien sind vollständig. Test 2 kann hochgeladen und aktiviert werden.', 'ok');
+      setProgress(8, 'Test 3 ist vorbereitet', 'Vollständiger Rohchat, Testfilter und KI-Vorschläge sind lokal geprüft');
+      setStatus('Beide Dateien sind vollständig. Test 3 kann hochgeladen und aktiviert werden.', 'ok');
     } catch (caught) {
       selected = null;
       detectedFiles.textContent = caught?.message || 'Dateiprüfung fehlgeschlagen.';
       detectedFiles.dataset.state = 'error';
       progressLabel.textContent = 'Vorbereitung abgebrochen';
-      progressDetail.textContent = 'Rohchat und KI-Vorselektion müssen exakt zusammenpassen.';
+      progressDetail.textContent = 'Vollständiger Originalexport und KI-Datei mit Testfilter müssen exakt zusammenpassen.';
       setStatus(caught?.message || 'Dateiprüfung fehlgeschlagen.', 'error');
     } finally {
       submit.disabled = false;
@@ -321,10 +363,10 @@
       }
       current.push(message);
       currentBytes += messageBytes;
-      if (index % 300 === 0 || index === messages.length - 1) {
+      if (index % 100 === 0 || index === messages.length - 1) {
         report(
           (index + 1) / messages.length,
-          `${(index + 1).toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} Ereignissen vorbereitet`,
+          `${(index + 1).toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} Testereignissen vorbereitet`,
         );
       }
     }
@@ -340,28 +382,30 @@
     const span = rangeEnd - rangeStart;
     const report = (fraction, label, detail) => setProgress(rangeStart + fraction * span, label, detail);
 
-    report(0.01, 'Verlustfreier Ereignisstrom wird vorbereitet …', `${messages.length.toLocaleString('de-DE')} Ereignisse aus 2026`);
+    report(0.01, 'Testfenster wird aus dem vollständigen Rohchat vorbereitet …', `${messages.length.toLocaleString('de-DE')} Ereignisse`);
     const { messages: ignored, ...chatMeta } = chat;
     void ignored;
-    chatMeta.importedYearRange = '2026';
     chatMeta.reviewYear = 2026;
-    chatMeta.reviewYearEvents = messages.length;
+    chatMeta.reviewYearEvents = REVIEW_YEAR_EVENTS;
     chatMeta.sourceFileName = entry.rawFile.name;
+    chatMeta.testFilter = entry.annotations.testFilter;
     chatMeta.sourceIntegrity = {
       sha256: entry.datasetHash,
       sourceSha256: ORIGINAL_SOURCE_SHA256,
       sourceFileHash: entry.rawFileHash,
       sourceEntries: ORIGINAL_SOURCE_EVENTS,
+      reviewYearEvents: REVIEW_YEAR_EVENTS,
       uploadedEvents: messages.length,
       preservedEntries: messages.length,
       silentLosses: 0,
+      fullOriginalVerified: true,
     };
 
     const chunks = makeChunks(messages, (fraction, detail) => {
       report(0.02 + fraction * 0.08, 'Datenblöcke werden vorbereitet …', detail);
     });
 
-    report(0.11, 'Importsitzung für Test 2 wird angelegt …', `${chunks.length} Datenblöcke`);
+    report(0.11, 'Importsitzung für Test 3 wird angelegt …', `${chunks.length} Datenblöcke`);
     const started = await apiPost('/api/admin/import/start', {
       datasetId,
       name,
@@ -381,18 +425,18 @@
       });
       report(
         0.11 + ((index + 1) / chunks.length) * 0.84,
-        'Originalereignisse werden übertragen …',
+        'Gefilterte Originalereignisse werden übertragen …',
         `${result.receivedMessages.toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} Ereignissen · Block ${index + 1}/${chunks.length}`,
       );
     }
 
-    report(0.97, 'Vollständigkeit wird serverseitig geprüft …', 'Ereignis- und Blockzahl müssen exakt stimmen');
+    report(0.97, 'Vollständigkeit wird serverseitig geprüft …', 'Originalquelle, Testfilter und Ereigniszahl müssen exakt stimmen');
     const result = await apiPost('/api/admin/import/finish', {
       datasetId,
       uploadId: started.uploadId,
     });
-    if (Number(result.messages) !== messages.length) throw new Error('Server hat nicht alle Ereignisse bestätigt.');
-    report(1, 'Verlustfreier Ereignisstrom gespeichert', `${result.messages.toLocaleString('de-DE')} Ereignisse · stille Verluste: 0`);
+    if (Number(result.messages) !== messages.length) throw new Error('Server hat nicht alle Testereignisse bestätigt.');
+    report(1, 'Testfenster gespeichert', `${result.messages.toLocaleString('de-DE')} Ereignisse · stille Verluste: 0`);
     return result;
   }
 
@@ -403,16 +447,17 @@
 
     setProgress(
       rangeStart + span * 0.1,
-      'KI-Vorselektion wird geprüft …',
+      'KI-Vorselektion und Testfilter werden geprüft …',
       `${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Ereignisse`,
     );
     const result = await apiPost('/api/admin/analysis-versions/import', {
       datasetId,
-      versionId: 'pilot-v2-lossless-userfile',
-      label: `KI-Vorselektion V2 · ${annotations.situations.length} Situationen`,
-      source: 'chatgpt-ai-preselection-v2-lossless-upload',
+      versionId: VERSION_ID,
+      label: `KI-Vorselektion V3 · Test 3 · ${annotations.situations.length} Situationen`,
+      source: 'chatgpt-ai-preselection-v3-unseen-fullsource-upload',
       parameters: {
         ...(annotations.preselection || {}),
+        testFilter: annotations.testFilter,
         sourceFileHash: entry.preselectionFileHash,
         sourceFileName: entry.preselectionFile.name,
       },
@@ -420,8 +465,8 @@
     });
     setProgress(
       rangeEnd,
-      'Test 2 aktiviert',
-      `${result.situations} Situationen · ${result.assignments} Ereigniszuordnungen · Test 1 bleibt gesperrt`,
+      'Test 3 aktiviert',
+      `${result.situations} Situationen · ${result.assignments} Ereigniszuordnungen`,
     );
     return result;
   }
@@ -449,7 +494,7 @@
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selected) {
-      setStatus('Zuerst den verlustfreien Rohchat und die KI-Vorselektionsdatei auswählen und prüfen.', 'error');
+      setStatus('Zuerst den vollständigen Telegram-Originalexport und die KI-Datei mit integriertem Testfilter auswählen.', 'error');
       return;
     }
 
@@ -457,21 +502,21 @@
     if (skip) skip.disabled = true;
     rawInput.disabled = true;
     preselectionInput.disabled = true;
-    setStatus('Test 2 wird erstellt. Seite geöffnet lassen.', 'working');
+    setStatus('Test 3 wird erstellt. Seite geöffnet lassen.', 'working');
 
     try {
       await uploadRaw(selected, 8, 86);
       await uploadAnalysis(selected, 86, 100);
-      setProgress(100, 'Test 2 ist bereit', 'Prüfansicht wird geöffnet …');
-      setStatus('Test 2 wurde mit Rohchat und KI-Vorschlägen aktiviert. Weiterleitung …', 'ok');
+      setProgress(100, 'Test 3 ist bereit', 'Prüfansicht wird geöffnet …');
+      setStatus('Test 3 wurde aus dem vollständigen Rohchat und den gefilterten KI-Vorschlägen aktiviert. Weiterleitung …', 'ok');
       setTimeout(() => location.replace('/review.html'), 900);
     } catch (caught) {
       const details = caught?.details;
       const countSuffix = details?.expectedMessages
         ? ` Empfangen: ${details.receivedMessages ?? '?'} von ${details.expectedMessages} Ereignissen.`
         : '';
-      setStatus(`${caught?.message || 'Test 2 konnte nicht gestartet werden.'}${countSuffix}`, 'error');
-      progressLabel.textContent = 'Test 2 unterbrochen';
+      setStatus(`${caught?.message || 'Test 3 konnte nicht gestartet werden.'}${countSuffix}`, 'error');
+      progressLabel.textContent = 'Test 3 unterbrochen';
       progressDetail.textContent = 'Beide Dateien bleiben ausgewählt. Nach Behebung kann der Upload erneut gestartet werden.';
       submit.disabled = false;
       rawInput.disabled = false;
@@ -480,5 +525,6 @@
     }
   });
 
+  if (document.getElementById('dataset-id')) document.getElementById('dataset-id').value = DATASET_ID;
   currentUser().catch(() => location.replace('/login.html'));
 })();
