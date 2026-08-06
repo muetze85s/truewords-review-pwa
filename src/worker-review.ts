@@ -140,7 +140,7 @@ async function reviewWindow(env: Env, dataset: DatasetRow, annotations: Annotati
     WHERE dataset_id = ?1
   `).bind(dataset.id, firstNeedle, lastNeedle).first<ChunkBoundsRow>();
 
-  if (bounds?.first_chunk === null || bounds?.last_chunk === null) {
+  if (!bounds || bounds.first_chunk === null || bounds.last_chunk === null) {
     throw new Error('Das Nachrichtenfenster der Vorschläge konnte nicht gefunden werden.');
   }
 
