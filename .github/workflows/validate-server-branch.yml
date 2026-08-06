@@ -32,13 +32,20 @@ jobs:
           npm run check
           npm run build
           test -f dist/index.html
-          test -f dist/admin.html
-          test -f dist/admin-upload.js
+          test -f dist/review.html
+          test -f dist/login.html
+          test -f dist/login.js
+          test -f dist/account-setup.html
+          test -f dist/account-setup.js
+          test -f dist/upload.html
+          test -f dist/upload.js
+          test -f dist/portal.css
           test -f dist/server-sync.js
           test -f dist/server-sync.css
-          grep -q 'server-sync.js' dist/index.html
-          grep -q 'server-sync.css' dist/index.html
-          grep -q 'admin-upload.js' dist/admin.html
+          test -f migrations/0004_email_auth.sql
+          grep -q 'server-sync.js' dist/review.html
+          grep -q 'data-files' dist/upload.html
+          grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
       - name: Wrangler dry run
