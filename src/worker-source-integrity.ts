@@ -15,10 +15,9 @@ const PILOT_V3_DATASET_ID = 'philena-2026-pilot-v3-unseen';
 const ORIGINAL_SOURCE_SHA256 = '5bb863d1b1a68e0ada83933bc069fbb923cd4d98074308bcbdb47581b7791822';
 const LOSSLESS_2026_FILE_SHA256 = '0501361af7e9fec8ba7ba24da45256db98479cfb600d1de30ece64c5ef057b44';
 const V2_PRESELECTION_FILE_SHA256 = '0c4409bcf000157d038e8cefc66b022409189579c47669ad98444852d1e9c24e';
-const V3_PRESELECTION_FILE_SHA256 = 'fce30f5883eeef31d5e5bb565fa6904a2ab3e3a56ac462bca692212a4fdc7a2c';
+const V3_PRESELECTION_FILE_SHA256 = '14cb353ab24bf6bf7129452e18da375dd90481832bdb1e21eafaefba845f58d5';
 const ORIGINAL_SOURCE_EVENTS = 73_946;
 const REVIEW_YEAR_EVENTS = 2_494;
-const V2_REVIEW_EVENTS = 2_494;
 const V2_PRESELECTION_SITUATIONS = 28;
 const V2_PRESELECTION_ASSIGNMENTS = 335;
 const V3_TEST_EVENTS = 335;
@@ -52,6 +51,32 @@ function acceptedV2RawFileHash(value: unknown): boolean {
   return hash === ORIGINAL_SOURCE_SHA256 || hash === LOSSLESS_2026_FILE_SHA256;
 }
 
+function validHalfSplitOwners(annotations: Record<string, unknown>): boolean {
+  const situations = Array.isArray(annotations.situations) ? annotations.situations : [];
+  const assignment = objectValue(annotations.ownerAssignment);
+  const owners = objectValue(assignment?.owners);
+  const duplicateOwners = objectValue(annotations.owners);
+  if (
+    assignment?.schemaVersion !== 'truewords-owner-assignment/v1'
+    || assignment?.strategy !== 'chronological-half-split'
+    || assignment?.oddSituationOwner !== 'Philipp'
+    || !owners
+  ) return false;
+
+  const ids = situations
+    .map((item) => Number(objectValue(item)?.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .sort((left, right) => left - right);
+  if (ids.length !== situations.length || new Set(ids).size !== ids.length) return false;
+  if (Object.keys(owners).length !== ids.length) return false;
+  const split = Math.ceil(ids.length / 2);
+  return ids.every((id, index) => {
+    const expected = index < split ? 'Philipp' : 'Lena';
+    return owners[String(id)] === expected
+      && (!duplicateOwners || duplicateOwners[String(id)] === expected);
+  });
+}
+
 async function validatePilotSource(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (url.pathname !== '/api/admin/import/start' || request.method !== 'POST') return null;
@@ -79,12 +104,8 @@ async function validatePilotSource(request: Request): Promise<Response | null> {
     }, 409);
   }
 
-  if (body.datasetId === PILOT_V2_DATASET_ID) {
-    return validateV2Source(body);
-  }
-  if (body.datasetId === PILOT_V3_DATASET_ID) {
-    return validateV3Source(body);
-  }
+  if (body.datasetId === PILOT_V2_DATASET_ID) return validateV2Source(body);
+  if (body.datasetId === PILOT_V3_DATASET_ID) return validateV3Source(body);
   return null;
 }
 
@@ -94,37 +115,23 @@ function validateV2Source(body: {
   chatMeta?: unknown;
 }): Response | null {
   const chatMeta = objectValue(body.chatMeta);
-  const sourceIntegrity = objectValue(chatMeta?.sourceIntegrity);
-  const hash = lowerHash(body.datasetHash);
-  const messages = Number(body.expectedMessages);
-  const sourceEntries = Number(sourceIntegrity?.sourceEntries);
-  const uploadedEvents = Number(sourceIntegrity?.uploadedEvents);
-  const preservedEntries = Number(sourceIntegrity?.preservedEntries);
-  const silentLosses = Number(sourceIntegrity?.silentLosses);
-  const sourceSha256 = lowerHash(sourceIntegrity?.sourceSha256);
-  const sourceFileHash = lowerHash(sourceIntegrity?.sourceFileHash);
-
+  const integrity = objectValue(chatMeta?.sourceIntegrity);
   const valid = (
-    hash === ORIGINAL_SOURCE_SHA256
-    && messages === V2_REVIEW_EVENTS
-    && sourceEntries === ORIGINAL_SOURCE_EVENTS
-    && uploadedEvents === V2_REVIEW_EVENTS
-    && preservedEntries === V2_REVIEW_EVENTS
-    && silentLosses === 0
-    && sourceSha256 === ORIGINAL_SOURCE_SHA256
-    && acceptedV2RawFileHash(sourceFileHash)
+    lowerHash(body.datasetHash) === ORIGINAL_SOURCE_SHA256
+    && Number(body.expectedMessages) === REVIEW_YEAR_EVENTS
+    && Number(integrity?.sourceEntries) === ORIGINAL_SOURCE_EVENTS
+    && Number(integrity?.uploadedEvents) === REVIEW_YEAR_EVENTS
+    && Number(integrity?.preservedEntries) === REVIEW_YEAR_EVENTS
+    && Number(integrity?.silentLosses) === 0
+    && lowerHash(integrity?.sourceSha256) === ORIGINAL_SOURCE_SHA256
+    && acceptedV2RawFileHash(integrity?.sourceFileHash)
   );
-  if (valid) return null;
-
-  return json({
+  return valid ? null : json({
     ok: false,
     error: 'Falscher oder unvollständiger Rohchat für Test 2.',
     details: {
-      sourceIntegrity: 'FAIL',
-      expectedMessages: V2_REVIEW_EVENTS,
-      receivedMessages: Number.isFinite(messages) ? messages : null,
-      expectedSourceEvents: ORIGINAL_SOURCE_EVENTS,
-      receivedSourceEvents: Number.isFinite(sourceEntries) ? sourceEntries : null,
+      expectedMessages: REVIEW_YEAR_EVENTS,
+      receivedMessages: Number(body.expectedMessages) || null,
     },
   }, 409);
 }
@@ -135,33 +142,23 @@ function validateV3Source(body: {
   chatMeta?: unknown;
 }): Response | null {
   const chatMeta = objectValue(body.chatMeta);
-  const sourceIntegrity = objectValue(chatMeta?.sourceIntegrity);
+  const integrity = objectValue(chatMeta?.sourceIntegrity);
   const testFilter = objectValue(chatMeta?.testFilter);
   const filterSource = objectValue(testFilter?.source);
   const selection = objectValue(testFilter?.selection);
   const eventIds = Array.isArray(selection?.eventIds) ? selection.eventIds.map(String) : [];
-
-  const hash = lowerHash(body.datasetHash);
   const messages = Number(body.expectedMessages);
-  const sourceEntries = Number(sourceIntegrity?.sourceEntries);
-  const reviewYearEvents = Number(sourceIntegrity?.reviewYearEvents);
-  const uploadedEvents = Number(sourceIntegrity?.uploadedEvents);
-  const preservedEntries = Number(sourceIntegrity?.preservedEntries);
-  const silentLosses = Number(sourceIntegrity?.silentLosses);
-  const sourceSha256 = lowerHash(sourceIntegrity?.sourceSha256);
-  const sourceFileHash = lowerHash(sourceIntegrity?.sourceFileHash);
 
   const valid = (
-    hash === ORIGINAL_SOURCE_SHA256
-    && messages === V3_TEST_EVENTS
-    && sourceEntries === ORIGINAL_SOURCE_EVENTS
-    && reviewYearEvents === REVIEW_YEAR_EVENTS
-    && uploadedEvents === V3_TEST_EVENTS
-    && preservedEntries === V3_TEST_EVENTS
-    && silentLosses === 0
-    && sourceSha256 === ORIGINAL_SOURCE_SHA256
-    && sourceFileHash === ORIGINAL_SOURCE_SHA256
-    && sourceIntegrity?.fullOriginalVerified === true
+    lowerHash(body.datasetHash) === ORIGINAL_SOURCE_SHA256
+    && messages === REVIEW_YEAR_EVENTS
+    && Number(integrity?.sourceEntries) === ORIGINAL_SOURCE_EVENTS
+    && Number(integrity?.uploadedEvents) === REVIEW_YEAR_EVENTS
+    && Number(integrity?.preservedEntries) === REVIEW_YEAR_EVENTS
+    && Number(integrity?.silentLosses) === 0
+    && lowerHash(integrity?.sourceSha256) === ORIGINAL_SOURCE_SHA256
+    && lowerHash(integrity?.sourceFileHash) === ORIGINAL_SOURCE_SHA256
+    && integrity?.fullOriginalVerified === true
     && testFilter?.schemaVersion === 'truewords-test-filter/v1'
     && lowerHash(filterSource?.sourceSha256) === ORIGINAL_SOURCE_SHA256
     && Number(filterSource?.sourceEvents) === ORIGINAL_SOURCE_EVENTS
@@ -178,19 +175,15 @@ function validateV3Source(body: {
 
   return json({
     ok: false,
-    error: 'Falscher oder unvollständiger Rohchat für Test 3. Erforderlich ist der vollständige Telegram-Originalexport plus der integrierte 335-Ereignisse-Testfilter.',
+    error: 'Falscher oder unvollständiger Rohchat für Test 3. Erforderlich ist der vollständige Telegram-Originalexport; der Prüfserver speichert daraus den vollständigen verlustfreien 2026-Ereignisstrom.',
     details: {
       sourceIntegrity: 'FAIL',
-      expectedMessages: V3_TEST_EVENTS,
+      expectedMessages: REVIEW_YEAR_EVENTS,
       receivedMessages: Number.isFinite(messages) ? messages : null,
       expectedSourceEvents: ORIGINAL_SOURCE_EVENTS,
-      receivedSourceEvents: Number.isFinite(sourceEntries) ? sourceEntries : null,
+      receivedSourceEvents: Number(integrity?.sourceEntries) || null,
       expectedSourceFileSha256: ORIGINAL_SOURCE_SHA256,
-      receivedSourceFileSha256: /^[a-f0-9]{64}$/iu.test(sourceFileHash) ? sourceFileHash : null,
-      expectedFirstEventId: V3_FIRST_EVENT_ID,
-      receivedFirstEventId: selection?.firstEventId || null,
-      expectedLastEventId: V3_LAST_EVENT_ID,
-      receivedLastEventId: selection?.lastEventId || null,
+      receivedSourceFileSha256: lowerHash(integrity?.sourceFileHash) || null,
       expectedFilterEvents: V3_TEST_EVENTS,
       receivedFilterEvents: eventIds.length,
     },
@@ -214,12 +207,8 @@ async function validatePilotPreselection(request: Request): Promise<Response | n
     return null;
   }
 
-  if (body.datasetId === PILOT_V2_DATASET_ID) {
-    return validateV2Preselection(body);
-  }
-  if (body.datasetId === PILOT_V3_DATASET_ID) {
-    return validateV3Preselection(body);
-  }
+  if (body.datasetId === PILOT_V2_DATASET_ID) return validateV2Preselection(body);
+  if (body.datasetId === PILOT_V3_DATASET_ID) return validateV3Preselection(body);
   return null;
 }
 
@@ -235,22 +224,20 @@ function validateV2Preselection(body: {
   const assignments = objectValue(annotations?.assignments);
   const preselection = objectValue(annotations?.preselection);
   const integrity = objectValue(preselection?.integrity);
-  const sourceFileHash = lowerHash(parameters?.sourceFileHash);
-  const datasetHash = lowerHash(annotations?.datasetHash);
-
   const valid = (
     body.versionId === 'pilot-v2-lossless-userfile'
     && body.source === 'chatgpt-ai-preselection-v2-lossless-upload'
-    && sourceFileHash === V2_PRESELECTION_FILE_SHA256
-    && datasetHash === ORIGINAL_SOURCE_SHA256
+    && lowerHash(parameters?.sourceFileHash) === V2_PRESELECTION_FILE_SHA256
+    && lowerHash(annotations?.datasetHash) === ORIGINAL_SOURCE_SHA256
     && situations.length === V2_PRESELECTION_SITUATIONS
     && Object.keys(assignments || {}).length === V2_PRESELECTION_ASSIGNMENTS
     && Number(integrity?.silentLosses) === 0
     && integrity?.allPilotEventsAssigned === true
   );
-  if (valid) return null;
-
-  return json({ ok: false, error: 'Falsche oder unvollständige KI-Vorselektionsdatei für Test 2.' }, 409);
+  return valid ? null : json({
+    ok: false,
+    error: 'Falsche oder unvollständige KI-Vorselektionsdatei für Test 2.',
+  }, 409);
 }
 
 function validateV3Preselection(body: {
@@ -270,52 +257,49 @@ function validateV3Preselection(body: {
   const filterSource = objectValue(testFilter?.source);
   const selection = objectValue(testFilter?.selection);
   const eventIds = Array.isArray(selection?.eventIds) ? selection.eventIds.map(String) : [];
-  const sourceFileHash = lowerHash(parameters?.sourceFileHash);
-  const datasetHash = lowerHash(annotations?.datasetHash);
-  const accountedForIds = new Set([
+  const accounted = new Set([
     ...Object.keys(assignments || {}).map(String),
     ...Object.keys(overrides || {}).map(String),
   ]);
 
   const valid = (
-    body.versionId === 'pilot-v3-unseen-fullsource-userfile'
-    && body.source === 'chatgpt-ai-preselection-v3-unseen-fullsource-upload'
-    && sourceFileHash === V3_PRESELECTION_FILE_SHA256
+    body.versionId === 'pilot-v3-unseen-fullsource-owners'
+    && body.source === 'chatgpt-ai-preselection-v3-unseen-fullsource'
+    && lowerHash(parameters?.sourceFileHash) === V3_PRESELECTION_FILE_SHA256
     && annotations?.schemaVersion === 'truewords-manual-segmentation/v3-unseen'
-    && datasetHash === ORIGINAL_SOURCE_SHA256
+    && lowerHash(annotations?.datasetHash) === ORIGINAL_SOURCE_SHA256
     && situations.length === V3_PRESELECTION_SITUATIONS
     && Object.keys(assignments || {}).length === V3_PRESELECTION_ASSIGNMENTS
+    && validHalfSplitOwners(annotations || {})
     && testFilter?.schemaVersion === 'truewords-test-filter/v1'
     && lowerHash(filterSource?.sourceSha256) === ORIGINAL_SOURCE_SHA256
     && Number(filterSource?.sourceEvents) === ORIGINAL_SOURCE_EVENTS
     && selection?.mode === 'exact_event_ids'
+    && Number(selection?.eventCount) === V3_TEST_EVENTS
     && eventIds.length === V3_TEST_EVENTS
     && new Set(eventIds).size === V3_TEST_EVENTS
     && eventIds[0] === V3_FIRST_EVENT_ID
     && eventIds.at(-1) === V3_LAST_EVENT_ID
-    && accountedForIds.size === V3_TEST_EVENTS
-    && eventIds.every((id) => accountedForIds.has(id))
+    && accounted.size === V3_TEST_EVENTS
+    && eventIds.every((id) => accounted.has(id))
     && Number(integrity?.silentLosses) === 0
-    && integrity?.allNonExcludedEventsAssigned === true
+    && integrity?.allSelectedEventsAssignedOrExcluded === true
     && integrity?.fullOriginalRequired === true
   );
   if (valid) return null;
 
   return json({
     ok: false,
-    error: 'Falsche oder unvollständige KI-Vorselektionsdatei für Test 3.',
+    error: 'Falsche oder unvollständige KI-Vorselektionsdatei für Test 3. Testfilter und Prüfaufteilung müssen integriert sein.',
     details: {
       preselectionIntegrity: 'FAIL',
       expectedFileSha256: V3_PRESELECTION_FILE_SHA256,
-      receivedFileSha256: /^[a-f0-9]{64}$/iu.test(sourceFileHash) ? sourceFileHash : null,
+      receivedFileSha256: lowerHash(parameters?.sourceFileHash) || null,
       expectedSituations: V3_PRESELECTION_SITUATIONS,
       receivedSituations: situations.length,
       expectedAssignments: V3_PRESELECTION_ASSIGNMENTS,
       receivedAssignments: Object.keys(assignments || {}).length,
-      expectedFilterEvents: V3_TEST_EVENTS,
-      receivedFilterEvents: eventIds.length,
-      expectedDatasetSha256: ORIGINAL_SOURCE_SHA256,
-      receivedDatasetSha256: /^[a-f0-9]{64}$/iu.test(datasetHash) ? datasetHash : null,
+      ownerAssignmentValid: validHalfSplitOwners(annotations || {}),
     },
   }, 409);
 }
