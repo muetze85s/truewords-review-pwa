@@ -70,15 +70,19 @@ jobs:
           grep -q 'data-situation-id' review.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
           grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
+          grep -q 'philena-2026-pilot-v3-unseen' src/worker-source-integrity.ts
           grep -q 'ABORTED_LOSSY_PREPROCESSING' src/worker-source-integrity.ts
-          grep -q 'philena-2026-pilot-v2' wrangler.jsonc
+          grep -q 'philena-2026-pilot-v3-unseen' wrangler.jsonc
           grep -q 'pilot-v2.js' dist/upload.html
-          grep -q 'Rohchat und KI-Vorschläge hochladen' dist/upload.html
-          grep -q 'KI-Vorselektionsdatei auswählen' dist/upload.html
+          grep -q 'Vollständigen Telegram-Rohchat auswählen' dist/upload.html
+          grep -q 'KI-Vorselektion mit integriertem Testfilter' dist/upload.html
           grep -q 'Weiter ohne Upload' dist/upload.html
-          grep -q 'PRESELECTION_SITUATIONS = 28' dist/upload.js
+          grep -q 'PRESELECTION_SITUATIONS = 12' dist/upload.js
           grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
-          grep -q 'PRESELECTION_SHA256' dist/upload.js
+          grep -q 'truewords-test-filter/v1' dist/upload.js
+          grep -q 'V3_PRESELECTION_FILE_SHA256' src/worker-source-integrity.ts
+          grep -q 'pilot-v3-unseen-fullsource-userfile' src/worker-source-integrity.ts
+          ! grep -q 'LOSSLESS_2026_SHA256' dist/upload.js
           ! grep -q 'generatePilot(prepared' dist/upload.js
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
