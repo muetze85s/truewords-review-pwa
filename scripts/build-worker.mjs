@@ -9,6 +9,8 @@ const files = [
   'review.css',
   'truewords-theme.css',
   'review.js',
+  'review-boundaries.css',
+  'review-boundaries.js',
   'admin.html',
   'admin-upload.css',
   'admin-upload.js',
