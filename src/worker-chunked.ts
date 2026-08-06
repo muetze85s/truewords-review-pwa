@@ -22,6 +22,13 @@ type ImportCountsRow = {
   messages: number;
 };
 
+type DatasetHashOwnerRow = {
+  id: string;
+};
+
+const PILOT_V3_DATASET_ID = 'philena-2026-pilot-v3-unseen';
+const PILOT_V3_STORAGE_SHA256 = 'a503edc19adaf2a2c659c18e851a4852a0de88ce4c1ffc948a52f6a295c0a8ee';
+
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store, max-age=0',
@@ -75,6 +82,14 @@ function positiveInteger(value: unknown, maximum: number): number | null {
   return Number.isInteger(number) && number > 0 && number <= maximum ? number : null;
 }
 
+function storageDatasetHash(datasetId: string, sourceHash: string): string {
+  // review_datasets.dataset_hash ist in der bestehenden D1-Struktur UNIQUE.
+  // Test 2 und Test 3 verwenden absichtlich denselben vollständigen Rohchat.
+  // Deshalb erhält Test 3 eine eigene Datensatzidentität; der Originalquellen-Hash
+  // bleibt unverändert in chat_meta_json.sourceIntegrity erhalten und wird dort geprüft.
+  return datasetId === PILOT_V3_DATASET_ID ? PILOT_V3_STORAGE_SHA256 : sourceHash;
+}
+
 async function sessionFor(
   env: Env,
   datasetId: string,
@@ -122,13 +137,26 @@ async function startImport(request: Request, env: Env): Promise<Response> {
     return error('Chat-Metadaten fehlen.');
   }
 
+  const datasetHash = storageDatasetHash(body.datasetId, body.datasetHash.toLocaleLowerCase('en-US'));
+  const hashOwner = await env.DB.prepare(`
+    SELECT id FROM review_datasets
+    WHERE dataset_hash = ?1 AND id <> ?2
+    LIMIT 1
+  `).bind(datasetHash, body.datasetId).first<DatasetHashOwnerRow>();
+  if (hashOwner) {
+    return error('Die Datensatzidentität wird bereits von einem anderen Prüfstand verwendet.', 409, {
+      datasetId: body.datasetId,
+      conflictingDatasetId: hashOwner.id,
+    });
+  }
+
   const uploadId = crypto.randomUUID();
   const name = String(body.name || body.datasetId).slice(0, 240);
   const year = Number.isInteger(Number(body.year)) ? Number(body.year) : 2021;
   const now = new Date().toISOString();
   const annotations = {
     schemaVersion: 'truewords-manual-segmentation/v2',
-    datasetHash: body.datasetHash,
+    datasetHash,
     datasetLabel: name,
     reviewer: 'System',
     situations: [],
@@ -156,7 +184,7 @@ async function startImport(request: Request, env: Env): Promise<Response> {
       body.datasetId,
       name,
       year,
-      body.datasetHash,
+      datasetHash,
       JSON.stringify(body.chatMeta),
       JSON.stringify(annotations),
       now,
@@ -178,7 +206,7 @@ async function startImport(request: Request, env: Env): Promise<Response> {
       uploadId,
       expectedChunks,
       expectedMessages,
-      body.datasetHash,
+      datasetHash,
       now,
     ),
   ]);
@@ -186,6 +214,7 @@ async function startImport(request: Request, env: Env): Promise<Response> {
   return json({
     ok: true,
     datasetId: body.datasetId,
+    datasetHash,
     uploadId,
     expectedChunks,
     expectedMessages,
@@ -338,7 +367,10 @@ export default {
       return baseWorker.fetch(request, env);
     } catch (caught) {
       console.error('Chunked import error', caught);
-      return error('Interner Serverfehler beim Datenimport.', 500);
+      return error('Interner Serverfehler beim Datenimport.', 500, {
+        code: 'CHUNKED_IMPORT_INTERNAL',
+        message: caught instanceof Error ? caught.message.slice(0, 240) : 'Unbekannter Fehler',
+      });
     }
   },
 };
