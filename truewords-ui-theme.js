@@ -21,7 +21,7 @@
     document.documentElement.dataset.theme = resolved;
     document.querySelector('meta[name="theme-color"]')?.setAttribute(
       'content',
-      resolved === 'dark' ? '#121716' : '#f6f2ec',
+      resolved === 'dark' ? '#111614' : '#f3f2ef',
     );
     document.querySelectorAll('[data-theme-choice]').forEach((button) => {
       const active = button.dataset.themeChoice === selected;
