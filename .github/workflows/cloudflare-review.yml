@@ -1,6 +1,19 @@
 name: Deploy private Review Server
 
 on:
+  push:
+    branches:
+      - agent/server-synchronization
+    paths:
+      - "review-precision.js"
+      - "review-precision.css"
+      - "review.html"
+      - "sw.js"
+      - "scripts/build-worker.mjs"
+      - "src/worker-review-precision.ts"
+      - "wrangler.jsonc"
+      - "package.json"
+      - ".github/workflows/cloudflare-review.yml"
   workflow_dispatch:
 
 permissions:
@@ -49,8 +62,13 @@ jobs:
           test -f dist/pilot-v2.js
           test -f dist/review.html
           test -f dist/review-boundaries.js
+          test -f dist/review-precision.js
+          test -f dist/review-precision.css
           test -f migrations/0001_review_sync.sql
           grep -q 'philena-2026-pilot-v2' wrangler.jsonc
+          grep -q 'worker-review-precision.ts' wrangler.jsonc
+          grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
+          grep -q 'boundary_cross_owner_moved' dist/review-precision.js
           grep -q 'Rohchat und KI-Vorschläge hochladen' dist/upload.html
           grep -q 'KI-Vorselektionsdatei auswählen' dist/upload.html
           grep -q 'Weiter ohne Upload' dist/upload.html
