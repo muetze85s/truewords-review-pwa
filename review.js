@@ -84,6 +84,18 @@
     return accountTimeZone();
   }
 
+  function accountTimeZone() {
+    return ACCOUNT_TIME_ZONES[state.user?.role]?.zone
+      || Intl.DateTimeFormat().resolvedOptions().timeZone
+      || 'UTC';
+  }
+
+  function accountTimeLabel() {
+    const configured = ACCOUNT_TIME_ZONES[state.user?.role];
+    if (configured) return `${configured.label} · ${configured.zone}`;
+    return accountTimeZone();
+  }
+
   function isOwnMessage(message) {
     const name = speaker(message).toLocaleLowerCase('de-DE');
     return activeReviewer() === 'Lena' ? name.includes('lena') : name.includes('philipp');
