@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1220">
   <meta name="robots" content="noindex,nofollow">
-  <title>TrueWords · Privater Datenimport</title>
+  <title>TrueWords · Privater Rohchat-Import</title>
   <link rel="stylesheet" href="./admin-upload.css">
 </head>
 <body>
   <main class="page">
     <section class="card">
       <div class="eyebrow">Einmalige Einrichtung</div>
-      <h1>Prüfdaten sicher einspielen</h1>
-      <p class="intro">Der Telegram-Export wird im Browser auf das Jahr 2026 reduziert und anschließend direkt an den privaten Cloudflare-Worker übertragen. Es wird keine Chatdatei in GitHub gespeichert.</p>
+      <h1>Bereinigten Rohchat einspielen</h1>
+      <p class="intro">Der vollständige bereinigte Telegram-Chat wird unverändert an den privaten Cloudflare-Worker übertragen. Die Jahresauswahl erfolgt anschließend in der Prüf-PWA. Es werden keine KI-Vorschläge importiert und keine Chatdateien in GitHub gespeichert.</p>
 
       <form id="upload-form">
         <label>
@@ -22,15 +22,9 @@
         </label>
 
         <label>
-          <span>Telegram-Export</span>
+          <span>Vollständiger bereinigter Rohchat</span>
           <input id="chat-file" type="file" accept=".json,application/json" required>
-          <small>Vollständiger Telegram-JSON-Export; übertragen werden nur Nachrichten aus 2026.</small>
-        </label>
-
-        <label>
-          <span>KI-Vorselektion</span>
-          <input id="annotations-file" type="file" accept=".json,application/json" required>
-          <small>Die erzeugte Markierungs- oder Vorselektionsdatei.</small>
+          <small>Telegram-JSON mit allen Jahren. Keine Jahresfilterung und keine KI-Vorselektion beim Import.</small>
         </label>
 
         <div class="grid">
@@ -40,15 +34,15 @@
           </label>
           <label>
             <span>Anzeigename</span>
-            <input id="dataset-name" value="Philipp & Lena" required>
+            <input id="dataset-name" value="Philipp & Lena · bereinigter Rohchat 2021–2026" required>
           </label>
         </div>
 
-        <button id="submit" type="submit">2026-Daten auf Server laden</button>
+        <button id="submit" type="submit">Bereinigten Rohchat auf Server laden</button>
       </form>
 
       <div id="status" class="status" role="status" aria-live="polite">Noch nichts übertragen.</div>
-      <p class="privacy">Der Zugangscode wird nicht gespeichert. Nach erfolgreichem Import diese Seite schließen.</p>
+      <p class="privacy">Der Zugangscode wird nicht gespeichert. Der Import legt einen leeren Prüfstand an; Segmentierungs- und Analysevorschläge entstehen später als getrennte Versionen.</p>
     </section>
   </main>
   <script src="./admin-upload.js"></script>
