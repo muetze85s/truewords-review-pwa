@@ -4,7 +4,10 @@
   const app = document.getElementById('review-app');
   const SHOW_COMPLETED_KEY = 'truewords-review/show-completed';
   const REVIEWER_MODE_KEY = 'truewords-review/reviewer-mode';
-  const THAILAND_TIME_ZONE = 'Asia/Bangkok';
+  const ACCOUNT_TIME_ZONES = {
+    Philipp: { zone: 'Asia/Bangkok', label: 'Thailand' },
+    Lena: { zone: 'Europe/Berlin', label: 'Deutschland' },
+  };
   const state = {
     user: null,
     dataset: null,
@@ -57,6 +60,18 @@
     return Boolean(state.user?.canUpload);
   }
 
+  function accountTimeZone() {
+    return ACCOUNT_TIME_ZONES[state.user?.role]?.zone
+      || Intl.DateTimeFormat().resolvedOptions().timeZone
+      || 'UTC';
+  }
+
+  function accountTimeLabel() {
+    const configured = ACCOUNT_TIME_ZONES[state.user?.role];
+    if (configured) return `${configured.label} · ${configured.zone}`;
+    return accountTimeZone();
+  }
+
   function isOwnMessage(message) {
     const name = speaker(message).toLocaleLowerCase('de-DE');
     return activeReviewer() === 'Lena' ? name.includes('lena') : name.includes('philipp');
@@ -77,7 +92,7 @@
       return typeof value === 'object' ? String(value?.date || '') : String(value || '');
     }
     return new Intl.DateTimeFormat('de-DE', {
-      timeZone: THAILAND_TIME_ZONE,
+      timeZone: accountTimeZone(),
       day: '2-digit',
       month: '2-digit',
       year: '2-digit',
@@ -464,8 +479,8 @@
       <div class="app-shell">
         <header class="topbar">
           <div class="brand">
-            <div class="logo">TW</div>
-            <div><div class="eyebrow">Gemeinsame Prüf-PWA</div><h1>Situationen prüfen</h1></div>
+            <div class="logo" aria-label="TrueWords"><i></i><b></b></div>
+            <div><div class="eyebrow">TrueWords · Gemeinsame Prüfung</div><h1>Situationen prüfen</h1></div>
           </div>
           <nav class="account-nav">
             ${reviewerControl()}
@@ -476,7 +491,7 @@
         </header>
         <div class="summarybar">
           <span><strong>${escapeHtml(state.dataset.name)}</strong> · ${open.length} offen / ${situations().length} gesamt</span>
-          <span class="timezone-note">Zeitangaben: Thailand · UTC+7</span>
+          <span class="timezone-note">Zeitangaben: ${escapeHtml(accountTimeLabel())}</span>
           <span>Philipp: ${stats.Philipp.done}/${stats.Philipp.situations} erledigt · Lena: ${stats.Lena.done}/${stats.Lena.situations}</span>
           <span id="sync-status" class="sync-status" data-state="${state.dirty ? 'working' : 'ok'}">${state.dirty ? 'Änderungen noch nicht bestätigt' : `Synchronisiert · Revision ${state.dataset.revision}`}</span>
         </div>
