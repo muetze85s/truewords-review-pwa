@@ -22,7 +22,7 @@ type ChunkRow = {
   message_count: number;
 };
 
-const SESSION_COOKIE = 'tw_review_session';
+const SESSION_COOKIE = 'tw_review_session_v2';
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store, max-age=0',

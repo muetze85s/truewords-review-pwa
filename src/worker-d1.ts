@@ -429,11 +429,25 @@ async function mergeReviewerState(
   }
   for (const id of newSituationIds) nextOwners[String(id)] = reviewer;
 
+  const assignedSituationIds = new Set(
+    Object.values(mergedAssignments)
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  );
+  const removedEmptySituationIds = mergedSituations
+    .map((situation) => Number(situation.id))
+    .filter((id) => !assignedSituationIds.has(id));
+  const removedEmptySet = new Set(removedEmptySituationIds);
+  const prunedSituations = mergedSituations.filter(
+    (situation) => !removedEmptySet.has(Number(situation.id)),
+  );
+  for (const id of removedEmptySituationIds) delete nextOwners[String(id)];
+
   const merged: AnnotationPayload = {
     ...current,
     datasetHash: dataset.dataset_hash,
     datasetLabel: dataset.name,
-    situations: mergedSituations,
+    situations: prunedSituations,
     assignments: mergedAssignments,
     events: Array.isArray(current.events) ? current.events.slice(-2000) : [],
   };
@@ -452,8 +466,11 @@ async function mergeReviewerState(
       reviewer,
       'review_state_saved',
       JSON.stringify({
-        situations: [...ownedAfterMerge].sort((a, b) => a - b),
-        newSituationIds,
+        situations: [...ownedAfterMerge]
+          .filter((id) => !removedEmptySet.has(id))
+          .sort((a, b) => a - b),
+        newSituationIds: newSituationIds.filter((id) => !removedEmptySet.has(id)),
+        removedEmptySituationIds,
       }),
     ),
   ]);
@@ -464,6 +481,7 @@ async function mergeReviewerState(
     datasetId: dataset.id,
     revision: updated?.revision ?? dataset.revision + 1,
     updatedAt: updated?.updated_at ?? now,
+    removedEmptySituationIds,
   });
 }
 

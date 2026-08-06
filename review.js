@@ -476,11 +476,10 @@
     state.dirty = true;
   }
 
-  function removeEmptyOwnSituations(exceptId = 0) {
+  function removeEmptySituations(exceptId = 0) {
     const emptyIds = situations()
       .filter((item) => (
         Number(item.id) !== Number(exceptId)
-        && isMine(item.id)
         && situationMessages(item.id).length === 0
       ))
       .map((item) => Number(item.id));
@@ -557,7 +556,7 @@
 
     if (!movedMessage) return;
     markModified(id, destinationId && destinationId !== id ? destinationId : 0);
-    removeEmptyOwnSituations(id);
+    removeEmptySituations(id);
 
     const updated = situationMessages(id);
     const boundaryMessage = action.startsWith('end') ? updated.at(-1) : updated[0];
@@ -673,6 +672,8 @@
       state.modified.clear();
       state.dirty = false;
       state.scrollTarget = null;
+      const removedEmpty = removeEmptySituations(0);
+      if (removedEmpty.length) await saveState();
       renderWorkspace();
       clearInterval(state.pollTimer);
       state.pollTimer = setInterval(poll, 15000);

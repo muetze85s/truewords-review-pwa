@@ -21,8 +21,8 @@ type UserRow = {
   password_iterations: number;
 };
 
-const SESSION_COOKIE = 'tw_review_session';
-const SESSION_SECONDS = 30 * 24 * 60 * 60;
+const SESSION_COOKIE = 'tw_review_session_v2';
+const SESSION_SECONDS = 12 * 60 * 60;
 const FAST_HMAC_MARKER = 1;
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -106,7 +106,7 @@ async function passwordVerifier(key: CryptoKey, password: string, salt: string):
 }
 
 function sessionCookie(token: string): string {
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_SECONDS}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict`;
 }
 
 async function setupAccounts(request: Request, env: Env): Promise<Response> {

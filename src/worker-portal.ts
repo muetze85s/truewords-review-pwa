@@ -28,8 +28,8 @@ type SessionUser = {
   canUpload: boolean;
 };
 
-const SESSION_COOKIE = 'tw_review_session';
-const SESSION_SECONDS = 30 * 24 * 60 * 60;
+const SESSION_COOKIE = 'tw_review_session_v2';
+const SESSION_SECONDS = 12 * 60 * 60;
 const PASSWORD_ITERATIONS = 180_000;
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -163,7 +163,7 @@ async function sessionUser(request: Request, env: Env): Promise<SessionUser | nu
 }
 
 function sessionCookie(token: string): string {
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_SECONDS}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict`;
 }
 
 function clearSessionCookie(): string {
