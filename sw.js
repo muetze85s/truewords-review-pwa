@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v10';
+const CACHE = 'truewords-review-pwa-server-v11';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
