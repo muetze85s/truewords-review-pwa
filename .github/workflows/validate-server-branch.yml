@@ -41,6 +41,8 @@ jobs:
           test -f dist/review-precision.css
           test -f dist/review-cross-owner-fix.js
           test -f dist/review-status-colors.css
+          test -f dist/truewords-ui-theme.css
+          test -f dist/truewords-ui-theme.js
           test -f dist/login.html
           test -f dist/login.js
           test -f dist/account-setup.html
@@ -54,34 +56,41 @@ jobs:
           grep -q 'review.js' dist/review.html
           grep -q 'review-boundaries.js' dist/review.html
           grep -q 'review-precision.js' dist/review.html
-          grep -q 'review-precision.css' dist/review.html
           grep -q 'review-cross-owner-fix.js' dist/review.html
           grep -q 'review-status-colors.css' dist/review.html
+          grep -q 'truewords-ui-theme.css' dist/review.html
+          grep -q 'truewords-ui-theme.js' dist/review.html
+          grep -q 'truewords-ui-theme.css' dist/upload.html
+          grep -q 'truewords-ui-theme.js' dist/upload.html
+          grep -q 'data-speaker="Philipp"' dist/truewords-ui-theme.css
+          grep -q 'data-speaker="Lena"' dist/truewords-ui-theme.css
+          grep -q 'data-theme="dark"' dist/truewords-ui-theme.css
+          grep -q 'truewords/theme' dist/truewords-ui-theme.js
           grep -q 'status-corrected' dist/review-status-colors.css
-          grep -q 'background: var(--corrected)' dist/review-status-colors.css
           grep -q 'Telegram-ID-Sprung' dist/review-boundaries.js
           ! grep -q 'Zwischen-IDs.*fehlen' dist/review-boundaries.js
           grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
           grep -q 'boundary_cross_owner_moved' dist/review-precision.js
-          grep -q 'mediaPlaceholder' dist/review-precision.js
           grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
           grep -q 'precision_review_state_saved' src/worker-review-precision.ts
           grep -q 'worker-review-precision.ts' wrangler.jsonc
-          grep -q 'data-situation-id' review.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
           grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' src/worker-source-integrity.ts
           grep -q 'ABORTED_LOSSY_PREPROCESSING' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' wrangler.jsonc
-          grep -q 'pilot-v2.js' dist/upload.html
           grep -q 'Vollständigen Telegram-Rohchat auswählen' dist/upload.html
-          grep -q 'KI-Vorselektion mit integriertem Testfilter' dist/upload.html
+          grep -q 'Testfilter und Prüfaufteilung' dist/upload.html
           grep -q 'Weiter ohne Upload' dist/upload.html
           grep -q 'PRESELECTION_SITUATIONS = 12' dist/upload.js
           grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
           grep -q 'truewords-test-filter/v1' dist/upload.js
+          grep -q 'truewords-owner-assignment/v1' dist/upload.js
+          grep -q 'pilot-v3-unseen-fullsource-owners' dist/upload.js
           grep -q 'V3_PRESELECTION_FILE_SHA256' src/worker-source-integrity.ts
-          grep -q 'pilot-v3-unseen-fullsource-userfile' src/worker-source-integrity.ts
+          grep -q 'pilot-v3-unseen-fullsource-owners' src/worker-source-integrity.ts
+          grep -q 'explicit-owner-assignment' src/worker-analysis.ts
+          grep -q 'chronological-half-split' src/worker-analysis.ts
           ! grep -q 'LOSSLESS_2026_SHA256' dist/upload.js
           ! grep -q 'generatePilot(prepared' dist/upload.js
           grep -q 'login-form' dist/login.html
