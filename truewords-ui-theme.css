@@ -1,58 +1,68 @@
 :root {
-  --tw-bg: #f6f2ec;
-  --tw-surface: #fffdf9;
-  --tw-surface-secondary: #f3efea;
-  --tw-text: #18211f;
-  --tw-text-muted: #68716e;
-  --tw-border: #d9d4cd;
+  --tw-bg: #f3f2ef;
+  --tw-surface: #fbfaf8;
+  --tw-surface-secondary: #f0efec;
+  --tw-surface-raised: #ffffff;
+  --tw-text: #202624;
+  --tw-text-muted: #68726e;
+  --tw-border: #d5d9d6;
 
-  --tw-philipp: #0f9d94;
-  --tw-philipp-strong: #0b7f78;
-  --tw-philipp-surface: #d9f3f0;
-  --tw-philipp-text: #075e58;
+  /* Personenfarben: bewusst gedämpft, nur als Akzent. */
+  --tw-philipp: #3f918a;
+  --tw-philipp-strong: #2f746e;
+  --tw-philipp-surface: #e8f1ef;
+  --tw-philipp-text: #28645f;
 
-  --tw-lena: #e67aa8;
-  --tw-lena-strong: #c85d8e;
-  --tw-lena-surface: #fbe1ec;
-  --tw-lena-text: #8d315e;
+  --tw-lena: #b8758c;
+  --tw-lena-strong: #985c70;
+  --tw-lena-surface: #f3e9ed;
+  --tw-lena-text: #7f4a5c;
 
-  --tw-status-open: #c89024;
-  --tw-status-open-surface: #fff3d8;
-  --tw-status-confirmed: #0e8777;
-  --tw-status-confirmed-surface: #ddf3ee;
-  --tw-status-corrected: #77589a;
-  --tw-status-corrected-surface: #eee7f5;
-  --tw-status-unclear: #d65370;
-  --tw-status-unclear-surface: #fae2e8;
+  /* Statusfarben bleiben getrennt und werden überwiegend als schmale Markierung genutzt. */
+  --tw-status-open: #b78b43;
+  --tw-status-open-surface: #f6f0e4;
+  --tw-status-confirmed: #5c927f;
+  --tw-status-confirmed-surface: #eaf1ee;
+  --tw-status-corrected: #89769f;
+  --tw-status-corrected-surface: #efedf2;
+  --tw-status-unclear: #b86f7c;
+  --tw-status-unclear-surface: #f4e9eb;
+
+  --tw-action: #367f78;
+  --tw-action-hover: #2c6d67;
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --tw-bg: #121716;
-  --tw-surface: #1b2221;
-  --tw-surface-secondary: #242c2b;
-  --tw-text: #f2f5f4;
-  --tw-text-muted: #b4bfbc;
-  --tw-border: #394442;
+  --tw-bg: #111614;
+  --tw-surface: #181e1c;
+  --tw-surface-secondary: #202724;
+  --tw-surface-raised: #252d2a;
+  --tw-text: #edf1ef;
+  --tw-text-muted: #a7b0ac;
+  --tw-border: #36403c;
 
-  --tw-philipp: #38c8bc;
-  --tw-philipp-strong: #53d8cd;
-  --tw-philipp-surface: #123a38;
-  --tw-philipp-text: #b8f4ef;
+  --tw-philipp: #65aaa4;
+  --tw-philipp-strong: #4f918b;
+  --tw-philipp-surface: #202b29;
+  --tw-philipp-text: #add7d3;
 
-  --tw-lena: #f08bb7;
-  --tw-lena-strong: #ffaacb;
-  --tw-lena-surface: #3d2430;
-  --tw-lena-text: #ffd3e4;
+  --tw-lena: #c38a9e;
+  --tw-lena-strong: #a96f83;
+  --tw-lena-surface: #2b2427;
+  --tw-lena-text: #deb7c4;
 
-  --tw-status-open: #e0aa45;
-  --tw-status-open-surface: #443619;
-  --tw-status-confirmed: #48c2ae;
-  --tw-status-confirmed-surface: #173b35;
-  --tw-status-corrected: #b59ad2;
-  --tw-status-corrected-surface: #332943;
-  --tw-status-unclear: #f08098;
-  --tw-status-unclear-surface: #48262f;
+  --tw-status-open: #bd9858;
+  --tw-status-open-surface: #302a20;
+  --tw-status-confirmed: #70a18f;
+  --tw-status-confirmed-surface: #202b27;
+  --tw-status-corrected: #9c8aaf;
+  --tw-status-corrected-surface: #292631;
+  --tw-status-unclear: #bd7b87;
+  --tw-status-unclear-surface: #302428;
+
+  --tw-action: #3f827b;
+  --tw-action-hover: #4b9189;
 
   --bg: var(--tw-bg);
   --panel: var(--tw-surface);
@@ -60,22 +70,23 @@ html[data-theme="dark"] {
   --line: var(--tw-border);
   --text: var(--tw-text);
   --muted: var(--tw-text-muted);
-  --accent: var(--tw-philipp);
+  --accent: var(--tw-action);
   --good: var(--tw-status-confirmed);
   --warn: var(--tw-status-open);
   --bad: var(--tw-status-unclear);
   --corrected: var(--tw-status-corrected);
-  --teal: var(--tw-philipp);
-  --teal-dark: var(--tw-philipp-strong);
+  --teal: var(--tw-action);
+  --teal-dark: var(--tw-action-hover);
   --teal-soft: var(--tw-philipp-surface);
   --rose: var(--tw-lena);
   --rose-soft: var(--tw-lena-surface);
   --ink: var(--tw-text);
   --paper: var(--tw-bg);
   --card: var(--tw-surface);
-  --shadow: 0 18px 60px rgba(0, 0, 0, .28);
+  --shadow: 0 18px 52px rgba(0, 0, 0, .22);
 }
 
+/* Theme-Umschalter */
 .tw-theme-switcher {
   display: inline-flex;
   align-items: center;
@@ -86,7 +97,7 @@ html[data-theme="dark"] {
   padding: 4px;
   border: 1px solid var(--tw-border);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--tw-surface) 94%, transparent);
+  background: var(--tw-surface);
   color: var(--tw-text-muted);
   font-size: 10px;
   font-weight: 800;
@@ -110,69 +121,173 @@ html[data-theme="dark"] {
   color: var(--tw-surface);
 }
 
+/* Grundflächen bleiben neutral. */
+body,
+.message-list,
+.context-zone,
+.situation-zone,
+.message,
+.reply-preview,
+.situation-row,
+.situation-button {
+  color: var(--tw-text);
+}
+
+/* Chatnachrichten: neutrale Fläche, farbiger Seitenstrich statt Vollfärbung. */
+.message[data-speaker="Philipp"],
+.message[data-speaker="Lena"] {
+  border: 1px solid var(--tw-border) !important;
+  background: var(--tw-surface-secondary) !important;
+  box-shadow: none !important;
+}
 .message[data-speaker="Philipp"] {
-  border-color: var(--tw-philipp) !important;
-  background: var(--tw-philipp-surface) !important;
+  border-inline-start: 4px solid var(--tw-philipp) !important;
+}
+.message[data-speaker="Lena"] {
+  border-inline-start: 4px solid var(--tw-lena) !important;
 }
 .message[data-speaker="Philipp"] .message-meta strong,
 .message[data-speaker="Philipp"] .speaker-name {
   color: var(--tw-philipp-text) !important;
-}
-.message[data-speaker="Lena"] {
-  border-color: var(--tw-lena) !important;
-  background: var(--tw-lena-surface) !important;
 }
 .message[data-speaker="Lena"] .message-meta strong,
 .message[data-speaker="Lena"] .speaker-name {
   color: var(--tw-lena-text) !important;
 }
 .message.context[data-speaker] {
-  opacity: .78;
-  border-style: dashed;
+  opacity: .72;
+  border-style: dashed !important;
   filter: none !important;
 }
+
+/* Zugehörigkeitsbadges bleiben klein und dezent. */
 .message[data-speaker="Philipp"] .membership-badge {
-  background: var(--tw-philipp-strong);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--tw-philipp) 55%, var(--tw-border));
+  background: color-mix(in srgb, var(--tw-philipp-surface) 48%, var(--tw-surface));
+  color: var(--tw-philipp-text);
 }
 .message[data-speaker="Lena"] .membership-badge {
-  background: var(--tw-lena-strong);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--tw-lena) 55%, var(--tw-border));
+  background: color-mix(in srgb, var(--tw-lena-surface) 48%, var(--tw-surface));
+  color: var(--tw-lena-text);
+}
+.context-badge {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface) !important;
+  color: var(--tw-text-muted) !important;
 }
 
+/* Antwortvorschau: ebenfalls neutral, nur linker Personenakzent. */
+.reply-preview {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface) !important;
+  box-shadow: none !important;
+}
 .reply-preview[data-speaker="Philipp"] {
-  border-left-color: var(--tw-philipp);
-  background: color-mix(in srgb, var(--tw-philipp-surface) 72%, var(--tw-surface));
+  border-left: 3px solid var(--tw-philipp) !important;
 }
 .reply-preview[data-speaker="Lena"] {
-  border-left-color: var(--tw-lena);
-  background: color-mix(in srgb, var(--tw-lena-surface) 72%, var(--tw-surface));
+  border-left: 3px solid var(--tw-lena) !important;
 }
 
-.owner-badge[data-owner="Philipp"],
-[data-reviewer-mode][data-owner="Philipp"] {
-  border-color: var(--tw-philipp) !important;
-  background: var(--tw-philipp-surface) !important;
+/* Owner-Badges tragen die Personenfarbe; die ganze Situationszeile nicht. */
+.owner-badge[data-owner="Philipp"] {
+  border: 1px solid color-mix(in srgb, var(--tw-philipp) 55%, var(--tw-border)) !important;
+  background: color-mix(in srgb, var(--tw-philipp-surface) 60%, var(--tw-surface)) !important;
   color: var(--tw-philipp-text) !important;
 }
-.owner-badge[data-owner="Lena"],
-[data-reviewer-mode][data-owner="Lena"] {
-  border-color: var(--tw-lena) !important;
-  background: var(--tw-lena-surface) !important;
+.owner-badge[data-owner="Lena"] {
+  border: 1px solid color-mix(in srgb, var(--tw-lena) 55%, var(--tw-border)) !important;
+  background: color-mix(in srgb, var(--tw-lena-surface) 60%, var(--tw-surface)) !important;
   color: var(--tw-lena-text) !important;
 }
-.situation-row[data-owner="Philipp"] .situation-button {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tw-philipp-surface) 65%, transparent), transparent 42%);
+.situation-row[data-owner] .situation-button {
+  background: transparent !important;
 }
-.situation-row[data-owner="Lena"] .situation-button {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tw-lena-surface) 65%, transparent), transparent 42%);
+
+/* Prüferumschaltung: inaktiv neutral, nur aktiv leicht personenbezogen. */
+.reviewer-switch [data-reviewer-mode] {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--tw-text-muted) !important;
+}
+.reviewer-switch [data-reviewer-mode].active[data-owner="Philipp"] {
+  border-color: color-mix(in srgb, var(--tw-philipp) 58%, var(--tw-border)) !important;
+  background: color-mix(in srgb, var(--tw-philipp-surface) 62%, var(--tw-surface)) !important;
+  color: var(--tw-philipp-text) !important;
+}
+.reviewer-switch [data-reviewer-mode].active[data-owner="Lena"] {
+  border-color: color-mix(in srgb, var(--tw-lena) 58%, var(--tw-border)) !important;
+  background: color-mix(in srgb, var(--tw-lena-surface) 62%, var(--tw-surface)) !important;
+  color: var(--tw-lena-text) !important;
+}
+
+/* Situationsliste: Status nur über schmalen Balken und Text, keine bunten Vollflächen. */
+.situation-row.status-open,
+.situation-row.status-confirmed,
+.situation-row.status-corrected,
+.situation-row.status-unclear {
+  background: transparent !important;
+}
+.situation-row.status-open {
+  box-shadow: inset 4px 0 0 var(--tw-status-open) !important;
+}
+.situation-row.status-confirmed {
+  box-shadow: inset 4px 0 0 var(--tw-status-confirmed) !important;
+}
+.situation-row.status-corrected {
+  box-shadow: inset 4px 0 0 var(--tw-status-corrected) !important;
+}
+.situation-row.status-unclear {
+  box-shadow: inset 4px 0 0 var(--tw-status-unclear) !important;
+}
+.situation-row:hover {
+  background: var(--tw-surface-secondary) !important;
+}
+.situation-row.active,
+.situation-row.status-open.active,
+.situation-row.status-confirmed.active,
+.situation-row.status-corrected.active,
+.situation-row.status-unclear.active {
+  background: var(--tw-surface-secondary) !important;
+  outline: 1px solid var(--tw-border);
+  outline-offset: -1px;
+}
+
+/* Der Situationsrahmen und die Grenzbalken bleiben neutral. */
+.situation-zone {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface) !important;
+  box-shadow: none !important;
+}
+.situation-boundary,
+.situation-boundary.end {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface-secondary) !important;
+  color: var(--tw-text) !important;
+}
+.boundary-focus {
+  border-color: var(--tw-status-open) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tw-status-open) 26%, transparent) !important;
+}
+
+/* Primäre Aktionen: gedämpftes TrueWords-Türkis statt Neon. */
+button.primary,
+button.confirm,
+.button.primary {
+  border-color: transparent !important;
+  background: var(--tw-action) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+button.primary:hover,
+button.confirm:hover:not(:disabled),
+.button.primary:hover {
+  background: var(--tw-action-hover) !important;
 }
 
 html[data-theme="dark"] body {
-  background:
-    radial-gradient(circle at 85% 5%, rgba(56, 200, 188, .09), transparent 30rem),
-    radial-gradient(circle at 7% 94%, rgba(240, 139, 183, .08), transparent 28rem),
-    var(--tw-bg);
+  background: var(--tw-bg);
   color: var(--tw-text);
 }
 html[data-theme="dark"] .topbar,
@@ -183,8 +298,9 @@ html[data-theme="dark"] .reviewer-switch,
 html[data-theme="dark"] .reviewer-fixed,
 html[data-theme="dark"] .loading-card {
   border-color: var(--tw-border);
-  background: color-mix(in srgb, var(--tw-surface) 96%, transparent);
+  background: var(--tw-surface);
   color: var(--tw-text);
+  box-shadow: none;
 }
 html[data-theme="dark"] .list-controls,
 html[data-theme="dark"] .boundary-box,
@@ -198,40 +314,28 @@ html[data-theme="dark"] .button {
   background: var(--tw-surface-secondary);
   color: var(--tw-text);
 }
-html[data-theme="dark"] button.primary,
-html[data-theme="dark"] button.confirm,
-html[data-theme="dark"] .button.primary {
-  background: var(--tw-philipp-strong);
-  color: #fff;
+html[data-theme="dark"] .message-list {
+  background: #141917;
 }
-html[data-theme="dark"] .message-list { background: #151b1a; }
-html[data-theme="dark"] .context-zone,
-html[data-theme="dark"] .situation-zone,
-html[data-theme="dark"] .context-zone .message.context,
-html[data-theme="dark"] .reply-preview {
+html[data-theme="dark"] .context-zone {
   border-color: var(--tw-border);
-  background: var(--tw-surface-secondary);
-}
-html[data-theme="dark"] .situation-row:hover { background: #252e2c; }
-html[data-theme="dark"] .situation-row.active {
-  background: #273432;
-  box-shadow: inset 0 0 0 1px var(--tw-philipp);
+  background: #171d1b;
 }
 html[data-theme="dark"] .status[data-state="ok"],
 html[data-theme="dark"] .status[data-state="working"] {
-  border-color: var(--tw-philipp);
-  background: var(--tw-philipp-surface);
-  color: var(--tw-philipp-text);
+  border-color: var(--tw-border);
+  background: var(--tw-surface-secondary);
+  color: var(--tw-text);
 }
 html[data-theme="dark"] .status[data-state="error"] {
   border-color: var(--tw-status-unclear);
   background: var(--tw-status-unclear-surface);
-  color: #ffd6df;
+  color: #e7bec5;
 }
 html[data-theme="dark"] .notice {
   border-color: var(--tw-status-open);
   background: var(--tw-status-open-surface);
-  color: #ffe7b0;
+  color: #dec9a1;
 }
 html[data-theme="dark"] label { color: var(--tw-text); }
 html[data-theme="dark"] .intro,
