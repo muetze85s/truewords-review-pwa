@@ -135,9 +135,7 @@
   }
 
   function listSituations() {
-    return state.showCompleted
-      ? [...openSituations(), ...completedSituations()]
-      : openSituations();
+    return situations().filter((item) => state.showCompleted || !isDone(item));
   }
 
   function selectedSituation() {
@@ -478,6 +476,42 @@
     state.dirty = true;
   }
 
+  function removeEmptyOwnSituations(exceptId = 0) {
+    const emptyIds = situations()
+      .filter((item) => (
+        Number(item.id) !== Number(exceptId)
+        && isMine(item.id)
+        && situationMessages(item.id).length === 0
+      ))
+      .map((item) => Number(item.id));
+
+    if (!emptyIds.length) return [];
+    const emptySet = new Set(emptyIds);
+    state.annotations.situations = state.annotations.situations
+      .filter((item) => !emptySet.has(Number(item.id)));
+
+    emptyIds.forEach((emptyId) => {
+      delete state.owners[String(emptyId)];
+      state.modified.delete(emptyId);
+    });
+
+    state.annotations.events = Array.isArray(state.annotations.events)
+      ? state.annotations.events
+      : [];
+    const at = new Date().toISOString();
+    emptyIds.forEach((emptyId) => {
+      state.annotations.events.push({
+        type: 'empty_situation_removed',
+        situationId: emptyId,
+        reviewer: state.user.role,
+        at,
+      });
+    });
+    state.annotations.events = state.annotations.events.slice(-2000);
+    state.dirty = true;
+    return emptyIds;
+  }
+
   function shiftBoundary(action) {
     const id = Number(state.selectedId);
     const current = situationMessages(id);
@@ -523,6 +557,7 @@
 
     if (!movedMessage) return;
     markModified(id, destinationId && destinationId !== id ? destinationId : 0);
+    removeEmptyOwnSituations(id);
 
     const updated = situationMessages(id);
     const boundaryMessage = action.startsWith('end') ? updated.at(-1) : updated[0];
