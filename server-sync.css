@@ -1,55 +1,3 @@
-.tw-server-login {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(5, 10, 18, .88);
-  backdrop-filter: blur(12px);
-}
-
-.tw-server-login-card {
-  width: min(420px, 100%);
-  display: grid;
-  gap: 14px;
-  padding: 22px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #101a2b;
-  box-shadow: 0 24px 70px #000a;
-}
-
-.tw-server-login-card p {
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.tw-server-login-card label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.tw-server-login-card input,
-.tw-server-login-card select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: #0c1524;
-  color: var(--text);
-}
-
-.tw-server-error {
-  padding: 10px 12px;
-  border: 1px solid #8a3e4a;
-  border-radius: 9px;
-  background: #3f2028;
-  color: #ffd5d8;
-}
-
 .tw-server-status {
   position: fixed;
   right: 12px;
@@ -90,19 +38,61 @@
   line-height: 1.35;
 }
 
+.tw-portal-nav {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  right: 10px;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100vw - 20px);
+  padding: 6px 7px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #101a2bf2;
+  color: var(--muted);
+  font-size: 11px;
+  box-shadow: 0 8px 24px #0007;
+  backdrop-filter: blur(10px);
+}
+
+.tw-portal-nav span {
+  overflow: hidden;
+  max-width: 190px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tw-portal-nav a,
+.tw-portal-nav button {
+  width: auto;
+  margin: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #18263d;
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 @media (max-width: 760px) {
-  .tw-server-login {
-    align-items: start;
-    padding-top: max(24px, env(safe-area-inset-top));
-  }
-
-  .tw-server-login-card {
-    padding: 18px;
-  }
-
   .tw-server-status {
     right: 8px;
     bottom: max(8px, env(safe-area-inset-bottom));
     max-width: calc(100vw - 16px);
+  }
+
+  .tw-portal-nav {
+    left: 8px;
+    right: 8px;
+    justify-content: flex-end;
+  }
+
+  .tw-portal-nav span {
+    margin-right: auto;
+    max-width: 42vw;
   }
 }
