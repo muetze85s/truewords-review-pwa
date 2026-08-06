@@ -42,6 +42,7 @@ jobs:
           test -f dist/account-setup.html
           test -f dist/account-setup.js
           test -f dist/upload.html
+          test -f dist/pilot-v2.js
           test -f dist/upload.js
           test -f dist/portal.css
           test -f migrations/0004_email_auth.sql
@@ -52,12 +53,72 @@ jobs:
           ! grep -q 'Zwischen-IDs.*fehlen' dist/review-boundaries.js
           grep -q 'data-situation-id' review.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
-          grep -q 'PHILENA_PILOT_SOURCE' src/worker-source-integrity.ts
+          grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
+          grep -q 'ABORTED_LOSSY_PREPROCESSING' src/worker-source-integrity.ts
           grep -q 'worker-source-integrity.ts' wrangler.jsonc
-          grep -q 'data-files' dist/upload.html
-          grep -q 'vollständige, unveränderte Telegram-JSON-Export' dist/upload.html
+          grep -q 'philena-2026-pilot-v2' wrangler.jsonc
+          grep -q 'pilot-v2.js' dist/upload.html
+          grep -q 'Test 2 erzeugen und starten' dist/upload.html
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
+
+      - name: Test pilot two coverage and placeholders
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs';
+          import vm from 'node:vm';
+
+          const context = {
+            window: {},
+            Date,
+            Intl,
+            Number,
+            String,
+            Boolean,
+            Array,
+            Object,
+            RegExp,
+            Math,
+            Set,
+            Map,
+          };
+          vm.createContext(context);
+          vm.runInContext(fs.readFileSync('pilot-v2.js', 'utf8'), context);
+          const pilot = context.window.TRUEWORDS_PILOT_V2;
+          if (!pilot) throw new Error('PILOT_V2_NOT_EXPOSED');
+
+          const messages = Array.from({ length: pilot.EXPECTED_ENTRIES }, (_, index) => ({
+            id: index + 1,
+            type: 'message',
+            date: index < 2494
+              ? `2026-01-${String(1 + Math.floor(index / 100)).padStart(2, '0')}T${String(Math.floor(index / 60) % 24).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}:00`
+              : '2025-12-31T00:00:00',
+            date_unixtime: String(1767225600 + index * 60),
+            from: index % 2 ? 'Lena' : 'Philipp',
+            from_id: index % 2 ? 'user-lena' : 'user-philipp',
+            text: `Nachricht ${index + 1}`,
+          }));
+          messages[0] = { ...messages[0], photo: '(File not included.)', text: '' };
+          messages[1] = { ...messages[1], text: 'Text bleibt unverändert' };
+          messages[2] = { ...messages[2], type: 'service', action: 'phone_call', duration: 240, text: '' };
+          messages[3] = { ...messages[3], media_type: 'video_file', duration_seconds: 43, text: '' };
+
+          const prepared = pilot.prepareOriginalChat({ type: 'personal_chat', messages });
+          if (prepared.chat.messages.length !== pilot.EXPECTED_ENTRIES) throw new Error('FULL_ENTRY_COUNT_CHANGED');
+          if (prepared.chat.truewordsTimelinePreservation.silentLosses !== 0) throw new Error('SILENT_LOSS');
+          if (prepared.reviewEvents.length !== 2494) throw new Error(`REVIEW_YEAR_COUNT_WRONG:${prepared.reviewEvents.length}`);
+          if (prepared.reviewEvents[0].text !== '[Bild gesendet]') throw new Error('PHOTO_PLACEHOLDER_WRONG');
+          if (prepared.reviewEvents[1].text !== 'Text bleibt unverändert') throw new Error('TEXT_CHANGED');
+          if (prepared.reviewEvents[2].text !== '[Anruf · 4 Min.]') throw new Error(`CALL_PLACEHOLDER_WRONG:${prepared.reviewEvents[2].text}`);
+          if (prepared.reviewEvents[3].text !== '[Video gesendet · 43 Sek.]') throw new Error('VIDEO_PLACEHOLDER_WRONG');
+
+          const annotations = pilot.generatePilot(prepared, pilot.EXPECTED_SHA256);
+          if (annotations.situations.length !== 29) throw new Error('SITUATION_COUNT_WRONG');
+          if (Object.keys(annotations.assignments).length !== 250) throw new Error('ASSIGNMENT_COUNT_WRONG');
+          if (annotations.preselection.coveragePercent !== 100) throw new Error('COVERAGE_WRONG');
+          if (annotations.preselection.silentLosses !== 0) throw new Error('PILOT_SILENT_LOSS');
+          if (annotations.preselection.includesMetadataPlaceholders !== true) throw new Error('PLACEHOLDER_FLAG_MISSING');
+          EOF
 
       - name: Wrangler dry run
         run: npx wrangler deploy --dry-run
