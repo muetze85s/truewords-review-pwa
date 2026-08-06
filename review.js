@@ -3,12 +3,16 @@
 
   const app = document.getElementById('review-app');
   const SHOW_COMPLETED_KEY = 'truewords-review/show-completed';
+  const REVIEWER_MODE_KEY = 'truewords-review/reviewer-mode';
+  const THAILAND_TIME_ZONE = 'Asia/Bangkok';
   const state = {
     user: null,
     dataset: null,
     owners: {},
     annotations: null,
     messages: [],
+    replyMessages: new Map(),
+    reviewerMode: null,
     selectedId: null,
     modified: new Set(),
     dirty: false,
@@ -45,15 +49,35 @@
     return String(message?.from || message?.actor || 'Unbekannt');
   }
 
+  function activeReviewer() {
+    return state.reviewerMode || state.user?.role || 'Philipp';
+  }
+
+  function canSwitchReviewer() {
+    return Boolean(state.user?.canUpload);
+  }
+
   function isOwnMessage(message) {
     const name = speaker(message).toLocaleLowerCase('de-DE');
-    return state.user?.role === 'Lena' ? name.includes('lena') : name.includes('philipp');
+    return activeReviewer() === 'Lena' ? name.includes('lena') : name.includes('philipp');
+  }
+
+  function messageDate(value) {
+    if (value && typeof value === 'object') {
+      const unix = Number(value.date_unixtime);
+      if (Number.isFinite(unix) && unix > 0) return new Date(unix * 1000);
+      return new Date(String(value.date || ''));
+    }
+    return new Date(value);
   }
 
   function formatDate(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value || '');
+    const date = messageDate(value);
+    if (Number.isNaN(date.getTime())) {
+      return typeof value === 'object' ? String(value?.date || '') : String(value || '');
+    }
     return new Intl.DateTimeFormat('de-DE', {
+      timeZone: THAILAND_TIME_ZONE,
       day: '2-digit',
       month: '2-digit',
       year: '2-digit',
@@ -97,7 +121,7 @@
   }
 
   function isMine(id) {
-    return owner(id) === state.user?.role;
+    return owner(id) === activeReviewer();
   }
 
   function assignment(message) {
@@ -169,6 +193,19 @@
     return result;
   }
 
+  function reviewerControl() {
+    const current = activeReviewer();
+    if (!canSwitchReviewer()) {
+      return `<div class="reviewer-fixed">Prüft als <strong>${escapeHtml(current)}</strong></div>`;
+    }
+    return `
+      <div class="reviewer-switch" role="group" aria-label="Aktiven Prüfer wählen">
+        <span>Prüft als</span>
+        <button type="button" data-reviewer-mode="Philipp" class="${current === 'Philipp' ? 'active' : ''}">Philipp</button>
+        <button type="button" data-reviewer-mode="Lena" class="${current === 'Lena' ? 'active' : ''}">Lena</button>
+      </div>`;
+  }
+
   function setSync(text, status = 'ok') {
     const element = document.getElementById('sync-status');
     if (!element) return;
@@ -208,9 +245,42 @@
         <button type="button" class="situation-button" data-situation-id="${Number(item.id)}">
           <span class="situation-title">${Number(item.id)} · ${escapeHtml(cleanLabel(item))}</span>
           <span class="situation-meta">${messages.length} Nachrichten · ${escapeHtml(statusLabel(item))}</span>
-          <span class="situation-range">${first ? `${escapeHtml(formatDate(first.date))} – ${escapeHtml(formatDate(last.date))}` : 'Keine Nachrichten zugeordnet'}</span>
+          <span class="situation-range">${first ? `${escapeHtml(formatDate(first))} – ${escapeHtml(formatDate(last))}` : 'Keine Nachrichten zugeordnet'}</span>
           <span class="owner-badge ${mine ? 'mine' : ''}">${escapeHtml(currentOwner)}</span>
         </button>
+      </div>`;
+  }
+
+  function replyId(message) {
+    const value = Number(message?.reply_to_message_id || 0);
+    return Number.isInteger(value) && value > 0 ? String(value) : '';
+  }
+
+  function findReplyMessage(id) {
+    if (!id) return null;
+    return state.messages.find((message) => messageId(message) === String(id))
+      || state.replyMessages.get(String(id))
+      || null;
+  }
+
+  function replyPreview(message) {
+    const id = replyId(message);
+    if (!id) return '';
+    const original = findReplyMessage(id);
+    if (!original) {
+      return `
+        <div class="reply-preview missing">
+          <div class="reply-title">Antwort auf Nachricht ID ${escapeHtml(id)}</div>
+          <div class="reply-missing">Originalnachricht im bereinigten Chat nicht verfügbar – vermutlich Medium ohne Text oder bereits herausgefilterter Inhalt.</div>
+        </div>`;
+    }
+    const originalText = textValue(original?.text)
+      || `[${original?.media_type || original?.file || 'Nachricht ohne Text'}]`;
+    return `
+      <div class="reply-preview">
+        <div class="reply-title">Antwort auf ursprüngliche Nachricht</div>
+        <div class="reply-meta">${escapeHtml(speaker(original))} · ${escapeHtml(formatDate(original))} · ID ${escapeHtml(id)}</div>
+        <div class="reply-text">${escapeHtml(short(originalText, 260))}</div>
       </div>`;
   }
 
@@ -224,10 +294,11 @@
         data-message-id="${escapeHtml(messageId(message))}">
         <div class="message-meta">
           <strong>${escapeHtml(speaker(message))}</strong>
-          <span>${escapeHtml(formatDate(message?.date))}</span>
+          <span>${escapeHtml(formatDate(message))}</span>
           <span>ID ${escapeHtml(messageId(message))}</span>
           ${membership}
         </div>
+        ${replyPreview(message)}
         <div class="message-text">${escapeHtml(text)}</div>
       </article>`;
   }
@@ -247,7 +318,7 @@
     if (!message) return false;
     const existingId = assignment(message);
     if (!existingId || existingId === Number(selectedId)) return true;
-    return owner(existingId) === state.user?.role;
+    return owner(existingId) === activeReviewer();
   }
 
   function previousSituationId(id) {
@@ -275,8 +346,8 @@
     const nextId = assignment(after) || nextSituationId(id);
     return {
       startEarlier: canTake(before, id),
-      startLater: current.length > 1 && (!previousId || owner(previousId) === state.user?.role),
-      endEarlier: current.length > 1 && (!nextId || owner(nextId) === state.user?.role),
+      startLater: current.length > 1 && (!previousId || owner(previousId) === activeReviewer()),
+      endEarlier: current.length > 1 && (!nextId || owner(nextId) === activeReviewer()),
       endLater: canTake(after, id),
     };
   }
@@ -323,13 +394,13 @@
         <div class="boundary-box">
           <div class="boundary-row">
             <strong>Anfang</strong>
-            <span class="boundary-value">${messages[0] ? escapeHtml(formatDate(messages[0].date)) : 'leer'}</span>
+            <span class="boundary-value">${messages[0] ? escapeHtml(formatDate(messages[0])) : 'leer'}</span>
             <button type="button" data-boundary="start-earlier" ${capabilities.startEarlier ? '' : 'disabled'}>← früher</button>
             <button type="button" data-boundary="start-later" ${capabilities.startLater ? '' : 'disabled'}>später →</button>
           </div>
           <div class="boundary-row">
             <strong>Ende</strong>
-            <span class="boundary-value">${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1).date)) : 'leer'}</span>
+            <span class="boundary-value">${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1))) : 'leer'}</span>
             <button type="button" data-boundary="end-earlier" ${capabilities.endEarlier ? '' : 'disabled'}>← früher</button>
             <button type="button" data-boundary="end-later" ${capabilities.endLater ? '' : 'disabled'}>später →</button>
           </div>
@@ -354,7 +425,7 @@
             </div>
             <div class="situation-boundary end">
               <span>Situation ${Number(selected.id)} endet</span>
-              <strong>${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1).date)) : 'ohne Nachrichten'}</strong>
+              <strong>${messages.at(-1) ? escapeHtml(formatDate(messages.at(-1))) : 'ohne Nachrichten'}</strong>
             </div>
           </section>
 
@@ -397,6 +468,7 @@
             <div><div class="eyebrow">Gemeinsame Prüf-PWA</div><h1>Situationen prüfen</h1></div>
           </div>
           <nav class="account-nav">
+            ${reviewerControl()}
             <span class="account-email">${escapeHtml(state.user.email)}</span>
             ${state.user.canUpload ? '<a class="button" href="/upload.html">Uploads</a>' : ''}
             <button id="logout" type="button">Abmelden</button>
@@ -404,6 +476,7 @@
         </header>
         <div class="summarybar">
           <span><strong>${escapeHtml(state.dataset.name)}</strong> · ${open.length} offen / ${situations().length} gesamt</span>
+          <span class="timezone-note">Zeitangaben: Thailand · UTC+7</span>
           <span>Philipp: ${stats.Philipp.done}/${stats.Philipp.situations} erledigt · Lena: ${stats.Lena.done}/${stats.Lena.situations}</span>
           <span id="sync-status" class="sync-status" data-state="${state.dirty ? 'working' : 'ok'}">${state.dirty ? 'Änderungen noch nicht bestätigt' : `Synchronisiert · Revision ${state.dataset.revision}`}</span>
         </div>
@@ -461,6 +534,21 @@
 
   function bindWorkspace() {
     document.getElementById('logout')?.addEventListener('click', signOut);
+    document.querySelectorAll('[data-reviewer-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.reviewerMode;
+        if (!canSwitchReviewer() || !['Philipp', 'Lena'].includes(mode) || mode === activeReviewer()) return;
+        if (state.dirty) {
+          alert('Bitte die aktuelle Grenzänderung zuerst bestätigen, bevor der Prüfer gewechselt wird.');
+          return;
+        }
+        state.reviewerMode = mode;
+        sessionStorage.setItem(REVIEWER_MODE_KEY, mode);
+        state.selectedId = firstOwnSelection();
+        state.scrollTarget = null;
+        renderWorkspace();
+      });
+    });
     document.getElementById('toggle-completed')?.addEventListener('click', () => {
       state.showCompleted = !state.showCompleted;
       sessionStorage.setItem(SHOW_COMPLETED_KEY, state.showCompleted ? '1' : '0');
@@ -529,7 +617,7 @@
       state.annotations.events.push({
         type: 'empty_situation_removed',
         situationId: emptyId,
-        reviewer: state.user.role,
+        reviewer: activeReviewer(),
         at,
       });
     });
@@ -560,7 +648,7 @@
       movedMessage = current[0];
       const before = state.messages[firstIndex - 1];
       destinationId = assignment(before) || previousSituationId(id);
-      if (destinationId && owner(destinationId) !== state.user.role) return;
+      if (destinationId && owner(destinationId) !== activeReviewer()) return;
       if (destinationId) assignments[messageId(movedMessage)] = destinationId;
       else delete assignments[messageId(movedMessage)];
     }
@@ -569,7 +657,7 @@
       movedMessage = current.at(-1);
       const after = state.messages[lastIndex + 1];
       destinationId = assignment(after) || nextSituationId(id);
-      if (destinationId && owner(destinationId) !== state.user.role) return;
+      if (destinationId && owner(destinationId) !== activeReviewer()) return;
       if (destinationId) assignments[messageId(movedMessage)] = destinationId;
       else delete assignments[messageId(movedMessage)];
     }
@@ -600,7 +688,10 @@
     try {
       const result = await fetchJson('/api/state', {
         method: 'PUT',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-truewords-reviewer': activeReviewer(),
+        },
         body: JSON.stringify({
           datasetId: state.dataset.id,
           annotations: state.annotations,
@@ -621,13 +712,13 @@
 
     const corrected = state.modified.has(Number(item.id));
     item.status = corrected ? 'corrected' : 'confirmed';
-    item.reviewedBy = state.user.role;
+    item.reviewedBy = activeReviewer();
     item.reviewedAt = new Date().toISOString();
     state.annotations.events = Array.isArray(state.annotations.events) ? state.annotations.events : [];
     state.annotations.events.push({
       type: corrected ? 'situation_corrected' : 'situation_confirmed',
       situationId: Number(item.id),
-      reviewer: state.user.role,
+      reviewer: activeReviewer(),
       at: item.reviewedAt,
     });
     state.annotations.events = state.annotations.events.slice(-2000);
@@ -695,6 +786,13 @@
       state.owners = result.owners || {};
       state.annotations = result.annotations;
       state.messages = result.messages || [];
+      state.replyMessages = new Map(
+        (result.replyMessages || []).map((message) => [messageId(message), message]),
+      );
+      const storedReviewer = sessionStorage.getItem(REVIEWER_MODE_KEY);
+      state.reviewerMode = result.user.canUpload && ['Philipp', 'Lena'].includes(storedReviewer)
+        ? storedReviewer
+        : result.user.role;
       state.selectedId = firstOwnSelection();
       state.modified.clear();
       state.dirty = false;

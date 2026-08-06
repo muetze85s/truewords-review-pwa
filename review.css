@@ -544,3 +544,82 @@ button.small { padding: 7px 9px; font-size: 11px; }
     text-align: center;
   }
 }
+
+/* Thailand time, reply previews and reviewer switching */
+.reviewer-switch,
+.reviewer-fixed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 1px solid #344763;
+  border-radius: 999px;
+  background: #0e192a;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.reviewer-switch button {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 10px;
+}
+.reviewer-switch button.active {
+  border-color: #63a5f2;
+  background: #1f5fae;
+  color: #fff;
+  font-weight: 900;
+}
+.reviewer-fixed strong { color: var(--text); }
+.timezone-note {
+  color: #b8d8ff;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.reply-preview {
+  margin: 3px 0 9px;
+  padding: 8px 10px;
+  border-left: 4px solid #7bb8ff;
+  border-radius: 8px;
+  background: #09182a;
+  box-shadow: inset 0 0 0 1px #33547c;
+}
+.reply-preview.missing {
+  border-left-color: var(--warn);
+  background: #251f12;
+  box-shadow: inset 0 0 0 1px #665424;
+}
+.reply-title {
+  margin-bottom: 3px;
+  color: #cfe5ff;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.reply-meta {
+  margin-bottom: 4px;
+  color: #9eb7d8;
+  font-size: 10px;
+}
+.reply-text,
+.reply-missing {
+  color: #dbe9fb;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reply-missing { color: #f3d994; }
+
+@media (max-width: 900px) {
+  .reviewer-switch > span { display: none; }
+}
+
+@media (max-width: 680px) {
+  .account-nav { flex-wrap: wrap; justify-content: flex-end; }
+  .reviewer-switch,
+  .reviewer-fixed { order: 3; }
+  .timezone-note { white-space: normal; }
+}

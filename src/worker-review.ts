@@ -120,6 +120,50 @@ function sourceId(message: unknown): string {
   return id === undefined || id === null ? '' : String(id);
 }
 
+function replySourceId(message: unknown): number | null {
+  if (!message || typeof message !== 'object') return null;
+  const id = Number((message as { reply_to_message_id?: unknown }).reply_to_message_id || 0);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+async function additionalReplyMessages(
+  env: Env,
+  dataset: DatasetRow,
+  messages: unknown[],
+): Promise<unknown[]> {
+  const available = new Set(messages.map(sourceId).filter(Boolean));
+  const requested = [...new Set(
+    messages
+      .map(replySourceId)
+      .filter((id): id is number => id !== null)
+      .filter((id) => !available.has(String(id))),
+  )].slice(0, 80);
+  if (!requested.length) return [];
+
+  const conditions = requested
+    .map((_, index) => `instr(messages_json, ?${index + 2}) > 0`)
+    .join(' OR ');
+  const needles = requested.map((id) => `\"id\":${id}`);
+  const rows = await env.DB.prepare(`
+    SELECT chunk_index, messages_json
+    FROM review_chat_chunks
+    WHERE dataset_id = ?1 AND (${conditions})
+    ORDER BY chunk_index
+  `).bind(dataset.id, ...needles).all<ChatChunkRow>();
+
+  const wanted = new Set(requested.map(String));
+  const found = new Map<string, unknown>();
+  for (const row of rows.results || []) {
+    const parsed = JSON.parse(row.messages_json);
+    if (!Array.isArray(parsed)) continue;
+    for (const message of parsed) {
+      const id = sourceId(message);
+      if (wanted.has(id) && !found.has(id)) found.set(id, message);
+    }
+  }
+  return [...found.values()];
+}
+
 async function reviewWindow(env: Env, dataset: DatasetRow, annotations: AnnotationPayload): Promise<unknown[]> {
   const assignedIds = Object.keys(annotations.assignments)
     .map((id) => Number(id))
@@ -182,6 +226,7 @@ async function reviewBootstrap(request: Request, env: Env): Promise<Response> {
   }
 
   const messages = await reviewWindow(env, dataset, annotations);
+  const replyMessages = await additionalReplyMessages(env, dataset, messages);
   return json({
     ok: true,
     user,
@@ -196,6 +241,7 @@ async function reviewBootstrap(request: Request, env: Env): Promise<Response> {
     owners: parseOwners(dataset.owners_json),
     annotations,
     messages,
+    replyMessages,
     window: {
       messages: messages.length,
       assigned: Object.keys(annotations.assignments).length,

@@ -340,15 +340,25 @@ async function proxiedApiRequest(request: Request, env: Env): Promise<Request | 
 
   const pathname = new URL(request.url).pathname;
   let secret: string | undefined;
+  let actingReviewer: Role = user.role;
+  const requestedReviewer = request.headers.get('x-truewords-reviewer');
+  if (requestedReviewer === 'Philipp' || requestedReviewer === 'Lena') {
+    if (requestedReviewer !== user.role && !user.canUpload) {
+      return error('Dieses Konto darf den Prüfer nicht wechseln.', 403);
+    }
+    actingReviewer = requestedReviewer;
+  }
+
   if (pathname.startsWith('/api/admin/')) {
     if (!user.canUpload) return error('Nur Philipp darf Daten hochladen.', 403);
     secret = env.ADMIN_REVIEW_TOKEN;
   } else {
-    secret = user.role === 'Lena' ? env.LENA_REVIEW_TOKEN : env.PHILIPP_REVIEW_TOKEN;
+    secret = actingReviewer === 'Lena' ? env.LENA_REVIEW_TOKEN : env.PHILIPP_REVIEW_TOKEN;
   }
   if (!secret) return error('Serverzugang ist nicht vollständig konfiguriert.', 503);
 
   const headers = new Headers(request.headers);
+  headers.delete('x-truewords-reviewer');
   headers.set('authorization', `Bearer ${secret}`);
   return new Request(request, { headers });
 }
