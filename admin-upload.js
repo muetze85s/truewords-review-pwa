@@ -1,7 +1,6 @@
 (() => {
   'use strict';
 
-  const YEAR = 2026;
   const form = document.getElementById('upload-form');
   const status = document.getElementById('status');
   const submit = document.getElementById('submit');
@@ -9,19 +8,6 @@
   function setStatus(text, state = 'idle') {
     status.textContent = text;
     status.dataset.state = state;
-  }
-
-  function messageYear(message) {
-    const raw = message?.date ?? message?.date_unixtime;
-    const numeric = /^\d{9,13}$/.test(String(raw));
-    const date = new Date(
-      numeric
-        ? String(raw).length > 10
-          ? Number(raw)
-          : Number(raw) * 1000
-        : raw,
-    );
-    return Number.isNaN(date.getTime()) ? null : date.getUTCFullYear();
   }
 
   async function readJson(input, label) {
@@ -34,6 +20,15 @@
     }
   }
 
+  function yearRange(messages) {
+    const years = messages
+      .map((message) => String(message?.date || '').slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year))
+      .map(Number);
+    if (!years.length) return 'unbekannt';
+    return `${Math.min(...years)}–${Math.max(...years)}`;
+  }
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     submit.disabled = true;
@@ -44,27 +39,25 @@
       const name = document.getElementById('dataset-name').value.trim();
       if (!token) throw new Error('Admin-Zugangscode fehlt.');
 
-      setStatus('Dateien werden lokal gelesen und auf 2026 reduziert …', 'working');
-      const [chat, annotations] = await Promise.all([
-        readJson(document.getElementById('chat-file'), 'Telegram-Export'),
-        readJson(document.getElementById('annotations-file'), 'KI-Vorselektion'),
-      ]);
-
+      setStatus('Bereinigter Rohchat wird lokal geprüft …', 'working');
+      const chat = await readJson(document.getElementById('chat-file'), 'Bereinigter Rohchat');
       if (!Array.isArray(chat.messages)) {
-        throw new Error('Der Telegram-Export enthält keine Nachrichtenliste.');
+        throw new Error('Der Chat enthält keine Nachrichtenliste.');
       }
-      if (!Array.isArray(annotations.situations) || !annotations.assignments) {
-        throw new Error('Die Vorselektionsdatei enthält keine gültigen Situationen.');
-      }
+      if (!chat.messages.length) throw new Error('Der Chat enthält keine Nachrichten.');
 
-      const selected = chat.messages.filter((message) => messageYear(message) === YEAR);
-      const filteredChat = {
-        ...chat,
-        name: `${chat.name || name} · ${YEAR}`,
-        messages: selected,
+      const years = yearRange(chat.messages);
+      const annotations = {
+        schemaVersion: 'truewords-manual-segmentation/v2',
+        datasetHash: '',
+        datasetLabel: name,
+        reviewer: 'System',
+        situations: [],
+        assignments: {},
+        events: [],
       };
 
-      setStatus(`${selected.length} Einträge aus 2026 werden verschlüsselt übertragen …`, 'working');
+      setStatus(`${chat.messages.length} bereinigte Nachrichten aus ${years} werden übertragen …`, 'working');
       const response = await fetch('/api/admin/import', {
         method: 'POST',
         headers: {
@@ -74,8 +67,8 @@
         body: JSON.stringify({
           datasetId,
           name,
-          year: YEAR,
-          chat: filteredChat,
+          year: 2026,
+          chat,
           annotations,
         }),
       });
@@ -85,7 +78,7 @@
 
       document.getElementById('admin-token').value = '';
       setStatus(
-        `Import abgeschlossen: ${selected.length} Einträge, ${result.situations} Situationen. Philipp ${result.split.Philipp}, Lena ${result.split.Lena}.`,
+        `Import abgeschlossen: ${result.messages} bereinigte Nachrichten aus ${years}, ${result.chunks} Datenblöcke, leerer Prüfstand ohne KI-Vorschläge.`,
         'ok',
       );
     } catch (caught) {
