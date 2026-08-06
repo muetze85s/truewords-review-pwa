@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: truewords-review-server
+  group: truewords-review-calm-palette-final
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,8 @@ jobs:
           npm run check
           npm run build
           grep -q 'truewords-ui-theme.css?v=2' dist/review.html
-          grep -q 'truewords-review-pwa-server-v19' dist/sw.js
+          grep -q 'truewords-ui-theme.js?v=2' dist/review.html
+          grep -q 'truewords-review-pwa-server-v20' dist/sw.js
       - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
