@@ -16,7 +16,7 @@
           <div>
             <div class="eyebrow">Philipps Bereich</div>
             <h1>Daten vorbereiten</h1>
-            <p class="intro">Rohchat und KI-Vorschläge können gemeinsam oder einzeln eingespielt werden.</p>
+            <p class="intro">Eine Dateiauswahl für Rohchat und Analysevorschläge. Der Dateityp wird automatisch erkannt.</p>
           </div>
           <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
         </div>
@@ -25,32 +25,14 @@
       <form id="upload-form">
         <section class="card upload-card">
           <div class="eyebrow">Optional</div>
-          <h2>Bereinigter Rohchat</h2>
-          <p class="muted">Nur auswählen, wenn der Rohchat neu oder aktualisiert eingespielt werden soll.</p>
+          <h2>Dateien auswählen</h2>
+          <p class="muted">Du kannst einen Rohchat, eine Vorschlagsdatei oder beide gemeinsam auswählen. Die Reihenfolge ist egal.</p>
           <label style="margin-top:14px">
-            <span>Rohchat-Datei</span>
-            <input id="chat-file" type="file" accept=".json,application/json">
+            <span>Rohchat und/oder KI-Vorschläge</span>
+            <input id="data-files" type="file" accept=".json,application/json" multiple>
+            <small>Erkennung: Telegram-Rohchat über die Nachrichtenliste; Vorschläge über Situationen und Nachrichtenzuordnungen.</small>
           </label>
-        </section>
-
-        <section class="card upload-card">
-          <div class="eyebrow">Optional</div>
-          <h2>KI- oder Algorithmusvorschläge</h2>
-          <p class="muted">Die Vorschläge werden als eigene Analyseversion gespeichert und aktiviert.</p>
-          <label style="margin-top:14px">
-            <span>Vorschlagsdatei</span>
-            <input id="analysis-file" type="file" accept=".json,application/json">
-          </label>
-          <div class="grid" style="margin-top:12px">
-            <label>
-              <span>Versions-ID</span>
-              <input id="version-id" value="pilot-v1" pattern="[A-Za-z0-9._-]{3,80}">
-            </label>
-            <label>
-              <span>Anzeigename</span>
-              <input id="version-label" value="Pilot v1 · lokale Heuristik">
-            </label>
-          </div>
+          <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
         </section>
 
         <input id="dataset-id" type="hidden" value="philena-2026">
@@ -58,7 +40,7 @@
 
         <section class="card">
           <div class="actions">
-            <button id="submit" class="primary" type="submit">Ausgewählte Daten hochladen</button>
+            <button id="submit" class="primary" type="submit">Erkannte Daten hochladen</button>
             <button id="skip" class="secondary" type="button">Ohne Upload zur Prüfung</button>
           </div>
           <div id="progress-wrap" class="progress-wrap" hidden>
