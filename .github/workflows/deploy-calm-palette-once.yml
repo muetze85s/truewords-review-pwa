@@ -1,9 +1,9 @@
 name: Deploy calm review palette once
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/server-synchronization
+      - main
     paths:
       - .github/workflows/deploy-calm-palette-once.yml
 
