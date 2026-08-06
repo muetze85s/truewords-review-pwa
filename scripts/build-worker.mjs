@@ -11,6 +11,8 @@ const files = [
   'review.js',
   'review-boundaries.css',
   'review-boundaries.js',
+  'review-precision.css',
+  'review-precision.js',
   'admin.html',
   'admin-upload.css',
   'admin-upload.js',
