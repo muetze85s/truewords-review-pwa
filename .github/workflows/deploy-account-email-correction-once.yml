@@ -1,0 +1,41 @@
+name: Deploy account email correction once
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: truewords-review-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.head_ref == 'agent/server-synchronization'
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and validate
+        run: |
+          npm install
+          npm run check
+          npm run build
+          grep -q 'philipp.sellin@googlemail.com' dist/account-setup.html
+          grep -q 'lenah666@googlemail.com' dist/account-setup.html
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+      - name: Verify health endpoint
+        run: |
+          sleep 20
+          curl --fail --silent --show-error --retry 24 --retry-delay 5 --retry-all-errors \
+            https://truewords-review-sync.truewords-review-896be42e.workers.dev/api/health
