@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f2ec">
   <meta name="robots" content="noindex,nofollow">
   <title>TrueWords · Test 2 vorbereiten</title>
-  <link rel="stylesheet" href="./portal.css?v=11">
+  <link rel="stylesheet" href="./portal.css?v=12">
 </head>
 <body>
   <main class="page">
@@ -20,7 +20,7 @@
           <div>
             <div class="eyebrow">Segmentierung · Test 2</div>
             <h1>Verlustfreien Prüfstand starten</h1>
-            <p class="intro">Der erste Test wurde wegen der fehlerhaften Bereinigung abgebrochen. Test 2 wird direkt aus dem vollständigen Telegram-Originalexport erzeugt.</p>
+            <p class="intro">Test 2 verwendet den verlustfreien Rohchat und die separat erstellte KI-Vorselektionsdatei. Beide Dateien werden vor dem Upload vollständig gegeneinander geprüft.</p>
           </div>
           <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
         </div>
@@ -28,13 +28,24 @@
 
       <form id="upload-form">
         <section class="card upload-card">
-          <div class="eyebrow">Verbindliche Quelle</div>
-          <h2>Telegram-Originalexport auswählen</h2>
-          <p class="muted">Erforderlich ist die unveränderte Originaldatei mit 73.946 Exportereignissen. SHA-256 und Ereigniszahl werden geprüft. Eine bereinigte, gefilterte oder gekürzte Datei wird abgelehnt.</p>
+          <div class="eyebrow">Datei 1 von 2</div>
+          <h2>Verlustfreien Rohchat auswählen</h2>
+          <p class="muted">Akzeptiert werden der vollständige Telegram-Originalexport oder die bereitgestellte Datei <strong>philena-chat-2026-lossless.json</strong>. Der Prüfstand speichert 2.494 Ereignisse aus 2026 ohne stille Verluste.</p>
           <label style="margin-top:14px">
-            <span>Vollständiger Telegram-JSON-Export</span>
-            <input id="data-files" type="file" accept=".json,application/json" required>
-            <small>Test 2 erzeugt die neuen 29 Grenzvorschläge automatisch. Bilder, Videos, Anrufe, Sticker und Serviceereignisse bleiben als sichtbare Platzhalter erhalten.</small>
+            <span>Rohchat / verlustfreier Ereignisstrom</span>
+            <input id="raw-file" type="file" accept=".json,application/json" required>
+            <small>Bilder, Videos, Anrufe, Sticker und Serviceereignisse bleiben als sichtbare Platzhalter erhalten.</small>
+          </label>
+        </section>
+
+        <section class="card upload-card">
+          <div class="eyebrow">Datei 2 von 2</div>
+          <h2>KI-Vorselektionsdatei auswählen</h2>
+          <p class="muted">Verwende die separat erstellte Datei <strong>truewords-ki-vorselektion-pilot-v2-lossless.json</strong>. Ihre 28 Situationsvorschläge und 335 Ereigniszuordnungen werden unverändert eingespielt.</p>
+          <label style="margin-top:14px">
+            <span>KI-Vorselektion V2</span>
+            <input id="preselection-file" type="file" accept=".json,application/json" required>
+            <small>Die Vorschläge werden nicht erneut automatisch erzeugt und nicht künstlich auf 29 Situationen begrenzt.</small>
           </label>
           <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
         </section>
@@ -44,23 +55,23 @@
 
         <section class="card">
           <div class="notice">
-            Test 1 bleibt als abgebrochener Auditstand erhalten, wird aber nicht als Trainings- oder Goldstandard verwendet. Nach erfolgreichem Upload wird ausschließlich Test 2 aktiviert.
+            Test 1 bleibt als abgebrochener Auditstand erhalten und wird nicht als Trainings- oder Goldstandard verwendet. Nach erfolgreichem Upload wird ausschließlich Test 2 aktiviert.
           </div>
           <div class="actions">
-            <button id="submit" class="primary" type="submit">Test 2 erzeugen und starten</button>
-            <button id="skip" class="secondary" type="button" disabled>Test 1 ist gesperrt</button>
+            <button id="submit" class="primary" type="submit">Rohchat und KI-Vorschläge hochladen</button>
+            <button id="skip" class="secondary" type="button">Weiter ohne Upload</button>
           </div>
           <div id="progress-wrap" class="progress-wrap" hidden>
             <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
             <progress id="progress" max="100" value="0"></progress>
             <div id="progress-detail" class="progress-detail"></div>
           </div>
-          <div id="status" class="status" role="status" aria-live="polite">Originalexport auswählen. Die Vorselektion wird danach automatisch neu erzeugt.</div>
+          <div id="status" class="status" role="status" aria-live="polite">Rohchat und KI-Vorselektionsdatei auswählen.</div>
         </section>
       </form>
     </div>
   </main>
-  <script src="./pilot-v2.js?v=1"></script>
-  <script src="./upload.js?v=12"></script>
+  <script src="./pilot-v2.js?v=2"></script>
+  <script src="./upload.js?v=13"></script>
 </body>
 </html>
