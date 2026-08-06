@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v1';
+const CACHE = 'truewords-review-pwa-server-v2';
 const FILES = [
   './',
   './index.html',
