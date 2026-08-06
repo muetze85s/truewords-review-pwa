@@ -14,6 +14,7 @@ const files = [
   'review-precision.css',
   'review-precision.js',
   'review-cross-owner-fix.js',
+  'review-status-colors.css',
   'admin.html',
   'admin-upload.css',
   'admin-upload.js',
