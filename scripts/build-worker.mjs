@@ -21,6 +21,7 @@ const files = [
   'account-setup.html',
   'account-setup.js',
   'upload.html',
+  'pilot-v2.js',
   'upload.js',
   'portal.css',
   'manifest.webmanifest',
