@@ -1,4 +1,4 @@
-import appWorker from './worker-analysis';
+import appWorker from './worker-auth-fast';
 
 interface Env {
   DB: D1Database;
@@ -22,6 +22,7 @@ type ChunkRow = {
   message_count: number;
 };
 
+const SESSION_COOKIE = 'tw_review_session';
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store, max-age=0',
@@ -41,6 +42,15 @@ function bearerToken(request: Request): string {
   return authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || '';
 }
 
+function cookieValue(request: Request, name: string): string {
+  const cookie = request.headers.get('cookie') || '';
+  for (const part of cookie.split(';')) {
+    const [key, ...value] = part.trim().split('=');
+    if (key === name) return decodeURIComponent(value.join('='));
+  }
+  return '';
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -55,7 +65,7 @@ function constantEqual(left: string, right: string): boolean {
   return difference === 0;
 }
 
-async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
+async function bearerAuthenticated(request: Request, env: Env): Promise<boolean> {
   const token = bearerToken(request);
   if (!token) return false;
   const provided = await sha256Hex(token);
@@ -65,6 +75,23 @@ async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
       .map((value) => sha256Hex(value)),
   );
   return expected.some((value) => constantEqual(provided, value));
+}
+
+async function sessionAuthenticated(request: Request, env: Env): Promise<boolean> {
+  const token = cookieValue(request, SESSION_COOKIE);
+  if (!/^[a-f0-9]{64}$/i.test(token)) return false;
+  const row = await env.DB.prepare(`
+    SELECT 1 AS valid
+    FROM review_sessions s
+    JOIN review_users u ON u.id = s.user_id
+    WHERE s.token_hash = ?1 AND s.expires_at > ?2 AND u.is_active = 1
+    LIMIT 1
+  `).bind(await sha256Hex(token), new Date().toISOString()).first<{ valid: number }>();
+  return Number(row?.valid || 0) === 1;
+}
+
+async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
+  return (await bearerAuthenticated(request, env)) || (await sessionAuthenticated(request, env));
 }
 
 function validDatasetId(value: string | null): value is string {
