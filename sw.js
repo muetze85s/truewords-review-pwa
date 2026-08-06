@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v16';
+const CACHE = 'truewords-review-pwa-server-v17';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
@@ -45,7 +45,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Private API responses and authenticated HTML pages must never enter Cache Storage.
   if (url.pathname.startsWith('/api/') || request.mode === 'navigate') {
     event.respondWith(fetch(request));
     return;
