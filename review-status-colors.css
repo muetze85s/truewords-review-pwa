@@ -1,4 +1,4 @@
-/* Status colours must remain visible even for situations assigned to the other reviewer. */
+/* Statusfarben bleiben auch bei Einträgen aus dem jeweils anderen Prüfbereich deutlich sichtbar. */
 .situation-row.other-owner {
   opacity: 1;
 }
