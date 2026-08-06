@@ -1,19 +1,6 @@
 name: Deploy private Review Server
 
 on:
-  push:
-    branches:
-      - agent/server-synchronization
-    paths:
-      - "review-precision.js"
-      - "review-precision.css"
-      - "review.html"
-      - "sw.js"
-      - "scripts/build-worker.mjs"
-      - "src/worker-review-precision.ts"
-      - "wrangler.jsonc"
-      - "package.json"
-      - ".github/workflows/cloudflare-review.yml"
   workflow_dispatch:
 
 permissions:
