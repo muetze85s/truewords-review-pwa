@@ -1,6 +1,16 @@
 name: Deploy private Review Server
 
 on:
+  push:
+    branches:
+      - agent/server-synchronization
+    paths:
+      - upload.html
+      - upload.js
+      - sw.js
+      - src/worker-source-integrity.ts
+      - wrangler.jsonc
+      - .github/workflows/cloudflare-review.yml
   workflow_dispatch:
 
 permissions:
