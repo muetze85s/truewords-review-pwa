@@ -39,6 +39,8 @@ jobs:
           test -f dist/review-boundaries.css
           test -f dist/review-precision.js
           test -f dist/review-precision.css
+          test -f dist/review-cross-owner-fix.js
+          test -f dist/review-status-colors.css
           test -f dist/login.html
           test -f dist/login.js
           test -f dist/account-setup.html
@@ -53,11 +55,16 @@ jobs:
           grep -q 'review-boundaries.js' dist/review.html
           grep -q 'review-precision.js' dist/review.html
           grep -q 'review-precision.css' dist/review.html
+          grep -q 'review-cross-owner-fix.js' dist/review.html
+          grep -q 'review-status-colors.css' dist/review.html
+          grep -q 'status-corrected' dist/review-status-colors.css
+          grep -q 'background: var(--corrected)' dist/review-status-colors.css
           grep -q 'Telegram-ID-Sprung' dist/review-boundaries.js
           ! grep -q 'Zwischen-IDs.*fehlen' dist/review-boundaries.js
           grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
           grep -q 'boundary_cross_owner_moved' dist/review-precision.js
           grep -q 'mediaPlaceholder' dist/review-precision.js
+          grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
           grep -q 'precision_review_state_saved' src/worker-review-precision.ts
           grep -q 'worker-review-precision.ts' wrangler.jsonc
           grep -q 'data-situation-id' review.js
