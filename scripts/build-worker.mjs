@@ -13,6 +13,7 @@ const files = [
   'review-boundaries.js',
   'review-precision.css',
   'review-precision.js',
+  'review-cross-owner-fix.js',
   'admin.html',
   'admin-upload.css',
   'admin-upload.js',
