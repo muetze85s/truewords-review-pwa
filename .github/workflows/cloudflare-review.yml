@@ -1,6 +1,20 @@
 name: Deploy private Review Server
 
 on:
+  push:
+    branches:
+      - agent/server-synchronization
+    paths:
+      - "src/**"
+      - "migrations/**"
+      - "*.html"
+      - "*.js"
+      - "*.css"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-review.yml"
   workflow_dispatch:
 
 permissions:
@@ -51,8 +65,12 @@ jobs:
           test -f dist/review-boundaries.js
           test -f migrations/0001_review_sync.sql
           grep -q 'philena-2026-pilot-v2' wrangler.jsonc
-          grep -q 'Test 2 erzeugen und starten' dist/upload.html
-          grep -q 'pilot-v2-lossless' dist/pilot-v2.js
+          grep -q 'Rohchat und KI-Vorschläge hochladen' dist/upload.html
+          grep -q 'KI-Vorselektionsdatei auswählen' dist/upload.html
+          grep -q 'Weiter ohne Upload' dist/upload.html
+          grep -q 'PRESELECTION_SITUATIONS = 28' dist/upload.js
+          grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
+          grep -q 'pilot-v2-lossless-userfile' src/worker-source-integrity.ts
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
       - name: Ensure workers.dev account subdomain
