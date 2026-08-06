@@ -33,6 +33,8 @@ jobs:
           npm run build
           test -f dist/index.html
           test -f dist/review.html
+          test -f dist/review.js
+          test -f dist/review.css
           test -f dist/login.html
           test -f dist/login.js
           test -f dist/account-setup.html
@@ -40,10 +42,12 @@ jobs:
           test -f dist/upload.html
           test -f dist/upload.js
           test -f dist/portal.css
-          test -f dist/server-sync.js
-          test -f dist/server-sync.css
           test -f migrations/0004_email_auth.sql
-          grep -q 'server-sync.js' dist/review.html
+          test -f migrations/0005_balance_pilot_review_owners.sql
+          grep -q 'review.js' dist/review.html
+          grep -q 'data-situation-id' review.js
+          grep -q 'api/review/bootstrap' src/worker-review.ts
+          grep -q 'worker-review.ts' wrangler.jsonc
           grep -q 'data-files' dist/upload.html
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
