@@ -99,11 +99,12 @@ async function hashPassword(password: string, saltHex: string, iterations: numbe
     false,
     ['deriveBits'],
   );
+  const salt = hexToBytes(saltHex).buffer as ArrayBuffer;
   const bits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
       hash: 'SHA-256',
-      salt: hexToBytes(saltHex),
+      salt,
       iterations,
     },
     key,
@@ -296,10 +297,21 @@ async function asset(request: Request, env: Env, pathname: string): Promise<Resp
 }
 
 async function routePage(request: Request, env: Env): Promise<Response | null> {
-  const url = new URL(request.url);
-  const pathname = url.pathname;
-  const user = await sessionUser(request, env);
+  const pathname = new URL(request.url).pathname;
+  const routedPages = new Set([
+    '/',
+    '/index.html',
+    '/login.html',
+    '/upload.html',
+    '/review.html',
+    '/admin.html',
+    '/analysis-import.html',
+    '/account-setup.html',
+  ]);
+  if (!routedPages.has(pathname)) return null;
+  if (pathname === '/account-setup.html') return asset(request, env, '/account-setup.html');
 
+  const user = await sessionUser(request, env);
   if (pathname === '/' || pathname === '/index.html') {
     if (!user) return asset(request, env, '/login.html');
     return asset(request, env, user.canUpload ? '/upload.html' : '/review.html');
@@ -318,7 +330,6 @@ async function routePage(request: Request, env: Env): Promise<Response | null> {
     if (!user) return redirect('/login.html');
     return redirect(user.canUpload ? '/upload.html' : '/review.html');
   }
-  if (pathname === '/account-setup.html') return asset(request, env, '/account-setup.html');
   return null;
 }
 
