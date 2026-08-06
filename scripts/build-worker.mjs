@@ -8,6 +8,8 @@ const files = [
   'admin.html',
   'admin-upload.css',
   'admin-upload.js',
+  'analysis-import.html',
+  'analysis-import.js',
   'manifest.webmanifest',
   'icon.svg',
   'sw.js',
