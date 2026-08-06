@@ -35,6 +35,8 @@ jobs:
           test -f dist/review.html
           test -f dist/review.js
           test -f dist/review.css
+          test -f dist/review-boundaries.js
+          test -f dist/review-boundaries.css
           test -f dist/login.html
           test -f dist/login.js
           test -f dist/account-setup.html
@@ -45,10 +47,15 @@ jobs:
           test -f migrations/0004_email_auth.sql
           test -f migrations/0005_balance_pilot_review_owners.sql
           grep -q 'review.js' dist/review.html
+          grep -q 'review-boundaries.js' dist/review.html
+          grep -q 'Telegram-ID-Sprung' dist/review-boundaries.js
+          ! grep -q 'Zwischen-IDs.*fehlen' dist/review-boundaries.js
           grep -q 'data-situation-id' review.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
-          grep -q 'worker-review.ts' wrangler.jsonc
+          grep -q 'PHILENA_PILOT_SOURCE' src/worker-source-integrity.ts
+          grep -q 'worker-source-integrity.ts' wrangler.jsonc
           grep -q 'data-files' dist/upload.html
+          grep -q 'vollständigen, unveränderten Telegram-JSON-Export' dist/upload.html
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
