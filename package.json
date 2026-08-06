@@ -1,11 +1,11 @@
 {
   "name": "truewords-review-pwa",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build-worker.mjs",
-    "check": "node --check server-sync.js && node --check admin-upload.js && node --check analysis-import.js && node --check scripts/build-worker.mjs && node --check scripts/import-review-data.mjs && tsc --noEmit",
+    "check": "node --check server-sync.js && node --check admin-upload.js && node --check analysis-import.js && node --check login.js && node --check account-setup.js && node --check upload.js && node --check scripts/build-worker.mjs && node --check scripts/import-review-data.mjs && tsc --noEmit",
     "dev": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
     "import:data": "node scripts/import-review-data.mjs",
