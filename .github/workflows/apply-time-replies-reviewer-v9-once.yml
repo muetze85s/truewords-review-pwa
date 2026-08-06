@@ -1,0 +1,46 @@
+name: Apply time reply and reviewer v9 once
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/server-synchronization'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/server-synchronization
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: node scripts/apply-time-replies-reviewer-v9.mjs
+
+      - name: Validate patch markers
+        run: |
+          node --check review.js
+          grep -q "Asia/Bangkok" review.js
+          grep -q "reply-preview" review.js
+          grep -q "data-reviewer-mode" review.js
+          grep -q "x-truewords-reviewer" src/worker-portal.ts
+          grep -q "additionalReplyMessages" src/worker-review.ts
+          grep -q "review.js?v=9" review.html
+          grep -q "truewords-review-pwa-server-v8" sw.js
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add review.js review.css review.html sw.js src/worker-portal.ts src/worker-review.ts
+          git commit -m "Show Thailand time replies and switch reviewer mode"
+          git push origin HEAD:agent/server-synchronization
