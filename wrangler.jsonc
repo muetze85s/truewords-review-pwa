@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "truewords-review-sync",
-  "main": "src/worker-chunked.ts",
+  "main": "src/worker-analysis.ts",
   "compatibility_date": "2026-08-05",
   "workers_dev": true,
   "preview_urls": false,
