@@ -1,16 +1,6 @@
 name: Deploy private Review Server
 
 on:
-  push:
-    branches:
-      - agent/server-synchronization
-    paths:
-      - "review-cross-owner-fix.js"
-      - "review.html"
-      - "sw.js"
-      - "scripts/build-worker.mjs"
-      - "package.json"
-      - ".github/workflows/cloudflare-review.yml"
   workflow_dispatch:
 
 permissions:
