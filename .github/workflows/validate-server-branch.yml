@@ -55,7 +55,7 @@ jobs:
           grep -q 'PHILENA_PILOT_SOURCE' src/worker-source-integrity.ts
           grep -q 'worker-source-integrity.ts' wrangler.jsonc
           grep -q 'data-files' dist/upload.html
-          grep -q 'vollständigen, unveränderten Telegram-JSON-Export' dist/upload.html
+          grep -q 'vollständige, unveränderte Telegram-JSON-Export' dist/upload.html
           grep -q 'login-form' dist/login.html
           ! grep -R "Philena_chat" dist src migrations scripts --exclude-dir=node_modules
 
