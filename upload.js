@@ -3,14 +3,13 @@
 
   const MAX_CHUNK_BYTES = 260_000;
   const ORIGINAL_SOURCE_SHA256 = '5bb863d1b1a68e0ada83933bc069fbb923cd4d98074308bcbdb47581b7791822';
-  const PRESELECTION_SHA256 = 'fce30f5883eeef31d5e5bb565fa6904a2ab3e3a56ac462bca692212a4fdc7a2c';
+  const PRESELECTION_SHA256 = '14cb353ab24bf6bf7129452e18da375dd90481832bdb1e21eafaefba845f58d5';
   const ORIGINAL_SOURCE_EVENTS = 73_946;
-  const REVIEW_YEAR_EVENTS = 2_494;
-  const TEST_EVENTS = 335;
+  const REVIEW_EVENTS = 2_494;
+  const FILTER_EVENTS = 335;
   const PRESELECTION_SITUATIONS = 12;
   const PRESELECTION_ASSIGNMENTS = 335;
   const DATASET_ID = 'philena-2026-pilot-v3-unseen';
-  const VERSION_ID = 'pilot-v3-unseen-fullsource-userfile';
 
   const form = document.getElementById('upload-form');
   const rawInput = document.getElementById('raw-file');
@@ -34,11 +33,11 @@
   }
 
   function setProgress(value, label, detail = '') {
-    const safeValue = Math.max(0, Math.min(100, Math.round(value)));
+    const safe = Math.max(0, Math.min(100, Math.round(value)));
     progressWrap.hidden = false;
-    progress.value = safeValue;
+    progress.value = safe;
     progressLabel.textContent = label;
-    progressPercent.textContent = `${safeValue} %`;
+    progressPercent.textContent = `${safe} %`;
     progressDetail.textContent = detail;
   }
 
@@ -49,7 +48,7 @@
   }
 
   function escapeHtml(value) {
-    return String(value)
+    return String(value ?? '')
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
@@ -95,8 +94,8 @@
     throw lastError || new Error('Server nicht erreichbar.');
   }
 
-  async function sha256Hex(value) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  async function sha256Hex(text) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return [...new Uint8Array(digest)]
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
@@ -110,122 +109,22 @@
     }
   }
 
-  function validatePreselection(annotations) {
-    if (!annotations || annotations.schemaVersion !== 'truewords-manual-segmentation/v3-unseen') {
-      throw new Error('Die KI-Vorselektionsdatei hat nicht das erwartete Test-3-Format.');
+  function losslessChatFromOriginal(original, pilot, sourceFileName) {
+    if (!Array.isArray(original?.messages) || original.messages.length !== ORIGINAL_SOURCE_EVENTS) {
+      throw new Error('Der vollständige Telegram-Originalexport muss exakt 73.946 Ereignisse enthalten.');
     }
-    if (annotations.datasetHash !== ORIGINAL_SOURCE_SHA256) {
-      throw new Error('Die KI-Vorselektion gehört nicht zum vollständigen Telegram-Originalexport.');
-    }
-    if (!Array.isArray(annotations.situations) || annotations.situations.length !== PRESELECTION_SITUATIONS) {
-      throw new Error(`Die KI-Vorselektion muss exakt ${PRESELECTION_SITUATIONS} Situationen enthalten.`);
-    }
-    if (!annotations.assignments || typeof annotations.assignments !== 'object' || Array.isArray(annotations.assignments)) {
-      throw new Error('Die KI-Vorselektionsdatei enthält keine gültigen Ereigniszuordnungen.');
-    }
-
-    const situationIds = new Set();
-    for (const situation of annotations.situations) {
-      const id = Number(situation?.id);
-      if (!Number.isInteger(id) || id <= 0 || situationIds.has(id)) {
-        throw new Error('Die KI-Vorselektion enthält ungültige oder doppelte Situations-IDs.');
-      }
-      situationIds.add(id);
-    }
-
-    const assignments = Object.entries(annotations.assignments);
-    if (assignments.length !== PRESELECTION_ASSIGNMENTS) {
-      throw new Error(`Die KI-Vorselektion muss exakt ${PRESELECTION_ASSIGNMENTS} Ereigniszuordnungen enthalten.`);
-    }
-    for (const [messageId, situationId] of assignments) {
-      if (!situationIds.has(Number(situationId))) {
-        throw new Error(`Ereignis ${messageId} verweist auf eine unbekannte Situation.`);
-      }
-    }
-
-    const filter = annotations.testFilter;
-    const selection = filter?.selection;
-    if (filter?.schemaVersion !== 'truewords-test-filter/v1') {
-      throw new Error('Der Testfilter fehlt in der KI-Vorselektionsdatei.');
-    }
-    if (
-      filter?.source?.sourceSha256 !== ORIGINAL_SOURCE_SHA256
-      || Number(filter?.source?.sourceEvents) !== ORIGINAL_SOURCE_EVENTS
-    ) {
-      throw new Error('Der integrierte Testfilter verweist nicht auf den vollständigen Telegram-Originalexport.');
-    }
-    if (selection?.mode !== 'exact_event_ids' || !Array.isArray(selection?.eventIds)) {
-      throw new Error('Der integrierte Testfilter enthält keine exakte Ereignisliste.');
-    }
-    const eventIds = selection.eventIds.map(String);
-    if (eventIds.length !== TEST_EVENTS || new Set(eventIds).size !== TEST_EVENTS) {
-      throw new Error(`Der Testfilter muss exakt ${TEST_EVENTS} eindeutige Ereignisse enthalten.`);
-    }
-    if (
-      String(selection.firstEventId) !== eventIds[0]
-      || String(selection.lastEventId) !== eventIds.at(-1)
-      || Number(selection.eventCount) !== TEST_EVENTS
-    ) {
-      throw new Error('Start, Ende und Ereigniszahl des Testfilters sind inkonsistent.');
-    }
-
-    const assignedOrExcluded = new Set([
-      ...Object.keys(annotations.assignments).map(String),
-      ...Object.keys(annotations.messageOverrides || {}).map(String),
-    ]);
-    for (const eventId of eventIds) {
-      if (!assignedOrExcluded.has(eventId)) {
-        throw new Error(`Testereignis ${eventId} ist weder einer Situation noch dem Kontext zugeordnet.`);
-      }
-    }
-    if (assignedOrExcluded.size !== TEST_EVENTS) {
-      throw new Error('Die KI-Datei enthält Zuordnungen außerhalb des integrierten Testfilters.');
-    }
-
-    const integrity = annotations.preselection?.integrity;
-    if (
-      Number(integrity?.silentLosses) !== 0
-      || integrity?.allNonExcludedEventsAssigned !== true
-      || integrity?.fullOriginalRequired !== true
-    ) {
-      throw new Error('Die KI-Vorselektion besteht ihre Integritätsprüfung nicht.');
-    }
-
-    return { eventIds, situationIds };
-  }
-
-  function filteredChatFromOriginal(original, pilot, sourceFileName, annotations) {
-    if (!Array.isArray(original.messages) || original.messages.length !== ORIGINAL_SOURCE_EVENTS) {
-      throw new Error(`Der Telegram-Originalexport muss exakt ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Exportereignisse enthalten.`);
-    }
-
     const prepared = pilot.prepareOriginalChat(original);
-    const reviewEvents = prepared.reviewEvents;
-    if (reviewEvents.length !== REVIEW_YEAR_EVENTS) {
-      throw new Error(`Der Originalexport enthält nicht exakt ${REVIEW_YEAR_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026.`);
+    const messages = prepared.reviewEvents;
+    if (messages.length !== REVIEW_EVENTS) {
+      throw new Error(`Die verlustfreie Aufbereitung muss exakt ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026 ergeben.`);
     }
     if (prepared.chat.truewordsTimelinePreservation.silentLosses !== 0) {
       throw new Error('Integritätsfehler: Die verlustfreie Aufbereitung hat Ereignisse verloren.');
     }
-
-    const { eventIds } = validatePreselection(annotations);
-    const selectedSet = new Set(eventIds);
-    const selectedMessages = reviewEvents.filter((message) => selectedSet.has(String(message.id)));
-    const selectedIds = selectedMessages.map((message) => String(message.id));
-
-    if (selectedMessages.length !== TEST_EVENTS) {
-      const found = new Set(selectedIds);
-      const missing = eventIds.filter((id) => !found.has(id));
-      throw new Error(`Der vollständige Rohchat enthält nicht alle Testereignisse. Fehlend: ${missing.slice(0, 5).join(', ') || 'unbekannt'}.`);
-    }
-    if (selectedIds.some((id, index) => id !== eventIds[index])) {
-      throw new Error('Die Ereignisreihenfolge im Testfilter stimmt nicht mit dem Originalchat überein.');
-    }
-
     return {
-      schemaVersion: 'truewords-lossless-chat/v3-unseen',
+      schemaVersion: 'truewords-lossless-chat/v3-full-source',
       datasetHash: ORIGINAL_SOURCE_SHA256,
-      datasetLabel: 'Philipp & Lena · Test 3 · ungesehener verlustfreier Ereignisstrom',
+      datasetLabel: 'Philipp & Lena · vollständiger Telegram-Originalexport · Prüfjahr 2026',
       source: {
         fileName: sourceFileName,
         chatName: original.name,
@@ -235,42 +134,136 @@
         sourceSha256: ORIGINAL_SOURCE_SHA256,
       },
       scope: {
-        purpose: 'unseen-validation',
-        selectionMode: 'exact_event_ids',
         year: 2026,
-        reviewYearEvents: REVIEW_YEAR_EVENTS,
-        events: selectedMessages.length,
-        firstEventId: selectedIds[0],
-        lastEventId: selectedIds.at(-1),
-        firstDate: selectedMessages[0]?.date,
-        lastDate: selectedMessages.at(-1)?.date,
+        events: messages.length,
+        firstEventId: String(messages[0]?.id ?? ''),
+        lastEventId: String(messages.at(-1)?.id ?? ''),
+        firstDate: messages[0]?.date,
+        lastDate: messages.at(-1)?.date,
       },
       integrity: {
         silentLosses: 0,
-        preservedEvents: selectedMessages.length,
-        selectedEventsExpected: TEST_EVENTS,
+        preservedEvents: messages.length,
         normalTextUnchanged: true,
         mediaAndServiceEventsPreserved: true,
         replyReferencesPreserved: true,
         fullOriginalVerified: true,
       },
-      messages: selectedMessages,
+      messages,
     };
+  }
+
+  function validateOwners(annotations, situationIds) {
+    const assignment = annotations?.ownerAssignment;
+    if (
+      assignment?.schemaVersion !== 'truewords-owner-assignment/v1'
+      || assignment?.strategy !== 'chronological-half-split'
+      || !assignment.owners
+      || typeof assignment.owners !== 'object'
+      || Array.isArray(assignment.owners)
+    ) {
+      throw new Error('Die KI-Datei enthält keine gültige Prüfaufteilung.');
+    }
+    const sorted = [...situationIds].sort((left, right) => left - right);
+    const split = Math.ceil(sorted.length / 2);
+    const expected = Object.fromEntries(
+      sorted.map((id, index) => [String(id), index < split ? 'Philipp' : 'Lena']),
+    );
+    for (const id of sorted) {
+      const owner = assignment.owners[String(id)];
+      if (owner !== expected[String(id)]) {
+        throw new Error(`Prüfaufteilung für Situation ${id} ist ungültig.`);
+      }
+      if (annotations.owners?.[String(id)] && annotations.owners[String(id)] !== owner) {
+        throw new Error(`Doppelte Owner-Angabe für Situation ${id} widerspricht sich.`);
+      }
+    }
+    return expected;
+  }
+
+  function validatePreselection(annotations, reviewMessageIds) {
+    if (annotations?.schemaVersion !== 'truewords-manual-segmentation/v3-unseen') {
+      throw new Error('Die KI-Datei hat nicht das erwartete Test-3-Format.');
+    }
+    if (annotations.datasetHash !== ORIGINAL_SOURCE_SHA256) {
+      throw new Error('Rohchat und KI-Datei gehören nicht zur selben Originalquelle.');
+    }
+    if (!Array.isArray(annotations.situations) || annotations.situations.length !== PRESELECTION_SITUATIONS) {
+      throw new Error(`Die KI-Datei muss exakt ${PRESELECTION_SITUATIONS} Situationen enthalten.`);
+    }
+    if (!annotations.assignments || typeof annotations.assignments !== 'object' || Array.isArray(annotations.assignments)) {
+      throw new Error('Die KI-Datei enthält keine gültigen Ereigniszuordnungen.');
+    }
+
+    const situationIds = annotations.situations.map((item) => Number(item?.id));
+    const uniqueSituationIds = new Set(situationIds);
+    if (
+      uniqueSituationIds.size !== PRESELECTION_SITUATIONS
+      || situationIds.some((id) => !Number.isInteger(id) || id <= 0)
+    ) {
+      throw new Error('Die KI-Datei enthält ungültige oder doppelte Situations-IDs.');
+    }
+    const owners = validateOwners(annotations, uniqueSituationIds);
+
+    const filter = annotations.testFilter;
+    const eventIds = filter?.selection?.eventIds;
+    if (
+      filter?.schemaVersion !== 'truewords-test-filter/v1'
+      || filter?.source?.sourceSha256 !== ORIGINAL_SOURCE_SHA256
+      || Number(filter?.source?.sourceEvents) !== ORIGINAL_SOURCE_EVENTS
+      || !Array.isArray(eventIds)
+      || eventIds.length !== FILTER_EVENTS
+      || Number(filter?.selection?.eventCount) !== FILTER_EVENTS
+    ) {
+      throw new Error('Der integrierte Testfilter ist unvollständig oder gehört nicht zur Originalquelle.');
+    }
+
+    const filteredIds = new Set(eventIds.map(String));
+    if (filteredIds.size !== FILTER_EVENTS) throw new Error('Der Testfilter enthält doppelte Ereignis-IDs.');
+    for (const id of filteredIds) {
+      if (!reviewMessageIds.has(id)) throw new Error(`Testereignis ${id} fehlt im vollständigen Rohchat.`);
+    }
+
+    const assignments = Object.entries(annotations.assignments);
+    if (assignments.length !== PRESELECTION_ASSIGNMENTS) {
+      throw new Error(`Die KI-Datei muss exakt ${PRESELECTION_ASSIGNMENTS} Ereigniszuordnungen enthalten.`);
+    }
+    for (const [messageId, situationId] of assignments) {
+      if (!filteredIds.has(String(messageId))) throw new Error(`Ereignis ${messageId} liegt außerhalb des Testfilters.`);
+      if (!uniqueSituationIds.has(Number(situationId))) throw new Error(`Ereignis ${messageId} verweist auf eine unbekannte Situation.`);
+    }
+
+    const overrides = annotations.messageOverrides && typeof annotations.messageOverrides === 'object'
+      ? Object.keys(annotations.messageOverrides)
+      : [];
+    const accounted = new Set([...assignments.map(([id]) => String(id)), ...overrides.map(String)]);
+    if (accounted.size !== FILTER_EVENTS || [...filteredIds].some((id) => !accounted.has(id))) {
+      throw new Error('Nicht alle Testereignisse sind zugeordnet oder begründet ausgeschlossen.');
+    }
+
+    const integrity = annotations.preselection?.integrity;
+    if (
+      Number(integrity?.silentLosses) !== 0
+      || integrity?.allSelectedEventsAssignedOrExcluded !== true
+      || integrity?.fullOriginalRequired !== true
+    ) {
+      throw new Error('Die KI-Datei besteht ihre Integritätsprüfung nicht.');
+    }
+    return { owners, filteredIds };
   }
 
   async function inspectFiles() {
     selected = null;
     const rawFile = rawInput.files?.[0];
     const preselectionFile = preselectionInput.files?.[0];
-
     if (!rawFile && !preselectionFile) {
       detectedFiles.textContent = 'Noch keine Datei ausgewählt.';
       detectedFiles.dataset.state = 'idle';
-      setStatus('Vollständigen Rohchat und KI-Vorselektionsdatei auswählen.');
+      setStatus('Vollständigen Telegram-Rohchat und KI-Datei auswählen.');
       return;
     }
     if (!rawFile || !preselectionFile) {
-      const missing = rawFile ? 'KI-Vorselektionsdatei' : 'vollständigen Telegram-Originalexport';
+      const missing = rawFile ? 'KI-Vorselektionsdatei' : 'vollständigen Telegram-Rohchat';
       detectedFiles.textContent = `Noch den ${missing} auswählen.`;
       detectedFiles.dataset.state = 'idle';
       setStatus(`Beide Dateien sind erforderlich. Es fehlt: ${missing}.`);
@@ -278,43 +271,33 @@
     }
 
     submit.disabled = true;
-    detectedFiles.textContent = 'Originalexport, KI-Vorschläge und integrierter Testfilter werden geprüft …';
+    detectedFiles.textContent = 'Originalexport, Testfilter, Vorschläge und Prüfaufteilung werden geprüft …';
     detectedFiles.dataset.state = 'working';
-    setStatus('Beide Dateien werden lokal gelesen, gehasht und gegeneinander geprüft …', 'working');
+    setStatus('Beide Dateien werden lokal gelesen und vollständig gegeneinander geprüft …', 'working');
     setProgress(1, 'Dateien werden gelesen …', `${rawFile.name} · ${preselectionFile.name}`);
 
     try {
       const pilot = window.TRUEWORDS_PILOT_V2;
-      if (!pilot) throw new Error('Verlustfreie Importlogik wurde nicht geladen. Seite neu laden.');
-
-      const [rawText, preselectionText] = await Promise.all([
-        rawFile.text(),
-        preselectionFile.text(),
-      ]);
+      if (!pilot) throw new Error('Verlustfreie Aufbereitungslogik wurde nicht geladen. Seite neu laden.');
+      const [rawText, preselectionText] = await Promise.all([rawFile.text(), preselectionFile.text()]);
       setProgress(3, 'SHA-256 wird berechnet …', `${formatBytes(rawFile.size)} + ${formatBytes(preselectionFile.size)}`);
       const [rawFileHash, preselectionFileHash] = await Promise.all([
         sha256Hex(rawText),
         sha256Hex(preselectionText),
       ]);
-
       if (rawFileHash !== ORIGINAL_SOURCE_SHA256) {
-        throw new Error('Falscher Rohchat: Für jeden Test ist immer der vollständige, unveränderte Telegram-Originalexport erforderlich.');
+        throw new Error('Falscher Rohchat: Erforderlich ist immer der vollständige unveränderte Telegram-Originalexport mit 73.946 Ereignissen.');
       }
       if (preselectionFileHash !== PRESELECTION_SHA256) {
-        throw new Error('Falsche KI-Vorselektionsdatei: Verwende die Test-3-Datei mit integriertem Testfilter.');
+        throw new Error('Falsche KI-Datei: Verwende die Test-3-Datei mit integriertem Testfilter und Prüfaufteilung.');
       }
 
       const original = parseJson(rawText, 'Der Telegram-Originalexport');
       const annotations = parseJson(preselectionText, 'Die KI-Vorselektionsdatei');
-      validatePreselection(annotations);
-      const chat = filteredChatFromOriginal(original, pilot, rawFile.name, annotations);
-      const messageIds = new Set(chat.messages.map((message) => String(message.id)));
-
-      for (const messageId of Object.keys(annotations.assignments)) {
-        if (!messageIds.has(String(messageId))) {
-          throw new Error(`Zugeordnetes Ereignis ${messageId} fehlt im Testfenster des vollständigen Rohchats.`);
-        }
-      }
+      const chat = losslessChatFromOriginal(original, pilot, rawFile.name);
+      const messageIds = new Set(chat.messages.map((message) => String(message?.id ?? '')));
+      if (messageIds.size !== REVIEW_EVENTS) throw new Error('Der 2026-Ereignisstrom enthält fehlende oder doppelte IDs.');
+      const validation = validatePreselection(annotations, messageIds);
 
       selected = {
         rawFile,
@@ -324,22 +307,24 @@
         datasetHash: ORIGINAL_SOURCE_SHA256,
         chat,
         annotations,
+        owners: validation.owners,
       };
 
       detectedFiles.innerHTML = `
-        <div><strong>Vollständiger Rohchat:</strong> ${escapeHtml(rawFile.name)} · ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Exportereignisse</div>
-        <div><strong>Integrierter Testfilter:</strong> IDs ${escapeHtml(chat.scope.firstEventId)}–${escapeHtml(chat.scope.lastEventId)} · ${TEST_EVENTS} Ereignisse</div>
-        <div><strong>KI-Vorselektion:</strong> ${escapeHtml(preselectionFile.name)} · ${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Zuordnungen</div>
-        <div><strong>Integrität:</strong> Originalquelle bestätigt · stille Verluste: 0 · Platzhalter enthalten</div>`;
+        <div><strong>Vollständiger Telegram-Rohchat:</strong> ${escapeHtml(rawFile.name)} · ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Originalereignisse</div>
+        <div><strong>Verlustfreier Prüfstrom:</strong> ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026 · stille Verluste: 0</div>
+        <div><strong>Testfilter:</strong> ${FILTER_EVENTS} Ereignisse · IDs ${escapeHtml(annotations.testFilter.selection.firstEventId)}–${escapeHtml(annotations.testFilter.selection.lastEventId)}</div>
+        <div><strong>KI-Vorselektion:</strong> ${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Zuordnungen</div>
+        <div><strong>Prüfaufteilung:</strong> Philipp 1–6 · Lena 7–12</div>`;
       detectedFiles.dataset.state = 'ok';
-      setProgress(8, 'Test 3 ist vorbereitet', 'Vollständiger Rohchat, Testfilter und KI-Vorschläge sind lokal geprüft');
+      setProgress(8, 'Test 3 ist vorbereitet', 'Originalquelle, Testfilter, KI-Vorschläge und Owner stimmen überein');
       setStatus('Beide Dateien sind vollständig. Test 3 kann hochgeladen und aktiviert werden.', 'ok');
     } catch (caught) {
       selected = null;
       detectedFiles.textContent = caught?.message || 'Dateiprüfung fehlgeschlagen.';
       detectedFiles.dataset.state = 'error';
       progressLabel.textContent = 'Vorbereitung abgebrochen';
-      progressDetail.textContent = 'Vollständiger Originalexport und KI-Datei mit Testfilter müssen exakt zusammenpassen.';
+      progressDetail.textContent = 'Vollständiger Originalexport und aktuelle KI-Datei müssen exakt zusammenpassen.';
       setStatus(caught?.message || 'Dateiprüfung fehlgeschlagen.', 'error');
     } finally {
       submit.disabled = false;
@@ -351,23 +336,19 @@
     const chunks = [];
     let current = [];
     let currentBytes = 2;
-
     for (let index = 0; index < messages.length; index += 1) {
       const message = messages[index];
-      const messageBytes = encoder.encode(JSON.stringify(message)).byteLength + (current.length ? 1 : 0);
-      if (messageBytes > 650_000) throw new Error(`Ereignis ${index + 1} ist zu groß für den Import.`);
-      if (current.length && currentBytes + messageBytes > MAX_CHUNK_BYTES) {
+      const bytes = encoder.encode(JSON.stringify(message)).byteLength + (current.length ? 1 : 0);
+      if (bytes > 650_000) throw new Error(`Ereignis ${index + 1} ist zu groß für den Import.`);
+      if (current.length && currentBytes + bytes > MAX_CHUNK_BYTES) {
         chunks.push(current);
         current = [];
         currentBytes = 2;
       }
       current.push(message);
-      currentBytes += messageBytes;
-      if (index % 100 === 0 || index === messages.length - 1) {
-        report(
-          (index + 1) / messages.length,
-          `${(index + 1).toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} Testereignissen vorbereitet`,
-        );
+      currentBytes += bytes;
+      if (index % 300 === 0 || index === messages.length - 1) {
+        report((index + 1) / messages.length, `${index + 1} von ${messages.length} Ereignissen vorbereitet`);
       }
     }
     if (current.length) chunks.push(current);
@@ -375,18 +356,14 @@
   }
 
   async function uploadRaw(entry, rangeStart, rangeEnd) {
-    const datasetId = document.getElementById('dataset-id').value.trim();
-    const name = document.getElementById('dataset-name').value.trim();
-    const chat = entry.chat;
-    const messages = chat.messages;
+    const messages = entry.chat.messages;
     const span = rangeEnd - rangeStart;
-    const report = (fraction, label, detail) => setProgress(rangeStart + fraction * span, label, detail);
-
-    report(0.01, 'Testfenster wird aus dem vollständigen Rohchat vorbereitet …', `${messages.length.toLocaleString('de-DE')} Ereignisse`);
-    const { messages: ignored, ...chatMeta } = chat;
+    const report = (fraction, label, detail = '') => setProgress(rangeStart + fraction * span, label, detail);
+    const { messages: ignored, ...chatMeta } = entry.chat;
     void ignored;
+    chatMeta.importedYearRange = '2026';
     chatMeta.reviewYear = 2026;
-    chatMeta.reviewYearEvents = REVIEW_YEAR_EVENTS;
+    chatMeta.reviewYearEvents = messages.length;
     chatMeta.sourceFileName = entry.rawFile.name;
     chatMeta.testFilter = entry.annotations.testFilter;
     chatMeta.sourceIntegrity = {
@@ -394,7 +371,6 @@
       sourceSha256: ORIGINAL_SOURCE_SHA256,
       sourceFileHash: entry.rawFileHash,
       sourceEntries: ORIGINAL_SOURCE_EVENTS,
-      reviewYearEvents: REVIEW_YEAR_EVENTS,
       uploadedEvents: messages.length,
       preservedEntries: messages.length,
       silentLosses: 0,
@@ -404,60 +380,55 @@
     const chunks = makeChunks(messages, (fraction, detail) => {
       report(0.02 + fraction * 0.08, 'Datenblöcke werden vorbereitet …', detail);
     });
-
     report(0.11, 'Importsitzung für Test 3 wird angelegt …', `${chunks.length} Datenblöcke`);
     const started = await apiPost('/api/admin/import/start', {
-      datasetId,
-      name,
+      datasetId: DATASET_ID,
+      name: 'Philipp & Lena · Test 3 · ungesehene V3-Validierung',
       year: 2026,
       datasetHash: entry.datasetHash,
       chatMeta,
       expectedChunks: chunks.length,
       expectedMessages: messages.length,
     });
-
     for (let index = 0; index < chunks.length; index += 1) {
       const result = await apiPost('/api/admin/import/chunk', {
-        datasetId,
+        datasetId: DATASET_ID,
         uploadId: started.uploadId,
         chunkIndex: index,
         messages: chunks[index],
       });
       report(
         0.11 + ((index + 1) / chunks.length) * 0.84,
-        'Gefilterte Originalereignisse werden übertragen …',
-        `${result.receivedMessages.toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} Ereignissen · Block ${index + 1}/${chunks.length}`,
+        'Verlustfreie Ereignisse werden übertragen …',
+        `${result.receivedMessages.toLocaleString('de-DE')} von ${messages.length.toLocaleString('de-DE')} · Block ${index + 1}/${chunks.length}`,
       );
     }
-
-    report(0.97, 'Vollständigkeit wird serverseitig geprüft …', 'Originalquelle, Testfilter und Ereigniszahl müssen exakt stimmen');
+    report(0.97, 'Vollständigkeit wird serverseitig geprüft …');
     const result = await apiPost('/api/admin/import/finish', {
-      datasetId,
+      datasetId: DATASET_ID,
       uploadId: started.uploadId,
     });
-    if (Number(result.messages) !== messages.length) throw new Error('Server hat nicht alle Testereignisse bestätigt.');
-    report(1, 'Testfenster gespeichert', `${result.messages.toLocaleString('de-DE')} Ereignisse · stille Verluste: 0`);
-    return result;
+    if (Number(result.messages) !== messages.length) throw new Error('Server hat nicht alle Ereignisse bestätigt.');
+    report(1, 'Vollständiger Prüfstrom gespeichert', `${result.messages.toLocaleString('de-DE')} Ereignisse · stille Verluste: 0`);
   }
 
   async function uploadAnalysis(entry, rangeStart, rangeEnd) {
-    const datasetId = document.getElementById('dataset-id').value.trim();
     const annotations = entry.annotations;
     const span = rangeEnd - rangeStart;
-
     setProgress(
       rangeStart + span * 0.1,
-      'KI-Vorselektion und Testfilter werden geprüft …',
-      `${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Ereignisse`,
+      'KI-Datei wird geprüft …',
+      `${annotations.situations.length} Situationen · Philipp 6 · Lena 6`,
     );
     const result = await apiPost('/api/admin/analysis-versions/import', {
-      datasetId,
-      versionId: VERSION_ID,
-      label: `KI-Vorselektion V3 · Test 3 · ${annotations.situations.length} Situationen`,
-      source: 'chatgpt-ai-preselection-v3-unseen-fullsource-upload',
+      datasetId: DATASET_ID,
+      versionId: 'pilot-v3-unseen-fullsource-owners',
+      label: `KI-Vorselektion V3 · ${annotations.situations.length} Situationen · Test 3`,
+      source: 'chatgpt-ai-preselection-v3-unseen-fullsource',
       parameters: {
         ...(annotations.preselection || {}),
         testFilter: annotations.testFilter,
+        ownerAssignment: annotations.ownerAssignment,
         sourceFileHash: entry.preselectionFileHash,
         sourceFileName: entry.preselectionFile.name,
       },
@@ -466,9 +437,8 @@
     setProgress(
       rangeEnd,
       'Test 3 aktiviert',
-      `${result.situations} Situationen · ${result.assignments} Ereigniszuordnungen`,
+      `${result.situations} Situationen · Philipp ${result.split.Philipp} · Lena ${result.split.Lena}`,
     );
-    return result;
   }
 
   async function currentUser() {
@@ -494,28 +464,26 @@
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selected) {
-      setStatus('Zuerst den vollständigen Telegram-Originalexport und die KI-Datei mit integriertem Testfilter auswählen.', 'error');
+      setStatus('Zuerst den vollständigen Telegram-Rohchat und die aktuelle KI-Datei auswählen.', 'error');
       return;
     }
-
     submit.disabled = true;
     if (skip) skip.disabled = true;
     rawInput.disabled = true;
     preselectionInput.disabled = true;
     setStatus('Test 3 wird erstellt. Seite geöffnet lassen.', 'working');
-
     try {
       await uploadRaw(selected, 8, 86);
       await uploadAnalysis(selected, 86, 100);
       setProgress(100, 'Test 3 ist bereit', 'Prüfansicht wird geöffnet …');
-      setStatus('Test 3 wurde aus dem vollständigen Rohchat und den gefilterten KI-Vorschlägen aktiviert. Weiterleitung …', 'ok');
+      setStatus('Test 3 wurde mit vollständigem Rohchat, Testfilter, KI-Vorschlägen und Prüfaufteilung aktiviert.', 'ok');
       setTimeout(() => location.replace('/review.html'), 900);
     } catch (caught) {
       const details = caught?.details;
-      const countSuffix = details?.expectedMessages
+      const suffix = details?.expectedMessages
         ? ` Empfangen: ${details.receivedMessages ?? '?'} von ${details.expectedMessages} Ereignissen.`
         : '';
-      setStatus(`${caught?.message || 'Test 3 konnte nicht gestartet werden.'}${countSuffix}`, 'error');
+      setStatus(`${caught?.message || 'Test 3 konnte nicht gestartet werden.'}${suffix}`, 'error');
       progressLabel.textContent = 'Test 3 unterbrochen';
       progressDetail.textContent = 'Beide Dateien bleiben ausgewählt. Nach Behebung kann der Upload erneut gestartet werden.';
       submit.disabled = false;
@@ -525,6 +493,5 @@
     }
   });
 
-  if (document.getElementById('dataset-id')) document.getElementById('dataset-id').value = DATASET_ID;
   currentUser().catch(() => location.replace('/login.html'));
 })();
