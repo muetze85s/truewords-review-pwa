@@ -2,13 +2,12 @@
   'use strict';
 
   const API_BASE = String(window.TRUEWORDS_REVIEW_API || '').replace(/\/$/, '');
-  const TOKEN_KEY = 'truewords-review-server/token';
   const REVIEWER_KEY = 'truewords-review-2026/reviewer';
   const REVIEWER_CONFIRMED_KEY = 'truewords-review-ui/reviewer-confirmed';
   const STORE_PREFIX = 'truewords-review-2026/';
 
-  let token = localStorage.getItem(TOKEN_KEY) || '';
-  let reviewer = localStorage.getItem(REVIEWER_KEY) === 'Lena' ? 'Lena' : 'Philipp';
+  let reviewer = 'Philipp';
+  let currentUser = null;
   let dataset = null;
   let revision = 0;
   let applyingRemote = false;
@@ -22,11 +21,11 @@
   Storage.prototype.setItem = function patchedSetItem(key, value) {
     originalSetItem.call(this, key, value);
     if (
-      this === localStorage &&
-      ready &&
-      !applyingRemote &&
-      dataset &&
-      key === STORE_PREFIX + dataset.hash
+      this === localStorage
+      && ready
+      && !applyingRemote
+      && dataset
+      && key === STORE_PREFIX + dataset.hash
     ) {
       scheduleSync();
     }
@@ -38,16 +37,16 @@
 
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
-    if (token) headers.set('authorization', `Bearer ${token}`);
     if (options.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
 
     const response = await fetch(apiUrl(path), {
       ...options,
       headers,
+      credentials: 'same-origin',
       cache: 'no-store',
     });
 
-    let payload = null;
+    let payload;
     try {
       payload = await response.json();
     } catch {
@@ -132,64 +131,33 @@
     }
   }
 
-  function showLogin(message = '') {
-    document.querySelector('.tw-server-login')?.remove();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'tw-server-login';
-    overlay.innerHTML = `
-      <form class="tw-server-login-card">
-        <div class="eyebrow">Private Prüfsitzung</div>
-        <h2>TrueWords-Prüfung öffnen</h2>
-        <p>Chat und gemeinsamer Prüfstand werden automatisch vom privaten Server geladen.</p>
-        ${message ? `<div class="tw-server-error">${escapeHtml(message)}</div>` : ''}
-        <label>
-          <span>Person</span>
-          <select name="reviewer">
-            <option value="Philipp" ${reviewer === 'Philipp' ? 'selected' : ''}>Philipp</option>
-            <option value="Lena" ${reviewer === 'Lena' ? 'selected' : ''}>Lena</option>
-          </select>
-        </label>
-        <label>
-          <span>Zugangscode</span>
-          <input name="token" type="password" autocomplete="current-password" required>
-        </label>
-        <button class="primary" type="submit">Prüfsitzung laden</button>
-      </form>`;
-
-    overlay.querySelector('form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const selectedReviewer = form.get('reviewer') === 'Lena' ? 'Lena' : 'Philipp';
-      const enteredToken = String(form.get('token') || '').trim();
-      if (!enteredToken) return;
-
-      token = enteredToken;
-      setReviewer(selectedReviewer);
-      setStatus('Verbindung wird geprüft …', 'working');
-
-      try {
-        await startSession();
-        localStorage.setItem(TOKEN_KEY, token);
-        overlay.remove();
-      } catch (caught) {
-        token = '';
-        localStorage.removeItem(TOKEN_KEY);
-        overlay.remove();
-        showLogin(caught?.message || 'Anmeldung fehlgeschlagen.');
-      }
-    });
-
-    document.body.appendChild(overlay);
+  async function signOut() {
+    await api('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    location.replace('/login.html');
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
+  function addPortalNavigation() {
+    document.querySelector('.tw-portal-nav')?.remove();
+    const nav = document.createElement('div');
+    nav.className = 'tw-portal-nav';
+
+    const identity = document.createElement('span');
+    identity.textContent = currentUser?.email || reviewer;
+    nav.appendChild(identity);
+
+    if (currentUser?.canUpload) {
+      const upload = document.createElement('a');
+      upload.href = '/upload.html';
+      upload.textContent = 'Uploads';
+      nav.appendChild(upload);
+    }
+
+    const logout = document.createElement('button');
+    logout.type = 'button';
+    logout.textContent = 'Abmelden';
+    logout.addEventListener('click', signOut);
+    nav.appendChild(logout);
+    document.body.appendChild(nav);
   }
 
   async function applyAnnotations(annotations) {
@@ -212,7 +180,7 @@
     setStatus('Chat wird geladen …', 'working');
     applyingRemote = true;
     try {
-      await loadFileIntoInput('#chat', 'server-chat-2026.json', bootstrap.chat);
+      await loadFileIntoInput('#chat', 'server-chat.json', bootstrap.chat);
       await waitFor('#ann');
       await new Promise((resolve) => setTimeout(resolve, 250));
       await loadFileIntoInput('#ann', 'server-markierungen.json', bootstrap.annotations);
@@ -251,10 +219,7 @@
     try {
       const result = await api('/api/state', {
         method: 'PUT',
-        body: JSON.stringify({
-          datasetId: dataset.id,
-          annotations,
-        }),
+        body: JSON.stringify({ datasetId: dataset.id, annotations }),
       });
       revision = Number(result.revision || revision + 1);
       setStatus(`Gespeichert · Revision ${revision}`, 'ok');
@@ -263,9 +228,7 @@
       setStatus(caught?.message || 'Speichern fehlgeschlagen.', 'error');
       if (caught?.status === 401) {
         ready = false;
-        token = '';
-        localStorage.removeItem(TOKEN_KEY);
-        showLogin('Der Zugang ist nicht mehr gültig.');
+        location.replace('/login.html');
       }
     } finally {
       syncing = false;
@@ -283,6 +246,10 @@
       revision = remoteRevision;
       setStatus(`Aktualisiert · Revision ${revision}`, 'ok');
     } catch (caught) {
+      if (caught?.status === 401) {
+        location.replace('/login.html');
+        return;
+      }
       setStatus(caught?.message || 'Server nicht erreichbar.', 'error');
     }
   }
@@ -311,17 +278,22 @@
   });
 
   async function boot() {
-    if (!token) {
-      showLogin();
-      return;
-    }
-
     try {
+      const me = await api('/api/auth/me');
+      currentUser = me.user;
+      setReviewer(currentUser.role);
+      addPortalNavigation();
       await startSession();
     } catch (caught) {
-      token = '';
-      localStorage.removeItem(TOKEN_KEY);
-      showLogin(caught?.message || 'Prüfsitzung konnte nicht geladen werden.');
+      if (caught?.status === 401) {
+        location.replace('/login.html');
+        return;
+      }
+      if (caught?.status === 404 && currentUser?.canUpload) {
+        location.replace('/upload.html');
+        return;
+      }
+      setStatus(caught?.message || 'Prüfsitzung konnte nicht geladen werden.', 'error');
     }
   }
 
