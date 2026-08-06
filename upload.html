@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#f6f2ec">
   <meta name="robots" content="noindex,nofollow">
   <title>TrueWords · Test 3 vorbereiten</title>
-  <link rel="stylesheet" href="./portal.css?v=12">
+  <link rel="stylesheet" href="./portal.css?v=13">
+  <link rel="stylesheet" href="./truewords-ui-theme.css?v=1">
+  <script src="./truewords-ui-theme.js?v=1"></script>
 </head>
 <body>
   <main class="page">
@@ -20,7 +22,7 @@
           <div>
             <div class="eyebrow">Segmentierung · Test 3</div>
             <h1>Unabhängigen V3-Prüfstand starten</h1>
-            <p class="intro">Für jeden Test wird immer der vollständige unveränderte Telegram-Originalexport verwendet. Die KI-Datei enthält zusätzlich den exakten Testfilter mit Zeitraum und Ereignis-IDs.</p>
+            <p class="intro">Für jeden Test wird immer der vollständige unveränderte Telegram-Originalexport verwendet. Die KI-Datei enthält Testfilter, Situationsvorschläge und die feste Prüfaufteilung.</p>
           </div>
           <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
         </div>
@@ -34,18 +36,18 @@
           <label style="margin-top:14px">
             <span>Vollständiger Telegram-Originalexport</span>
             <input id="raw-file" type="file" accept=".json,application/json" required>
-            <small>Der SHA-256 und die vollständige Ereigniszahl werden vor dem Upload geprüft.</small>
+            <small>SHA-256, vollständige Ereigniszahl und verlustfreie 2026-Aufbereitung werden geprüft.</small>
           </label>
         </section>
 
         <section class="card upload-card">
           <div class="eyebrow">Datei 2 von 2</div>
-          <h2>KI-Vorselektion mit integriertem Testfilter auswählen</h2>
-          <p class="muted">Verwende <strong>truewords-ki-vorselektion-pilot-v3-unseen-fullsource.json</strong>. Die Datei enthält die 12 Situationsvorschläge sowie den verbindlichen Testfilter für exakt 335 Originalereignisse.</p>
+          <h2>KI-Vorselektion mit Testfilter und Prüfaufteilung</h2>
+          <p class="muted">Verwende <strong>truewords-ki-vorselektion-pilot-v3-unseen-fullsource-owners.json</strong>. Sie enthält 12 Situationsvorschläge, 335 Testereignisse und die feste Aufteilung Philipp 1–6 / Lena 7–12.</p>
           <label style="margin-top:14px">
-            <span>KI-Vorselektion V3 + Testfilter</span>
+            <span>KI-Vorselektion V3 + Testfilter + Owner</span>
             <input id="preselection-file" type="file" accept=".json,application/json" required>
-            <small>Der Testfilter bestimmt Zeitraum, Start-/End-ID und die vollständige Liste der Testereignisse.</small>
+            <small>Die Owner-Zuordnung wird geprüft und unverändert im Prüfstand gespeichert.</small>
           </label>
           <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
         </section>
@@ -55,10 +57,10 @@
 
         <section class="card">
           <div class="notice">
-            Test 2 bleibt als abgeschlossener Goldstandard erhalten. Test 3 verwendet einen neuen, zuvor ungeprüften Zeitraum und die unveränderte V3-Logik.
+            Test 2 bleibt als abgeschlossener Goldstandard erhalten. Test 3 verwendet einen neuen, zuvor ungeprüften Zeitraum, die unveränderte V3-Logik und dieselbe Halbteilung der Prüfung wie Test 2.
           </div>
           <div class="actions">
-            <button id="submit" class="primary" type="submit">Rohchat prüfen und Test 3 starten</button>
+            <button id="submit" class="primary" type="submit">Rohchat und KI-Datei prüfen · Test 3 starten</button>
             <button id="skip" class="secondary" type="button">Weiter ohne Upload</button>
           </div>
           <div id="progress-wrap" class="progress-wrap" hidden>
@@ -72,6 +74,6 @@
     </div>
   </main>
   <script src="./pilot-v2.js?v=2"></script>
-  <script src="./upload.js?v=14"></script>
+  <script src="./upload.js?v=15"></script>
 </body>
 </html>
