@@ -18,6 +18,8 @@ const files = [
   'review-precision.js',
   'review-cross-owner-fix.js',
   'review-status-colors.css',
+  'review-v2-situation.css',
+  'review-v2-situation.js',
   'situation-quiz.html',
   'situation-quiz.css',
   'situation-quiz.js',
