@@ -67,6 +67,7 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .rv2-situation-card.is-active .rv2-main {
@@ -94,10 +95,23 @@
   place-items: center;
   width: 22px;
   height: 22px;
+  padding: 0;
   border: 1px solid currentColor;
   border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 15px;
   font-weight: 900;
+}
+
+button.rv2-check {
+  cursor: pointer;
+}
+
+button.rv2-check:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .rv2-status-text {
