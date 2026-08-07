@@ -8,14 +8,13 @@
   const scenarios = [
     {
       id: 'q01',
-      title: 'Organisation – plötzlich ein altes Thema',
-      intro: 'Ein laufendes Abendgespräch wechselt kurz auf ein Thema von vorgestern und danach wieder zurück.',
+      title: 'Abendessen und Versicherung',
       before: [
         { time: '18:05', speaker: 'Lena', text: 'Was wollen wir heute essen?' },
         { time: '18:07', speaker: 'Philipp', text: 'Ich könnte noch Gemüse holen. Brauchen wir sonst was?' },
         { time: '18:10', speaker: 'Lena', text: 'Milch wäre gut. Und vielleicht Reis.' },
       ],
-      gap: '2 Minuten später · Themenwechsel',
+      gap: '2 Minuten später',
       after: [
         { time: '18:12', speaker: 'Philipp', text: 'Übrigens, wegen der Versicherung von vorgestern: Hast du die Mail noch gefunden?' },
         { time: '18:15', speaker: 'Lena', text: 'Ja, die schicke ich dir gleich. Beim Essen lieber Curry oder Pfanne?' },
@@ -24,8 +23,7 @@
     },
     {
       id: 'q02',
-      title: 'Paket – längere Pause, derselbe Vorgang',
-      intro: 'Es geht um eine konkrete Lieferung. Danach ist längere Zeit nichts zu schreiben.',
+      title: 'Paketlieferung',
       before: [
         { time: '09:00', speaker: 'Philipp', text: 'Der Fahrer soll heute zwischen neun und elf kommen.' },
         { time: '09:04', speaker: 'Lena', text: 'Okay. Sag mir kurz Bescheid, wenn er da ist.' },
@@ -38,8 +36,7 @@
     },
     {
       id: 'q03',
-      title: 'Konflikt – Gespräch bewusst unterbrochen',
-      intro: 'Ein Streit wird ausdrücklich beendet und einige Stunden später wieder aufgenommen.',
+      title: 'Streit am Vormittag',
       before: [
         { time: '11:10', speaker: 'Lena', text: 'Mich hat der Satz gerade wirklich verletzt.' },
         { time: '11:14', speaker: 'Philipp', text: 'Ich wollte damit nicht sagen, was du gerade daraus machst.' },
@@ -53,8 +50,7 @@
     },
     {
       id: 'q04',
-      title: 'Gute Nacht – am Morgen direkt dasselbe Problem',
-      intro: 'Beide gehen ausdrücklich schlafen. Am nächsten Morgen wird das ungelöste Thema sofort wieder aufgenommen.',
+      title: 'Abends Streit, morgens wieder Thema',
       before: [
         { time: '23:18', speaker: 'Philipp', text: 'So kommen wir heute nicht mehr weiter.' },
         { time: '23:24', speaker: 'Lena', text: 'Dann lass uns morgen darüber reden. Gute Nacht.' },
@@ -68,8 +64,7 @@
     },
     {
       id: 'q05',
-      title: 'Gute Nacht – am Morgen ein anderes Thema',
-      intro: 'Der Abend endet gemeinsam. Am Morgen beginnt etwas völlig Alltägliches.',
+      title: 'Abendplanung und Morgenkaffee',
       before: [
         { time: '22:50', speaker: 'Lena', text: 'Dann sehen wir uns morgen gegen Mittag.' },
         { time: '23:03', speaker: 'Philipp', text: 'Passt. Gute Nacht, ich lege das Handy jetzt weg.' },
@@ -83,8 +78,7 @@
     },
     {
       id: 'q06',
-      title: 'Unterwegs – viele Stunden ohne Nachricht',
-      intro: 'Ein gemeinsamer organisatorischer Vorgang läuft über mehrere Stunden weiter, obwohl kaum geschrieben wird.',
+      title: 'Fahrt zur Fähre',
       before: [
         { time: '08:00', speaker: 'Philipp', text: 'Die Fähre ist gebucht. Ich fahre gleich los.' },
         { time: '08:15', speaker: 'Lena', text: 'Okay. Schreib kurz, wenn du am Pier bist.' },
@@ -97,8 +91,7 @@
     },
     {
       id: 'q07',
-      title: 'Telefonat erledigt – danach neues Alltagsproblem',
-      intro: 'Ein kurzer Austausch endet praktisch. Wenig später kommt ein ganz anderes Anliegen.',
+      title: 'Telefonieren und Waschmaschine',
       before: [
         { time: '14:00', speaker: 'Lena', text: 'Kannst du kurz telefonieren?' },
         { time: '14:10', speaker: 'Philipp', text: 'Gerade nicht. In ungefähr einer halben Stunde.' },
@@ -112,13 +105,12 @@
     },
     {
       id: 'q08',
-      title: 'Altes Streitthema mitten in einer aktuellen Planung',
-      intro: 'Während eines laufenden organisatorischen Gesprächs wird ein älteres Konfliktthema eingeschoben.',
+      title: 'Hotelplanung und Thema von vorgestern',
       before: [
         { time: '17:00', speaker: 'Lena', text: 'Für das Hotel brauchen wir noch die genauen Daten.' },
         { time: '17:04', speaker: 'Philipp', text: 'Freitag bis Montag wäre bei mir am besten.' },
       ],
-      gap: '4 Minuten später · anderes Thema',
+      gap: '4 Minuten später',
       after: [
         { time: '17:08', speaker: 'Lena', text: 'Bevor ich es vergesse: Wegen vorgestern bin ich immer noch nicht ganz okay.' },
         { time: '17:12', speaker: 'Philipp', text: 'Das können wir gleich in Ruhe besprechen.' },
@@ -127,8 +119,7 @@
     },
     {
       id: 'q09',
-      title: 'Guten Abend – derselbe organisatorische Vorgang',
-      intro: 'Morgens wird etwas vereinbart. Am Abend gibt es die dazugehörige Rückmeldung.',
+      title: 'Tierarzt',
       before: [
         { time: '10:12', speaker: 'Lena', text: 'Rufst du heute beim Tierarzt an?' },
         { time: '10:18', speaker: 'Philipp', text: 'Ja. Ich melde mich, wenn ich einen Termin habe.' },
@@ -142,8 +133,7 @@
     },
     {
       id: 'q10',
-      title: 'Frage vor dem Schlafen – Antwort erst am Morgen',
-      intro: 'Eine konkrete Frage bleibt offen, weil beide schlafen gehen. Die erste inhaltliche Nachricht am Morgen beantwortet genau diese Frage.',
+      title: 'Miete vor dem Schlafen',
       before: [
         { time: '00:05', speaker: 'Lena', text: 'Hast du die Miete eigentlich schon überwiesen?' },
         { time: '00:07', speaker: 'Philipp', text: 'Ich bin todmüde. Ich gehe jetzt ins Bett.' },
@@ -205,7 +195,6 @@
       </div>
       <div class="scenario-head">
         <h2>${escapeHtml(scenario.title)}</h2>
-        <p>${escapeHtml(scenario.intro)}</p>
       </div>
       <div class="transcript">
         ${scenario.before.map(chatLine).join('')}
@@ -221,11 +210,11 @@
         <div class="choice-grid">
           <button type="button" class="choice ${selected === 'same' ? 'selected' : ''}" data-decision="same">
             Dieselbe Situation
-            <span>Der zusammenhängende Vorgang läuft für mich weiter.</span>
+            <span>Für mich gehört der Abschnitt noch zur Situation davor.</span>
           </button>
           <button type="button" class="choice ${selected === 'new' ? 'selected' : ''}" data-decision="new">
             Eine neue Situation
-            <span>Für mich beginnt dort ein neuer Gesprächsvorgang.</span>
+            <span>Für mich beginnt ab hier eine neue Situation.</span>
           </button>
         </div>
       </div>
