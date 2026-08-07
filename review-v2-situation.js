@@ -79,8 +79,9 @@
 
   function normalizeSituation(input = {}) {
     const status = STATUS_LABELS[String(input.status || '').toLowerCase()] ? String(input.status).toLowerCase() : 'open';
+    const rawId = String(input.id ?? input.displayId ?? '').trim();
     return {
-      id: Number(input.id || 0),
+      id: rawId || '–',
       status,
       owner: String(input.owner || 'Unbekannt'),
       startDate: String(input.startDate || ''),
@@ -105,7 +106,7 @@
     const active = Boolean(options.active);
     const editable = Boolean(options.editable);
     const statusLabel = STATUS_LABELS[item.status];
-    const check = item.status === 'confirmed' || item.status === 'corrected' ? '✓' : '';
+    const done = item.status === 'confirmed' || item.status === 'corrected';
     const detailRows = active && item.details.length
       ? `<dl class="rv2-details">${item.details.map((detail) => renderDetail(detail, editable)).join('')}</dl>`
       : active
@@ -114,13 +115,19 @@
 
     return `
       <article class="rv2-situation-card status-${escapeHtml(item.status)} ${active ? 'is-active' : ''}"
-        data-situation-id="${item.id}"
-        data-status="${escapeHtml(item.status)}">
-        <button type="button" class="rv2-main" data-open-situation="${item.id}">
+        data-open-situation="${escapeHtml(item.id)}"
+        data-situation-id="${escapeHtml(item.id)}"
+        data-status="${escapeHtml(item.status)}"
+        tabindex="0"
+        role="button"
+        aria-label="Situation ${escapeHtml(item.id)} öffnen">
+        <div class="rv2-main">
           <div class="rv2-row rv2-row-primary">
-            <strong class="rv2-number">${item.id}</strong>
-            <span class="rv2-check" aria-label="${escapeHtml(statusLabel)}">${check}</span>
-            ${active ? `<span class="rv2-status-text">${escapeHtml(statusLabel)}</span>` : ''}
+            <strong class="rv2-number">${escapeHtml(item.id)}</strong>
+            ${editable
+              ? `<button type="button" class="rv2-check rv2-status-toggle ${done ? 'is-done' : ''}" data-toggle-status="${escapeHtml(item.id)}" aria-label="${done ? 'Bestätigung zurücknehmen' : 'Situation bestätigen'}">${done ? '✓' : ''}</button>`
+              : `<span class="rv2-check ${done ? 'is-done' : ''}" aria-label="${escapeHtml(statusLabel)}">${done ? '✓' : ''}</span>`}
+            ${active ? `<span class="rv2-status-text">${escapeHtml(statusLabel)}</span>` : '<span></span>'}
             <span class="rv2-count">${item.messageCount} Nachr.</span>
           </div>
           <div class="rv2-row rv2-row-secondary">
@@ -128,8 +135,8 @@
             <span class="rv2-date">${escapeHtml(item.startDate)}</span>
           </div>
           ${active && (item.startTime || item.endTime) ? `<div class="rv2-time-range">${escapeHtml(item.startTime)}${item.startTime && item.endTime ? ' – ' : ''}${escapeHtml(item.endTime)}</div>` : ''}
-        </button>
-        ${active ? `<div class="rv2-active-details">${detailRows}<div class="rv2-editor-slot" data-editor-slot="${item.id}" hidden></div></div>` : ''}
+        </div>
+        ${active ? `<div class="rv2-active-details">${detailRows}<div class="rv2-editor-slot" data-editor-slot="${escapeHtml(item.id)}" hidden></div></div>` : ''}
       </article>`;
   }
 
