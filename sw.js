@@ -1,9 +1,10 @@
-const CACHE = 'truewords-review-pwa-server-v20';
+const CACHE = 'truewords-review-pwa-server-v21';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
   './portal.css',
   './truewords-ui-theme.css',
+  './truewords-ui-bright.css',
   './truewords-ui-theme.js',
   './login.js',
   './account-setup.js',
@@ -18,6 +19,8 @@ const FILES = [
   './review-precision.js',
   './review-cross-owner-fix.js',
   './review-status-colors.css',
+  './situation-quiz.css',
+  './situation-quiz.js',
   './enhancements.css',
   './enhancements.js',
   './coordination.css',
