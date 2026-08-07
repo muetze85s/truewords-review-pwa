@@ -109,7 +109,7 @@ test('Lena situation calibration quiz', async ({ page }, testInfo) => {
   })).toBeVisible();
   await expect(page.getByText('1 / 10')).toBeVisible();
   await expect(page.getByRole('heading', {
-    name: 'Organisation – plötzlich ein altes Thema',
+    name: 'Abendessen und Versicherung',
   })).toBeVisible();
 
   const philipp = page.locator('.chat-line.philipp').first();
