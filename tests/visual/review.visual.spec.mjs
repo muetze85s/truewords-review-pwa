@@ -5,6 +5,19 @@ const cases = [
   { theme: 'light', screenshot: 'review-light.png' },
 ];
 
+async function resolvedColor(page, variableName) {
+  return page.evaluate((name) => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = `var(${name})`;
+    probe.style.position = 'fixed';
+    probe.style.opacity = '0';
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  }, variableName);
+}
+
 for (const visualCase of cases) {
   test(`review design ${visualCase.theme}`, async ({ page }, testInfo) => {
     await page.goto(`/tests/visual/review-fixture.html?theme=${visualCase.theme}`);
@@ -38,8 +51,8 @@ for (const visualCase of cases) {
       context.evaluate((node) => Number(getComputedStyle(node).opacity)),
       philipp.evaluate((node) => getComputedStyle(node).borderColor),
       lena.evaluate((node) => getComputedStyle(node).borderColor),
-      body.evaluate((node) => getComputedStyle(node).getPropertyValue('--tw-philipp-surface').trim()),
-      body.evaluate((node) => getComputedStyle(node).getPropertyValue('--tw-lena-surface').trim()),
+      resolvedColor(page, '--tw-philipp-surface'),
+      resolvedColor(page, '--tw-lena-surface'),
     ]);
 
     expect(bodyBg).not.toBe(panelBg);
