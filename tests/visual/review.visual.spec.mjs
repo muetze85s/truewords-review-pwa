@@ -15,17 +15,35 @@ for (const visualCase of cases) {
     const lena = page.locator('.message.assigned[data-speaker="Lena"]').first();
     const context = page.locator('.message.context[data-speaker="Philipp"]').first();
     const body = page.locator('body');
+    const panel = page.locator('.panel').first();
 
-    const [philippBg, lenaBg, contextBg, bodyBg, contextOpacity, philippBorder, lenaBorder] = await Promise.all([
+    const [
+      philippBg,
+      lenaBg,
+      contextBg,
+      bodyBg,
+      panelBg,
+      contextOpacity,
+      philippBorder,
+      lenaBorder,
+      philippToken,
+      lenaToken,
+    ] = await Promise.all([
       philipp.evaluate((node) => getComputedStyle(node).backgroundColor),
       lena.evaluate((node) => getComputedStyle(node).backgroundColor),
       context.evaluate((node) => getComputedStyle(node).backgroundColor),
       body.evaluate((node) => getComputedStyle(node).backgroundColor),
+      panel.evaluate((node) => getComputedStyle(node).backgroundColor),
       context.evaluate((node) => Number(getComputedStyle(node).opacity)),
       philipp.evaluate((node) => getComputedStyle(node).borderColor),
       lena.evaluate((node) => getComputedStyle(node).borderColor),
+      body.evaluate((node) => getComputedStyle(node).getPropertyValue('--tw-philipp-surface').trim()),
+      body.evaluate((node) => getComputedStyle(node).getPropertyValue('--tw-lena-surface').trim()),
     ]);
 
+    expect(bodyBg).not.toBe(panelBg);
+    expect(philippBg).toBe(philippToken);
+    expect(lenaBg).toBe(lenaToken);
     expect(philippBg).not.toBe(bodyBg);
     expect(lenaBg).not.toBe(bodyBg);
     expect(philippBg).not.toBe(lenaBg);
