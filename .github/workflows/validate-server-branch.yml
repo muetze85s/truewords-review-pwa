@@ -42,7 +42,11 @@ jobs:
           test -f dist/review-cross-owner-fix.js
           test -f dist/review-status-colors.css
           test -f dist/truewords-ui-theme.css
+          test -f dist/truewords-ui-bright.css
           test -f dist/truewords-ui-theme.js
+          test -f dist/situation-quiz.html
+          test -f dist/situation-quiz.css
+          test -f dist/situation-quiz.js
           test -f dist/login.html
           test -f dist/login.js
           test -f dist/account-setup.html
@@ -53,12 +57,14 @@ jobs:
           test -f dist/portal.css
           test -f migrations/0004_email_auth.sql
           test -f migrations/0005_balance_pilot_review_owners.sql
+          test -f migrations/0006_situation_quiz.sql
           grep -q 'review.js' dist/review.html
           grep -q 'review-boundaries.js' dist/review.html
           grep -q 'review-precision.js' dist/review.html
           grep -q 'review-cross-owner-fix.js' dist/review.html
           grep -q 'review-status-colors.css' dist/review.html
           grep -q 'truewords-ui-theme.css' dist/review.html
+          grep -q 'truewords-ui-bright.css' dist/review.html
           grep -q 'truewords-ui-theme.js' dist/review.html
           grep -q 'truewords-ui-theme.css' dist/upload.html
           grep -q 'truewords-ui-theme.js' dist/upload.html
@@ -73,7 +79,13 @@ jobs:
           grep -q 'boundary_cross_owner_moved' dist/review-precision.js
           grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
           grep -q 'precision_review_state_saved' src/worker-review-precision.ts
-          grep -q 'worker-review-precision.ts' wrangler.jsonc
+          grep -q 'worker-situation-quiz.ts' wrangler.jsonc
+          grep -q 'review_situation_quiz_results' src/worker-situation-quiz.ts
+          grep -q '/api/situation-quiz/submit' src/worker-situation-quiz.ts
+          grep -q '/situation-quiz.html' src/worker-situation-quiz.ts
+          grep -q 'situation-quiz.html' dist/login.js
+          grep -q 'Lena, Lass uns herausfinden ob du Situation richtig erkennst' dist/situation-quiz.html
+          grep -q 'q10' dist/situation-quiz.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
           grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' src/worker-source-integrity.ts
