@@ -8,6 +8,7 @@ const cases = [
 for (const visualCase of cases) {
   test(`review design ${visualCase.theme}`, async ({ page }, testInfo) => {
     await page.goto(`/tests/visual/review-fixture.html?theme=${visualCase.theme}`);
+    await page.addStyleTag({ url: '/truewords-ui-bright.css' });
     await page.locator('.app-shell').waitFor({ state: 'visible' });
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: visualCase.theme });
 
