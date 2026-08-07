@@ -44,6 +44,11 @@ jobs:
           test -f dist/truewords-ui-theme.css
           test -f dist/truewords-ui-bright.css
           test -f dist/truewords-ui-theme.js
+          test -f dist/review-v2-situation.css
+          test -f dist/review-v2-situation.js
+          test -f dist/review-v2-timeline.css
+          test -f dist/review-v2-timeline.js
+          test -f dist/review-v2-prototype.html
           test -f dist/situation-quiz.html
           test -f dist/situation-quiz.css
           test -f dist/situation-quiz.js
@@ -84,8 +89,11 @@ jobs:
           grep -q '/api/situation-quiz/submit' src/worker-situation-quiz.ts
           grep -q '/situation-quiz.html' src/worker-situation-quiz.ts
           grep -q 'situation-quiz.html' dist/login.js
-          grep -q 'Lena, Lass uns herausfinden ob du Situation richtig erkennst' dist/situation-quiz.html
+          grep -q 'Lena, lass uns herausfinden, ob du Situationen richtig erkennst' dist/situation-quiz.html
           grep -q 'q10' dist/situation-quiz.js
+          grep -q 'Neue Situation ab hier' dist/review-v2-timeline.js
+          grep -q 'nextTemporarySituationId' dist/review-v2-timeline.js
+          grep -q 'is-header-hidden' dist/review-v2-timeline.css
           grep -q 'api/review/bootstrap' src/worker-review.ts
           grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' src/worker-source-integrity.ts
