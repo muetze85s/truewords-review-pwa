@@ -105,7 +105,7 @@ test('Lena situation calibration quiz', async ({ page }, testInfo) => {
 
   await page.goto('/situation-quiz.html');
   await expect(page.getByRole('heading', {
-    name: 'Lena, Lass uns herausfinden ob du Situation richtig erkennst',
+    name: 'Lena, lass uns herausfinden, ob du Situationen richtig erkennst',
   })).toBeVisible();
   await expect(page.getByText('1 / 10')).toBeVisible();
   await expect(page.getByRole('heading', {
