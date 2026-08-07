@@ -40,7 +40,11 @@
       if (!response.ok) throw new Error(result.error || 'Anmeldung fehlgeschlagen.');
 
       setStatus('Angemeldet. Seite wird geöffnet …', 'ok');
-      location.replace(result.user?.canUpload ? '/upload.html' : '/review.html');
+      if (result.user?.role === 'Lena') {
+        location.replace('/situation-quiz.html');
+      } else {
+        location.replace(result.user?.canUpload ? '/upload.html' : '/review.html');
+      }
     } catch (caught) {
       setStatus(caught?.message || 'Anmeldung fehlgeschlagen.', 'error');
     } finally {
