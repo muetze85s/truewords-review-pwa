@@ -87,3 +87,48 @@ for (const visualCase of cases) {
     expect(screenshot.byteLength).toBeGreaterThan(50_000);
   });
 }
+
+test('Lena situation calibration quiz', async ({ page }, testInfo) => {
+  await page.route('**/api/situation-quiz/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        quizVersion: 1,
+        user: { role: 'Lena', email: 'lena@example.test' },
+        required: true,
+        completed: false,
+      }),
+    });
+  });
+
+  await page.goto('/situation-quiz.html');
+  await expect(page.getByRole('heading', {
+    name: 'Lena, Lass uns herausfinden ob du Situation richtig erkennst',
+  })).toBeVisible();
+  await expect(page.getByText('1 / 10')).toBeVisible();
+  await expect(page.getByRole('heading', {
+    name: 'Organisation – plötzlich ein altes Thema',
+  })).toBeVisible();
+
+  const philipp = page.locator('.chat-line.philipp').first();
+  const lena = page.locator('.chat-line.lena').first();
+  const [philippBg, lenaBg] = await Promise.all([
+    philipp.evaluate((node) => getComputedStyle(node).backgroundColor),
+    lena.evaluate((node) => getComputedStyle(node).backgroundColor),
+  ]);
+  expect(philippBg).not.toBe(lenaBg);
+  expect(await page.locator('.choice').count()).toBe(2);
+
+  const screenshot = await page.screenshot({
+    fullPage: true,
+    animations: 'disabled',
+    caret: 'hide',
+  });
+  await testInfo.attach('situation-quiz.png', {
+    body: screenshot,
+    contentType: 'image/png',
+  });
+  expect(screenshot.byteLength).toBeGreaterThan(50_000);
+});
