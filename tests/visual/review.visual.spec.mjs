@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 
 const cases = [
-  { theme: 'dark', snapshot: 'review-dark.png' },
-  { theme: 'light', snapshot: 'review-light.png' },
+  { theme: 'dark', screenshot: 'review-dark.png' },
+  { theme: 'light', screenshot: 'review-light.png' },
 ];
 
 for (const visualCase of cases) {
-  test(`review design ${visualCase.theme}`, async ({ page }) => {
+  test(`review design ${visualCase.theme}`, async ({ page }, testInfo) => {
     await page.goto(`/tests/visual/review-fixture.html?theme=${visualCase.theme}`);
     await page.locator('.app-shell').waitFor({ state: 'visible' });
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: visualCase.theme });
@@ -16,12 +16,14 @@ for (const visualCase of cases) {
     const context = page.locator('.message.context[data-speaker="Philipp"]').first();
     const body = page.locator('body');
 
-    const [philippBg, lenaBg, contextBg, bodyBg, contextOpacity] = await Promise.all([
+    const [philippBg, lenaBg, contextBg, bodyBg, contextOpacity, philippBorder, lenaBorder] = await Promise.all([
       philipp.evaluate((node) => getComputedStyle(node).backgroundColor),
       lena.evaluate((node) => getComputedStyle(node).backgroundColor),
       context.evaluate((node) => getComputedStyle(node).backgroundColor),
       body.evaluate((node) => getComputedStyle(node).backgroundColor),
       context.evaluate((node) => Number(getComputedStyle(node).opacity)),
+      philipp.evaluate((node) => getComputedStyle(node).borderColor),
+      lena.evaluate((node) => getComputedStyle(node).borderColor),
     ]);
 
     expect(philippBg).not.toBe(bodyBg);
@@ -29,6 +31,8 @@ for (const visualCase of cases) {
     expect(philippBg).not.toBe(lenaBg);
     expect(contextBg).not.toBe(bodyBg);
     expect(contextOpacity).toBeLessThan(1);
+    expect(philippBorder).toBe(lenaBorder);
+    expect(philippBorder).not.toBe('rgba(0, 0, 0, 0)');
 
     const statusBackgrounds = await page.locator('.situation-row').evaluateAll((nodes) =>
       nodes.map((node) => getComputedStyle(node).backgroundColor),
@@ -39,10 +43,15 @@ for (const visualCase of cases) {
     const buttonBackground = await confirmButton.evaluate((node) => getComputedStyle(node).backgroundColor);
     expect(buttonBackground).not.toBe(bodyBg);
 
-    await expect(page).toHaveScreenshot(visualCase.snapshot, {
+    const screenshot = await page.screenshot({
       fullPage: true,
       animations: 'disabled',
       caret: 'hide',
     });
+    await testInfo.attach(visualCase.screenshot, {
+      body: screenshot,
+      contentType: 'image/png',
+    });
+    expect(screenshot.byteLength).toBeGreaterThan(50_000);
   });
 }
