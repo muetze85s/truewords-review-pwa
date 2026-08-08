@@ -12,10 +12,16 @@
   <style>
     .tw-progress-ring{background:transparent!important}.tw-progress-ring:after{display:none!important}
     .tw-chat-stream{padding-bottom:max(360px,52vh)!important}
+    .tw-sit-check{cursor:pointer}
+    .tw-situation[data-status="confirmed"] .tw-sit-check,.tw-situation[data-status="corrected"] .tw-sit-check{background:var(--confirmed);border-color:var(--confirmed);color:#fff}
+    .tw-confirm.done{background:var(--unclear)!important;color:#fff!important;border:1px solid var(--unclear)!important}
+    html[data-theme="dark"] .tw-situation.is-active{background:#2A2A30!important}
+    html[data-theme="dark"] .tw-message-wrap.is-active.philipp .tw-message{background:#24514E!important}
+    html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{background:#5A3B49!important}
     @media(max-width:840px){.tw-chat-stream{padding-bottom:max(430px,62vh)!important}}
   </style>
   <script src="./truewords-user-theme.js?v=1"></script>
-  <script src="./review-navigation-fix.js?v=1" defer></script>
+  <script src="./review-navigation-fix.js?v=2" defer></script>
   <script src="./review-v2-app.js?v=1" defer></script>
   <script src="./review-v2-events.js?v=1" defer></script>
 </head>
