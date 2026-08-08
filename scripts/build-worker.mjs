@@ -44,6 +44,7 @@ const files = [
   'upload.html',
   'pilot-v2.js',
   'upload.js',
+  'segmentation-v4.mjs',
   'portal.css',
   'manifest.webmanifest',
   'icon.svg',
