@@ -19,7 +19,7 @@ test('Situationsinfo erklärt Gesprächsepisode und Algorithmus', async ({ page 
   await expect(page.getByText('Situation ≠ Thema')).toBeVisible();
   await expect(page.getByText('Pause ≠ automatisch Ende')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Die Grenzen kommen vom TrueWords-Algorithmus' })).toBeVisible();
-  await expect(page.getByText(/keine externe Sprach-KI/i)).toBeVisible();
+  await expect(page.getByText(/externe Sprach-KI soll die Situationsgrenzen nicht festlegen/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Zum Prüfstand' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Daten / Upload' })).toBeVisible();
 
