@@ -1,0 +1,81 @@
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+const root = resolve(process.cwd());
+const dist = resolve(root, 'dist');
+const files = [
+  'index.html',
+  'review.html',
+  'review-v30.css',
+  'review-v30-app.js',
+  'review-v2-app.css',
+  'review-v2-app.js',
+  'review-v2-events.js',
+  'review-navigation-fix.js',
+  'review-sidebar-follow.js',
+  'review-redesign-v29.css',
+  'review-experience-v29.js',
+  'review.css',
+  'truewords-theme.css',
+  'truewords-ui-theme.css',
+  'truewords-ui-bright.css',
+  'truewords-ui-theme.js',
+  'truewords-user-theme.js',
+  'review.js',
+  'review-boundaries.css',
+  'review-boundaries.js',
+  'review-precision.css',
+  'review-precision.js',
+  'review-cross-owner-fix.js',
+  'review-status-colors.css',
+  'review-v2-situation.css',
+  'review-v2-situation.js',
+  'review-v2-timeline.css',
+  'review-v2-timeline.js',
+  'review-v2-prototype.html',
+  'situation-info.html',
+  'situation-info.css',
+  'situation-info.js',
+  'situation-quiz.html',
+  'situation-quiz.css',
+  'situation-quiz.js',
+  'admin.html',
+  'admin-upload.css',
+  'admin-upload.js',
+  'analysis-import.html',
+  'analysis-import.js',
+  'login.html',
+  'login.js',
+  'account-setup.html',
+  'account-setup.js',
+  'upload.html',
+  'pilot-v2.js',
+  'upload.js',
+  'segmentation-v4.mjs',
+  'portal.css',
+  'manifest.webmanifest',
+  'icon.svg',
+  'sw.js',
+  'enhancements.css',
+  'enhancements.js',
+  'coordination.css',
+  'coordination.js',
+  'server-sync.css',
+  'server-sync.js',
+];
+
+await rm(dist, { recursive: true, force: true });
+await mkdir(dist, { recursive: true });
+
+for (const file of files) {
+  await cp(resolve(root, file), resolve(dist, file));
+}
+
+await mkdir(resolve(dist, 'vendor'), { recursive: true });
+await cp(
+  resolve(root, 'node_modules/embla-carousel/embla-carousel.umd.js'),
+  resolve(dist, 'vendor/embla-carousel.umd.js'),
+);
+
+await writeFile(resolve(dist, '.assetsignore'), '*.map\n', 'utf8');
+console.log(`Worker assets prepared in ${dist}`);

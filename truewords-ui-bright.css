@@ -1,0 +1,216 @@
+/* TrueWords review palette refinement: brighter canvas, stronger panel separation,
+   recognizable but restrained speaker colors. Loaded after truewords-ui-theme.css. */
+
+:root {
+  --tw-bg: #e9e4dc;
+  --tw-surface: #fffdf9;
+  --tw-surface-secondary: #f3efe8;
+  --tw-surface-raised: #ffffff;
+  --tw-border: #cec8be;
+  --tw-message-border: #989d99;
+
+  --tw-philipp: #2f9f96;
+  --tw-philipp-strong: #237b74;
+  --tw-philipp-surface: #d9eeeb;
+  --tw-philipp-context: #eaf4f2;
+  --tw-philipp-text: #185e58;
+
+  --tw-lena: #cf789c;
+  --tw-lena-strong: #a85c7b;
+  --tw-lena-surface: #f3dfe8;
+  --tw-lena-context: #f8edf2;
+  --tw-lena-text: #80405d;
+
+  --tw-status-open-surface: #f6edda;
+  --tw-status-confirmed-surface: #e2eee7;
+  --tw-status-corrected-surface: #eae3f1;
+  --tw-status-unclear-surface: #f3e1e6;
+
+  --tw-button-bg: #f5eadb;
+  --tw-button-hover: #eadcc9;
+  --tw-button-text: #2b2721;
+  --tw-button-border: #c9bba9;
+}
+
+html[data-theme="dark"] {
+  /* Der Seitenhintergrund ist bewusst heller als Liste und Chat. */
+  --tw-bg: #303936;
+  --tw-surface: #19201e;
+  --tw-surface-secondary: #232c29;
+  --tw-surface-raised: #2a3431;
+  --tw-text: #f3f5f4;
+  --tw-text-muted: #b8c0bd;
+  --tw-border: #53605b;
+  --tw-message-border: #727c78;
+
+  /* Klar erkennbare Userfarben, ohne Neonwirkung. */
+  --tw-philipp: #58beb5;
+  --tw-philipp-strong: #43a59c;
+  --tw-philipp-surface: #24504c;
+  --tw-philipp-context: #263d3a;
+  --tw-philipp-text: #d1f2ee;
+
+  --tw-lena: #df8db0;
+  --tw-lena-strong: #c87598;
+  --tw-lena-surface: #563747;
+  --tw-lena-context: #42343b;
+  --tw-lena-text: #ffe1ed;
+
+  --tw-status-open: #d4ad63;
+  --tw-status-open-surface: #443a28;
+  --tw-status-confirmed: #83b69f;
+  --tw-status-confirmed-surface: #294038;
+  --tw-status-corrected: #b39bce;
+  --tw-status-corrected-surface: #393247;
+  --tw-status-unclear: #db91a1;
+  --tw-status-unclear-surface: #472f36;
+
+  --tw-button-bg: #e2d4c1;
+  --tw-button-hover: #f0e4d3;
+  --tw-button-text: #28231c;
+  --tw-button-border: #b4a38d;
+}
+
+/* Hellerer Gesamtgrund, klar abgesetzte Arbeitsflächen. */
+body,
+html[data-theme="dark"] body {
+  background: var(--tw-bg) !important;
+}
+
+.review-grid {
+  background: transparent !important;
+}
+
+.panel,
+html[data-theme="dark"] .panel {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .18) !important;
+}
+
+.topbar,
+.summarybar,
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .summarybar {
+  border-color: var(--tw-border) !important;
+  background: color-mix(in srgb, var(--tw-surface) 92%, transparent) !important;
+}
+
+/* Liste und Chat bleiben als zusammenhängende dunklere Arbeitsbereiche lesbar. */
+.situation-list,
+.message-list,
+html[data-theme="dark"] .message-list {
+  background: var(--tw-surface) !important;
+}
+
+.list-controls,
+.list-legend,
+.boundary-box,
+.review-actions,
+html[data-theme="dark"] .list-controls,
+html[data-theme="dark"] .boundary-box,
+html[data-theme="dark"] .review-actions {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface-secondary) !important;
+}
+
+/* Sprecherfarben als klar erkennbare, aber ruhige Bubble-Flächen. */
+.message[data-speaker="Philipp"] {
+  background: var(--tw-philipp-surface) !important;
+  border-color: var(--tw-message-border) !important;
+}
+.message[data-speaker="Lena"] {
+  background: var(--tw-lena-surface) !important;
+  border-color: var(--tw-message-border) !important;
+}
+.message[data-speaker="Philipp"] .message-meta strong,
+.message[data-speaker="Philipp"] .speaker-name {
+  color: var(--tw-philipp-text) !important;
+}
+.message[data-speaker="Lena"] .message-meta strong,
+.message[data-speaker="Lena"] .speaker-name {
+  color: var(--tw-lena-text) !important;
+}
+
+/* Kontext behält die Userfarbe, ist aber blasser als die eigentliche Situation. */
+.message.context[data-speaker="Philipp"] {
+  background: var(--tw-philipp-context) !important;
+}
+.message.context[data-speaker="Lena"] {
+  background: var(--tw-lena-context) !important;
+}
+.message.context[data-speaker] {
+  opacity: .62 !important;
+  filter: saturate(.68) !important;
+}
+
+/* Situationsnachrichten erhalten den geforderten neutralgrauen Rahmen. */
+.situation-zone .message.assigned[data-speaker] {
+  border: 1px solid var(--tw-message-border) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12) !important;
+}
+
+.context-zone,
+html[data-theme="dark"] .context-zone {
+  border-color: color-mix(in srgb, var(--tw-border) 80%, transparent) !important;
+  background: color-mix(in srgb, var(--tw-surface-secondary) 76%, transparent) !important;
+}
+
+.situation-zone {
+  border-color: var(--tw-border) !important;
+  background: var(--tw-surface-secondary) !important;
+}
+
+/* Statusflächen sollen sichtbar sein, aber nicht mit den Sprecherfarben konkurrieren. */
+.situation-row.status-open {
+  background: var(--tw-status-open-surface) !important;
+}
+.situation-row.status-confirmed {
+  background: var(--tw-status-confirmed-surface) !important;
+}
+.situation-row.status-corrected {
+  background: var(--tw-status-corrected-surface) !important;
+}
+.situation-row.status-unclear {
+  background: var(--tw-status-unclear-surface) !important;
+}
+.situation-row.active {
+  outline: 2px solid color-mix(in srgb, var(--tw-text) 32%, transparent) !important;
+  outline-offset: -2px !important;
+}
+
+/* Cremefarbene Bedienelemente bleiben im Dunkelmodus bewusst hell. */
+button,
+a.button,
+.button,
+button.primary,
+button.confirm,
+.button.primary {
+  border-color: var(--tw-button-border) !important;
+  background: var(--tw-button-bg) !important;
+  color: var(--tw-button-text) !important;
+}
+button:hover:not(:disabled),
+a.button:hover,
+.button:hover,
+button.primary:hover,
+button.confirm:hover:not(:disabled),
+.button.primary:hover {
+  background: var(--tw-button-hover) !important;
+}
+
+/* Kleine personenbezogene Schalter bleiben farbig statt cremefarben. */
+.reviewer-switch [data-reviewer-mode] {
+  background: transparent !important;
+  color: var(--tw-text-muted) !important;
+}
+.reviewer-switch [data-reviewer-mode].active[data-owner="Philipp"] {
+  border-color: var(--tw-philipp) !important;
+  background: var(--tw-philipp-surface) !important;
+  color: var(--tw-philipp-text) !important;
+}
+.reviewer-switch [data-reviewer-mode].active[data-owner="Lena"] {
+  border-color: var(--tw-lena) !important;
+  background: var(--tw-lena-surface) !important;
+  color: var(--tw-lena-text) !important;
+}

@@ -1,0 +1,87 @@
+name: Visual regression screenshots
+
+on:
+  push:
+    branches:
+      - main
+      - agent/server-synchronization
+    paths:
+      - '**/*.css'
+      - '**/*.html'
+      - 'review-v2-app.js'
+      - 'review-v2-events.js'
+      - 'review.js'
+      - 'review-boundaries.js'
+      - 'review-precision.js'
+      - 'review-cross-owner-fix.js'
+      - 'review-v2-situation.js'
+      - 'review-v2-timeline.js'
+      - 'truewords-ui-theme.js'
+      - 'situation-quiz.js'
+      - 'icon.svg'
+      - 'manifest.webmanifest'
+      - 'tests/visual/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/visual-regression.yml'
+  pull_request:
+    paths:
+      - '**/*.css'
+      - '**/*.html'
+      - 'review-v2-app.js'
+      - 'review-v2-events.js'
+      - 'review.js'
+      - 'review-boundaries.js'
+      - 'review-precision.js'
+      - 'review-cross-owner-fix.js'
+      - 'review-v2-situation.js'
+      - 'review-v2-timeline.js'
+      - 'truewords-ui-theme.js'
+      - 'situation-quiz.js'
+      - 'icon.svg'
+      - 'manifest.webmanifest'
+      - 'tests/visual/**'
+      - 'playwright.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/visual-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install project dependencies
+        run: npm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run visual regression tests
+        run: npm run test:visual
+
+      - name: Upload screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14

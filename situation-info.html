@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f3f4f6">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Was ist eine Situation?</title>
+  <script>
+    (() => {
+      const key = 'truewords/review-after-upload';
+      if (sessionStorage.getItem(key) === '1') {
+        sessionStorage.removeItem(key);
+        location.replace('/review.html');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="./truewords-ui-theme.css?v=3">
+  <link rel="stylesheet" href="./portal.css?v=15">
+  <link rel="stylesheet" href="./situation-info.css?v=2">
+  <script src="./truewords-user-theme.js?v=1"></script>
+  <script src="./truewords-ui-theme.js?v=3"></script>
+</head>
+<body>
+  <main class="page">
+    <div class="info-shell">
+      <section class="card info-hero">
+        <div class="top-actions">
+          <div>
+            <div class="portal-brand"><span class="truewords-logo" aria-hidden="true"><i></i><b></b></span><span><strong>TrueWords</strong><small>Gemeinsame Prüfung</small></span></div>
+            <div class="eyebrow">Vor dem Prüfstand</div>
+            <h1>Situation bedeutet Konversation.</h1>
+            <p class="intro">Wir schneiden den Chat nach zusammenhängenden Konversationen – nicht nach Themen und nicht nach festen Zeitabständen.</p>
+          </div>
+          <button class="secondary" type="button" data-logout>Abmelden</button>
+        </div>
+
+        <div class="definition-quote"><strong>Situation = Konversation.</strong> Ein Gespräch kann über mehrere Konversationen beziehungsweise Situationen verlaufen.</div>
+
+        <div class="info-grid">
+          <div class="info-tile"><b>Zeitpause ≠ Grenze</b><p>Vier Stunden, eine Nacht oder unterschiedliche Arbeitszeiten können weiterhin dieselbe Konversation sein.</p></div>
+          <div class="info-tile"><b>Thema ≠ Situation</b><p>Ein Themenwechsel kann innerhalb derselben Konversation passieren. Dasselbe Thema kann später in einer neuen Situation wiederkommen.</p></div>
+          <div class="info-tile"><b>Neue Konversation = neue Situation</b><p>Ein neuer Kontaktversuch, ein klarer neuer Einstieg oder ein vorheriger Abschluss können eine echte Grenze markieren.</p></div>
+        </div>
+      </section>
+
+      <section class="card episode-card">
+        <div class="eyebrow">Asynchrones Beispiel</div>
+        <h2>Vier Stunden Antwortpause können eine Situation bleiben</h2>
+        <p class="muted">Entscheidend ist, ob dieselbe Konversation fortgesetzt wird.</p>
+        <div class="episode-flow" aria-label="Beispiel einer asynchronen Konversation">
+          <div class="episode-label">Situation 1 · dieselbe Konversation</div>
+          <div class="bubble lena">08:00 · Kannst du heute beim Vermieter anrufen?</div>
+          <div class="bubble philipp">12:00 · Ja, mache ich in der Mittagspause.</div>
+          <div class="bubble lena">16:00 · Hat es geklappt?</div>
+          <div class="bubble philipp">20:00 · Ja, Termin ist Donnerstag.</div>
+          <div class="new-episode">Keine neue Situation: Die Pausen entstehen durch Verfügbarkeit, der kommunikative Vorgang bleibt derselbe.</div>
+        </div>
+      </section>
+
+      <section class="purpose">
+        <div class="card">
+          <div class="eyebrow">Wenn später etwas wieder aufgegriffen wird</div>
+          <h2>Bezug verbindet Situationen, verschmilzt sie aber nicht</h2>
+          <div class="purpose-list">
+            <div class="purpose-step"><span>1</span><div><b>Situation A endet</b><p>Die damalige Konversation ist abgeschlossen oder durch eine neue eigenständige Konversation abgelöst.</p></div></div>
+            <div class="purpose-step"><span>2</span><div><b>Situation B beginnt</b><p>Der Chat läuft chronologisch in einem neuen zusammenhängenden Abschnitt weiter.</p></div></div>
+            <div class="purpose-step"><span>3</span><div><b>Späterer Reply auf A</b><p>Der Reply bleibt als Beziehung zu A erhalten, öffnet A aber nicht wieder. Keine gestückelten Situationen.</p></div></div>
+          </div>
+        </div>
+
+        <div class="algorithm-note">
+          <div class="eyebrow">Test 4</div>
+          <h2>TrueWords V4 setzt diese Regel erstmals direkt um</h2>
+          <p>Der Algorithmus setzt <strong>keine Grenze allein wegen einer Pause</strong>. Direkte Replies und offene Fragen können die Konversation über lange Unterbrechungen offen halten.</p>
+          <p>Neue Kontaktversuche, klare neue Einstiege und erkennbare Abschlüsse dienen als Grenzsignale. Eine externe Sprach-KI erzeugt die Grenzen nicht.</p>
+          <span class="algorithm-badge">TrueWords V4 · lokaler Algorithmus · neuer ungesehener Testbereich</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="eyebrow">Prüffrage</div>
+        <h2>„Ist das noch dieselbe Konversation – oder beginnt hier eine neue?“</h2>
+        <p class="intro">Nicht fragen: „Wie lange war Pause?“ oder „Ist das noch dasselbe Thema?“ Zeit und Thema sind nur Hinweise.</p>
+        <div class="info-actions">
+          <button class="primary" type="button" data-continue disabled>Weiter</button>
+          <button class="secondary" type="button" data-upload hidden>Daten / Upload</button>
+        </div>
+        <div class="account-line" data-account>Kontodaten werden geladen …</div>
+      </section>
+    </div>
+  </main>
+  <script src="./situation-info.js?v=2"></script>
+</body>
+</html>

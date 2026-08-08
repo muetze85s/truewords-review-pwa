@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f3f4f6">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Test 4 vorbereiten</title>
+  <link rel="stylesheet" href="./truewords-ui-theme.css?v=3">
+  <link rel="stylesheet" href="./portal.css?v=15">
+  <script src="./truewords-user-theme.js?v=1"></script>
+  <script src="./truewords-ui-theme.js?v=3"></script>
+</head>
+<body>
+  <main class="page">
+    <div class="shell">
+      <section class="card">
+        <div class="header">
+          <div>
+            <div class="portal-brand">
+              <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+              <span><strong>TrueWords</strong><small>Review-PWA</small></span>
+            </div>
+            <div class="eyebrow" style="margin-top:1.3rem">Segmentierung · Test 4</div>
+            <h1>V4 auf einem neuen ungesehenen Abschnitt prüfen.</h1>
+            <p class="intro">Test 4 verwendet den nächsten noch ungeprüften Ereignisblock nach Test 3. Die Grenzen erzeugt ausschließlich der lokale deterministische TrueWords-V4-Algorithmus.</p>
+            <span class="test-badge">Situation = Konversation · Zeitabstand allein erzeugt keine Grenze</span>
+          </div>
+          <div class="account"><span id="account-email"></span><button id="logout" class="secondary" type="button">Abmelden</button></div>
+        </div>
+      </section>
+
+      <form id="upload-form">
+        <div class="upload-bento">
+          <div class="upload-stack">
+            <section class="card upload-card">
+              <div class="eyebrow">Originalquelle</div>
+              <h2>Vollständigen Telegram-Rohchat auswählen</h2>
+              <p class="intro">Erforderlich ist der unveränderte Originalexport mit 73.946 Ereignissen. Testfilter und V4-Vorschläge werden anschließend lokal im Browser erzeugt. Eine zweite Vorselektionsdatei ist nicht mehr erforderlich.</p>
+              <label style="margin-top:16px">
+                <span>Vollständiger Telegram-Originalexport</span>
+                <input id="raw-file" type="file" accept=".json,application/json" required>
+                <small>SHA-256, Ereigniszahl, Verlustfreiheit und Reply-Bezüge werden geprüft.</small>
+              </label>
+              <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
+            </section>
+
+            <section class="card">
+              <div class="eyebrow">Test-4-Status</div>
+              <h2>Test 3 bleibt unverändert erhalten</h2>
+              <div class="notice">Test 4 erstellt einen eigenen Datensatz und eine eigene Analyseversion. Test 3 wird weder überschrieben noch neu segmentiert. Beim Aktivieren wird Test 4 lediglich zum aktuellen Prüfstand.</div>
+              <div class="actions">
+                <button id="submit" class="primary" type="submit" disabled>Test 4 erzeugen und aktivieren</button>
+                <button id="skip" class="secondary" type="button">Zum Prüfstand</button>
+              </div>
+              <div id="progress-wrap" class="progress-wrap" hidden>
+                <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
+                <progress id="progress" max="100" value="0"></progress>
+                <div id="progress-detail" class="progress-detail"></div>
+              </div>
+              <div id="status" class="status" role="status" aria-live="polite">Vollständigen Telegram-Originalexport auswählen.</div>
+            </section>
+          </div>
+
+          <section class="card">
+            <div class="eyebrow">V4-Regel</div>
+            <h2>Konversationskontinuität statt Uhr</h2>
+            <div class="rule-list">
+              <div class="rule-row"><span>1</span><div><b>Zeit trennt nicht allein.</b><p>Arbeit, Schlaf oder Zeitverschiebung können eine Antwort um Stunden verzögern.</p></div></div>
+              <div class="rule-row"><span>2</span><div><b>Offene Frage hält die Konversation offen.</b><p>Eine erkennbare Antwort bleibt derselben Situation zugeordnet, auch wenn sie später kommt.</p></div></div>
+              <div class="rule-row"><span>3</span><div><b>Neue Kontaktaufnahme kann trennen.</b><p>Ein neuer Anruf, klarer neuer Einstieg oder ein vorheriger Abschluss sind echte Grenzsignale.</p></div></div>
+              <div class="rule-row"><span>4</span><div><b>Keine gestückelten Situationen.</b><p>Eine beendete Situation wird nach einer dazwischenliegenden anderen Konversation nicht wieder geöffnet; spätere Replies bleiben nur als Bezug erhalten.</p></div></div>
+            </div>
+          </section>
+        </div>
+      </form>
+    </div>
+  </main>
+  <script src="./pilot-v2.js?v=2"></script>
+  <script>
+    (() => {
+      const key = 'truewords/review-after-upload';
+      const status = document.getElementById('status');
+      const markReviewNext = () => sessionStorage.setItem(key, '1');
+      document.getElementById('skip')?.addEventListener('click', markReviewNext, { capture: true });
+      if (status) {
+        new MutationObserver(() => {
+          if (status.dataset.state === 'ok' && status.textContent.includes('Test 4 ist aktiv')) markReviewNext();
+        }).observe(status, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-state'] });
+      }
+    })();
+  </script>
+  <script type="module" src="./upload.js?v=16"></script>
+</body>
+</html>

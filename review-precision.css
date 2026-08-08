@@ -1,0 +1,76 @@
+.media-placeholder {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  margin: 0 0 8px;
+  padding: 5px 10px;
+  border: 1px solid rgba(14, 126, 113, 0.28);
+  border-radius: 999px;
+  background: rgba(14, 126, 113, 0.09);
+  color: #0b675d;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.message-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(26, 39, 37, 0.18);
+}
+
+.message-inline-actions button {
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid rgba(26, 39, 37, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #4d5552;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.message-inline-actions button:hover,
+.message-inline-actions button:focus-visible {
+  border-color: #0e7e71;
+  color: #0b675d;
+  outline: none;
+}
+
+.message.precision-excluded {
+  margin: 12px 18px;
+  border: 2px dashed #bc8b31;
+  background: #fff8e9;
+  opacity: 0.96;
+}
+
+.message.precision-excluded .context-badge {
+  background: #f1ddb2;
+  color: #6b4d18;
+}
+
+[data-boundary].cross-owner-boundary {
+  border-color: #bc8b31 !important;
+  background: #fff8e9 !important;
+  color: #6b4d18 !important;
+}
+
+[data-boundary].cross-owner-boundary::after {
+  content: " · anderer Prüfbereich";
+  font-size: 0.72em;
+}
+
+@media (max-width: 760px) {
+  .message-inline-actions {
+    justify-content: stretch;
+  }
+
+  .message-inline-actions button {
+    width: 100%;
+  }
+}

@@ -1,0 +1,319 @@
+.rv2-shell {
+  --rv2-timeline-bg: #161618;
+  --rv2-panel-bg: #202023;
+  --rv2-panel-border: #3c3c42;
+  --rv2-message-bg: #2a2a2e;
+  --rv2-message-active: #34343a;
+  --rv2-message-muted: #aeadb4;
+  --rv2-action-bg: #eee2d0;
+  --rv2-action-text: #29251f;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--rv2-timeline-bg);
+  color: #f4f1eb;
+}
+
+.rv2-context-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 62px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--rv2-panel-border);
+  background: var(--rv2-panel-bg);
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.rv2-context-primary,
+.rv2-context-secondary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 14px;
+}
+
+.rv2-context-primary strong {
+  font-size: 17px;
+}
+
+.rv2-context-secondary {
+  justify-content: flex-end;
+  color: #b9b8bf;
+  font-size: 13px;
+}
+
+.rv2-mobile-slider {
+  display: none;
+}
+
+.rv2-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.rv2-sidebar {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--rv2-panel-border);
+  background: var(--rv2-panel-bg);
+}
+
+.rv2-chat {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+  background: var(--rv2-timeline-bg);
+}
+
+.rv2-chat-stream {
+  width: min(820px, calc(100% - 36px));
+  margin: 0 auto;
+  padding: 24px 0 44px;
+}
+
+.rv2-message {
+  position: relative;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border: 1px solid #4b4b51;
+  border-radius: 14px;
+  background: var(--rv2-message-bg);
+  color: #dad8d3;
+  opacity: .62;
+  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  scroll-margin-top: 86px;
+}
+
+.rv2-message.is-active-situation {
+  border-color: #777780;
+  background: var(--rv2-message-active);
+  color: #f5f2ec;
+  opacity: 1;
+}
+
+.rv2-message[data-situation-first="true"] {
+  margin-top: 18px;
+}
+
+.rv2-message[data-situation-first="true"]::before {
+  content: "Situation " attr(data-message-situation);
+  position: absolute;
+  top: -20px;
+  left: 4px;
+  color: var(--rv2-message-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rv2-message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 5px;
+  color: var(--rv2-message-muted);
+  font-size: 12px;
+}
+
+.rv2-message-meta strong {
+  color: inherit;
+}
+
+.rv2-message-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.rv2-message.is-selected-message {
+  border-width: 2px;
+  opacity: 1;
+}
+
+.rv2-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #515158;
+}
+
+.rv2-message-actions button,
+.rv2-situation-end button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #b8aa96;
+  border-radius: 9px;
+  background: var(--rv2-action-bg);
+  color: var(--rv2-action-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rv2-situation-end {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 10px 0 26px;
+  padding: 10px 12px;
+  border-top: 1px solid #45454b;
+  color: var(--rv2-message-muted);
+  font-size: 12px;
+  opacity: .45;
+  scroll-margin-bottom: 22px;
+}
+
+.rv2-situation-end.is-active-situation {
+  opacity: 1;
+}
+
+.rv2-situation-card[role="button"] {
+  cursor: pointer;
+}
+
+.rv2-situation-card[role="button"]:focus-visible {
+  outline: 2px solid #ded8cd;
+  outline-offset: 2px;
+}
+
+.rv2-status-toggle {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .rv2-shell {
+    display: block;
+  }
+
+  .rv2-layout {
+    display: block;
+  }
+
+  .rv2-sidebar {
+    display: none;
+  }
+
+  .rv2-context-header {
+    position: fixed;
+    inset: 0 0 auto 0;
+    min-height: 78px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+    align-items: flex-start;
+  }
+
+  .rv2-context-primary,
+  .rv2-context-secondary {
+    gap: 5px 9px;
+  }
+
+  .rv2-context-primary {
+    flex: 1 1 52%;
+  }
+
+  .rv2-context-secondary {
+    flex: 1 1 42%;
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .rv2-mobile-slider {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 31;
+    display: flex;
+    gap: 7px;
+    height: calc(48px + env(safe-area-inset-top));
+    padding: calc(5px + env(safe-area-inset-top)) calc(50vw - 44px) 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--rv2-panel-border);
+    background: var(--rv2-panel-bg);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    transition: transform 160ms ease, opacity 160ms ease;
+  }
+
+  .rv2-mobile-slider::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rv2-slider-item {
+    flex: 0 0 88px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 6px;
+    height: 38px;
+    padding: 5px 9px;
+    border: 1px solid #4a4a51;
+    border-radius: 10px;
+    background: #29292d;
+    color: #bdbbc1;
+    scroll-snap-align: center;
+  }
+
+  .rv2-slider-item strong {
+    font-size: 15px;
+  }
+
+  .rv2-slider-item span {
+    font-size: 11px;
+  }
+
+  .rv2-slider-item.is-active {
+    border-width: 2px;
+    color: #f5f2ec;
+  }
+
+  .rv2-chat {
+    height: 100dvh;
+    padding-top: calc(88px + env(safe-area-inset-top));
+  }
+
+  .rv2-chat-stream {
+    width: calc(100% - 20px);
+    padding: 10px 0 36px;
+  }
+
+  .rv2-message {
+    margin-bottom: 7px;
+    padding: 10px 11px;
+    border-radius: 12px;
+    scroll-margin-top: calc(62px + env(safe-area-inset-top));
+  }
+
+  .rv2-situation-end {
+    margin-bottom: 22px;
+    padding-inline: 4px;
+  }
+
+  .rv2-shell.is-header-hidden .rv2-context-header {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+  }
+
+  .rv2-shell.is-header-hidden .rv2-mobile-slider {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .rv2-shell.is-header-hidden .rv2-chat {
+    padding-top: calc(52px + env(safe-area-inset-top));
+  }
+}
