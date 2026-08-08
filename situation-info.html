@@ -6,6 +6,15 @@
   <meta name="theme-color" content="#f3f4f6">
   <meta name="robots" content="noindex,nofollow">
   <title>TrueWords · Was ist eine Situation?</title>
+  <script>
+    (() => {
+      const key = 'truewords/review-after-upload';
+      if (sessionStorage.getItem(key) === '1') {
+        sessionStorage.removeItem(key);
+        location.replace('/review.html');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="./truewords-ui-theme.css?v=3">
   <link rel="stylesheet" href="./portal.css?v=15">
   <link rel="stylesheet" href="./situation-info.css?v=2">
