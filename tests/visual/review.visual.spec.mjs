@@ -133,7 +133,7 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
-test('Review V2 mobile header collapses to synchronized situation slider', async ({ page }, testInfo) => {
+test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockReviewApi(page);
   await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
@@ -142,13 +142,26 @@ test('Review V2 mobile header collapses to synchronized situation slider', async
 
   await page.locator('.tw-chat-scroll').evaluate((node) => node.scrollTo(0, 500));
   await page.waitForTimeout(250);
-  await expect(page.locator('[data-app-shell]')).toHaveClass(/is-header-hidden/);
+  await expect(page.locator('[data-app-shell]')).not.toHaveClass(/is-header-hidden/);
+  await expect(page.locator('.tw-topbar')).toBeVisible();
   await expect(page.locator('[data-situation-slider]')).toBeVisible();
+  await expect(page.locator('.tw-bottom-nav')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
 
   await page.locator('[data-slider-situation="3"]').click();
   await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/, { timeout: 4000 });
-  const activeFirst = page.locator('[data-message-situation="3"][data-situation-first="true"]');
-  await expect(activeFirst).toBeVisible();
+  const centerDiff = await page.locator('[data-situation-slider]').evaluate((slider) => {
+    const active = slider.querySelector('[data-slider-situation].is-active');
+    if (!active) return 9999;
+    const a = slider.getBoundingClientRect();
+    const b = active.getBoundingClientRect();
+    return Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
+  });
+  expect(centerDiff).toBeLessThanOrEqual(8);
+
+  await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
+  await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
+  await expect(page.locator('.tw-drawer-panel')).toBeVisible();
 
   const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
   await testInfo.attach('review-v2-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
@@ -170,7 +183,7 @@ test('Lena situation calibration quiz', async ({ page }, testInfo) => {
   await expect(page.getByRole('heading', { name: 'Abendessen und Versicherung' })).toBeVisible();
   expect(await page.locator('.choice').count()).toBe(2);
 
-  const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
+  const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled' });
   await testInfo.attach('situation-quiz.png', { body: screenshot, contentType: 'image/png' });
   expect(screenshot.byteLength).toBeGreaterThan(50_000);
 });
