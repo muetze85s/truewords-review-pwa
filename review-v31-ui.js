@@ -6,7 +6,6 @@
   let scheduled = 0;
   let lastActiveId = '';
   let mobileExpanded = false;
-  let resizeObserver = null;
 
   /* Capture the single Embla instance created by V30 so V31 can reliably
      re-center it after active-situation changes and split-view resizes. */
@@ -37,7 +36,9 @@
   function centerVerticalList(list, behavior = 'smooth') {
     if (!list || list.clientHeight <= 0) return;
     removeListSpacers(list);
-    const card = list.querySelector(`[data-situation-card="${CSS.escape(activeId())}"]`);
+    const id = activeId();
+    if (!id) return;
+    const card = list.querySelector(`[data-situation-card="${CSS.escape(id)}"]`);
     if (!card) return;
 
     const spacerHeight = Math.max(0, (list.clientHeight - card.offsetHeight) / 2 - 12);
@@ -107,7 +108,6 @@
         mobileExpanded = !mobileExpanded;
         panel.classList.toggle('is-expanded', mobileExpanded);
         toggle.setAttribute('aria-expanded', String(mobileExpanded));
-        schedule(false);
       });
     }
 
@@ -184,23 +184,10 @@
     }
   }
 
-  function observeSizes() {
-    resizeObserver?.disconnect?.();
-    if (!('ResizeObserver' in window)) return;
-    resizeObserver = new ResizeObserver(() => schedule(false));
-    const list = document.querySelector('[data-situation-list]');
-    const drawerList = document.querySelector('[data-drawer-list]');
-    const card = activeCard();
-    if (list) resizeObserver.observe(list);
-    if (drawerList) resizeObserver.observe(drawerList);
-    if (card) resizeObserver.observe(card);
-  }
-
   function stabilize({ initial = false } = {}) {
     if (!document.querySelector('[data-app-shell]')) return;
     const nextId = activeId();
-    const changed = nextId && nextId !== lastActiveId;
-    if (changed) {
+    if (nextId && nextId !== lastActiveId) {
       lastActiveId = nextId;
       mobileExpanded = false;
     }
@@ -208,7 +195,6 @@
     bindDrawerFollow();
     centerLists(initial ? 'auto' : 'smooth');
     centerSlider(initial);
-    observeSizes();
   }
 
   function schedule(initial = false) {
@@ -219,9 +205,15 @@
     });
   }
 
+  function internalSpacerMutation(mutation) {
+    const nodes = [...mutation.addedNodes, ...mutation.removedNodes].filter((node) => node.nodeType === Node.ELEMENT_NODE);
+    return nodes.length > 0 && nodes.every((node) => node.classList?.contains('tw-v31-list-spacer'));
+  }
+
   const observer = new MutationObserver((mutations) => {
     const relevant = mutations.some((mutation) => {
-      if (mutation.type === 'childList') return true;
+      if (mutation.target.closest?.('[data-v31-mobile-active]')) return false;
+      if (mutation.type === 'childList') return !internalSpacerMutation(mutation);
       if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
         return mutation.target.matches?.('[data-situation-card],[data-slider-situation],[data-drawer]');
       }
