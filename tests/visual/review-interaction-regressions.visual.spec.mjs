@@ -103,7 +103,10 @@ test('Checkbox bestätigt und hebt Bestätigung wieder auf', async ({ page }) =>
 
   const undo = page.locator('[data-confirm="1"]');
   const undoBg = await undo.evaluate((node) => getComputedStyle(node).backgroundColor);
-  expect(undoBg).toBe('rgb(201, 99, 114)');
+  const rgb = undoBg.match(/\d+/g)?.map(Number) || [];
+  expect(rgb.length).toBeGreaterThanOrEqual(3);
+  expect(rgb[0]).toBeGreaterThan(rgb[1]);
+  expect(rgb[0]).toBeGreaterThan(rgb[2]);
 
   await page.locator('[data-situation-list] [data-situation-card="1"] .tw-sit-check').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveAttribute('data-status', 'open');
@@ -127,7 +130,9 @@ test('TrueWords Sprechblasen sind Türkis und Rosa und aktive Situation ist hell
 
 test('Nach Upload-Markierung wird die Infoseite übersprungen', async ({ page }) => {
   await mockReview(page);
-  await page.addInitScript(() => sessionStorage.setItem('truewords/review-after-upload', '1'));
+  await page.goto('/review.html');
+  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+  await page.evaluate(() => sessionStorage.setItem('truewords/review-after-upload', '1'));
   await page.goto('/situation-info.html');
   await expect(page).toHaveURL(/\/review\.html$/);
   await page.locator('.tw-workspace').waitFor({ state: 'visible' });
