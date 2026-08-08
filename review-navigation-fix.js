@@ -80,8 +80,23 @@
     };
   }
 
+  function restoreActiveSituation(snapshot) {
+    const id = Number(snapshot?.activeSituationId || 0);
+    if (!id || currentActiveSituationId() === id) return;
+    const slider = document.querySelector(`[data-slider-situation="${id}"]`);
+    if (!slider) return;
+    const previousSuppression = suppressChatFocus;
+    suppressChatFocus = true;
+    try {
+      slider.click();
+    } finally {
+      suppressChatFocus = previousSuppression;
+    }
+  }
+
   function restoreViewportSnapshot(snapshot, { restoreSelection = true } = {}) {
     if (!snapshot) return;
+    restoreActiveSituation(snapshot);
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return;
     const anchor = snapshot.messageId
@@ -287,9 +302,6 @@
 
     const split = event.target.closest?.('[data-split-here]');
     if (split) {
-      // Split wird absichtlich vom delegierten Persistenz-Handler in review-v2-events.js
-      // verarbeitet, weil er nach dem Server-Save neu lädt. Wir sichern hier nur den
-      // aktuellen Viewport und lassen das Ereignis unverändert weiterlaufen.
       armStableAction();
       return;
     }
