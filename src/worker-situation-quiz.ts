@@ -200,13 +200,18 @@ async function quizApi(request: Request, env: Env): Promise<Response | null> {
 async function quizPageGate(request: Request, env: Env): Promise<Response | null> {
   if (request.method !== 'GET' && request.method !== 'HEAD') return null;
   const pathname = new URL(request.url).pathname;
-  if (!['/', '/index.html', '/review.html', '/situation-quiz.html'].includes(pathname)) return null;
+  if (!['/', '/index.html', '/review.html', '/situation-quiz.html', '/situation-info.html'].includes(pathname)) return null;
 
   const user = await sessionUser(request, env);
 
+  if (pathname === '/situation-info.html') {
+    if (!user) return redirect('/login.html');
+    return asset(request, env, '/situation-info.html');
+  }
+
   if (pathname === '/situation-quiz.html') {
     if (!user) return redirect('/login.html');
-    if (user.role !== 'Lena') return redirect(user.canUpload ? '/upload.html' : '/review.html');
+    if (user.role !== 'Lena') return redirect('/review.html');
     if (await quizCompleted(env, 'Lena')) return redirect('/review.html');
     return asset(request, env, '/situation-quiz.html');
   }
