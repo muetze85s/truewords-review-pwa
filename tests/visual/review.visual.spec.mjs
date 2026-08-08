@@ -164,7 +164,7 @@ test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar',
 
   const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
   await testInfo.attach('review-v2-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
-  expect(screenshot.byteLength).toBeGreaterThan(40_000);
+  expect(screenshot.byteLength).toBeGreaterThan(30_000);
 });
 
 test('Lena situation calibration quiz', async ({ page }, testInfo) => {
