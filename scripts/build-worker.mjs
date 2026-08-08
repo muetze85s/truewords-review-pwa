@@ -6,6 +6,8 @@ const dist = resolve(root, 'dist');
 const files = [
   'index.html',
   'review.html',
+  'review-v2-app.css',
+  'review-v2-app.js',
   'review.css',
   'truewords-theme.css',
   'truewords-ui-theme.css',
