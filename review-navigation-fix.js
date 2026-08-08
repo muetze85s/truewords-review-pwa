@@ -5,10 +5,12 @@
   const nativeScrollIntoView = Element.prototype.scrollIntoView;
   const nativeAddEventListener = EventTarget.prototype.addEventListener;
   const messageClickHandlers = new Map();
+  const confirmationClickHandlers = new Map();
   const guardedChatScrolls = new WeakSet();
   let manualScrollUntil = 0;
   let scrollSyncFrame = 0;
   let suppressChatFocus = false;
+  let confirmationInFlight = false;
 
   function focusOffset() {
     if (window.innerWidth > MOBILE_BREAKPOINT) return 18;
@@ -81,8 +83,37 @@
     if (Math.abs(delta) > 0.5) scroll.scrollTop += delta;
   }
 
+  function captureViewportSnapshot(scroll) {
+    if (!scroll) return null;
+    const anchorNode = visibleViewportAnchor(scroll);
+    return {
+      messageId: String(anchorNode?.dataset.messageWrap || ''),
+      top: anchorNode?.getBoundingClientRect().top,
+      scrollTop: scroll.scrollTop,
+    };
+  }
+
+  function restoreViewportSnapshot(snapshot) {
+    if (!snapshot) return;
+    const scroll = document.querySelector('[data-chat-scroll]');
+    if (!scroll) return;
+    const anchorNode = snapshot.messageId
+      ? document.querySelector(`[data-message-wrap="${CSS.escape(snapshot.messageId)}"]`)
+      : null;
+    if (anchorNode && Number.isFinite(snapshot.top)) {
+      const delta = anchorNode.getBoundingClientRect().top - snapshot.top;
+      if (Math.abs(delta) > 0.5) scroll.scrollTop += delta;
+      return;
+    }
+    scroll.scrollTop = snapshot.scrollTop || 0;
+  }
+
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+
   function activateSituationFromScroll(scroll) {
-    if (performance.now() < manualScrollUntil) return;
+    if (suppressChatFocus || performance.now() < manualScrollUntil) return;
     const id = situationAtScrollAnchor(scroll);
     if (!id || id === currentActiveSituationId()) return;
     const sliderButton = document.querySelector(`[data-slider-situation="${id}"]`);
@@ -138,6 +169,21 @@
       return;
     }
 
+    // Bestätigen/Wiederöffnen rendert die komplette Arbeitsfläche neu und die
+    // Kern-App springt danach automatisch zur nächsten offenen Situation. Wir
+    // übernehmen den Handler delegiert, damit Status und Speicherung unverändert
+    // bleiben, verhindern aber jede automatische Chat-Navigation.
+    if (
+      type === 'click'
+      && this instanceof Element
+      && this.matches?.('[data-confirm]')
+      && typeof listener === 'function'
+    ) {
+      const id = String(this.dataset.confirm || '');
+      if (id) confirmationClickHandlers.set(id, { listener, source: this });
+      return;
+    }
+
     // Der ursprüngliche Scroll-Handler löscht beim Situationswechsel die aktuell
     // markierte Nachricht. Wir ersetzen ihn durch einen passiven Sync, der dieselbe
     // activeId über den Slider setzt, aber weder die Nachrichtenauswahl löscht noch
@@ -182,22 +228,59 @@
     scrollElementIntoChatView(target);
   }
 
-  function toggleSituationConfirmation(check) {
-    const opener = check.closest?.('[data-open-situation]');
-    const id = Number(opener?.dataset.openSituation || 0);
-    if (!id) return false;
-    const confirm = document.querySelector(`[data-confirm="${id}"]`);
-    if (!confirm) return false;
-    confirm.click();
-    return true;
+  async function runConfirmation(id, event) {
+    if (!id || confirmationInFlight) return false;
+    const stored = confirmationClickHandlers.get(String(id));
+    if (!stored) return false;
+
+    const activeBefore = currentActiveSituationId() || Number(id);
+    const snapshot = captureViewportSnapshot(document.querySelector('[data-chat-scroll]'));
+    confirmationInFlight = true;
+    suppressChatFocus = true;
+    try {
+      const result = stored.listener.call(stored.source, event);
+      if (result && typeof result.then === 'function') await result;
+
+      // Die Kern-App plant ihre automatische Navigation in requestAnimationFrame.
+      // Wir lassen diesen State-Wechsel auslaufen, blockieren aber dessen Fokus.
+      await nextFrame();
+      await nextFrame();
+
+      // Die gerade bestätigte Situation bleibt aktiv. Das ist eine reine UI-
+      // Auswahl; der gespeicherte Bestätigungsstatus bleibt unverändert.
+      const sliderButton = document.querySelector(`[data-slider-situation="${activeBefore}"]`);
+      sliderButton?.click();
+
+      manualScrollUntil = performance.now() + 180;
+      restoreViewportSnapshot(snapshot);
+      await nextFrame();
+      restoreViewportSnapshot(snapshot);
+      return true;
+    } finally {
+      suppressChatFocus = false;
+      confirmationInFlight = false;
+    }
   }
 
   document.addEventListener('click', (event) => {
     const check = event.target.closest?.('.tw-sit-check');
     if (check) {
+      const opener = check.closest?.('[data-open-situation]');
+      const id = Number(opener?.dataset.openSituation || 0);
+      if (!id) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      toggleSituationConfirmation(check);
+      runConfirmation(id, event);
+      return;
+    }
+
+    const confirm = event.target.closest?.('[data-confirm]');
+    if (confirm) {
+      const id = Number(confirm.dataset.confirm || 0);
+      if (!id) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      runConfirmation(id, event);
       return;
     }
 
