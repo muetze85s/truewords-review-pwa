@@ -457,7 +457,7 @@
       ? selected
       : null;
     if (!best) {
-      const anchorY = scrollRect.top + scrollRect.height * 0.34;
+      const anchorY = scrollRect.top + Math.min(96, scrollRect.height * 0.22);
       let bestDistance = Infinity;
       scroll.querySelectorAll('[data-message-wrap]').forEach((node) => {
         const rect = node.getBoundingClientRect();
@@ -556,7 +556,9 @@
     const padding = Math.max(24, Math.ceil(list.clientHeight / 2));
     list.style.paddingTop = `${padding}px`;
     list.style.paddingBottom = `${padding}px`;
-    const target = card.offsetTop - (list.clientHeight - card.offsetHeight) / 2;
+    const listRect = list.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const target = list.scrollTop + (cardRect.top + cardRect.height / 2) - (listRect.top + listRect.height / 2);
     const max = Math.max(0, list.scrollHeight - list.clientHeight);
     list.scrollTo({ top: Math.min(max, Math.max(0, target)), behavior: smooth ? 'smooth' : 'auto' });
   }
@@ -603,7 +605,7 @@
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!target || !scroll) return;
     setActive(id, { source: 'manual' });
-    state.suppressChatSyncUntil = behavior === 'smooth' ? performance.now() + 520 : 0;
+    state.suppressChatSyncUntil = performance.now() + (behavior === 'smooth' ? 520 : 120);
     const scrollRect = scroll.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const top = Math.max(0, scroll.scrollTop + targetRect.top - scrollRect.top - 12);
@@ -619,7 +621,7 @@
       return;
     }
     const scrollRect = scroll.getBoundingClientRect();
-    const anchor = scroll.scrollTop + scroll.clientHeight * 0.34;
+    const anchor = scroll.scrollTop + Math.min(96, scroll.clientHeight * 0.22);
     let candidate = Number(orderedSituations()[0]?.id || 0);
     document.querySelectorAll('[data-situation-sentinel]').forEach((node) => {
       const absoluteTop = scroll.scrollTop + node.getBoundingClientRect().top - scrollRect.top;
@@ -683,9 +685,11 @@
   }
 
   function selectMessage(id) {
-    const next = state.selectedMessageId === String(id) ? '' : String(id);
+    const message = state.messages.find((candidate) => messageId(candidate) === String(id));
+    const messageSituationId = message ? assignment(message) : 0;
+    if (messageSituationId) setActive(messageSituationId, { source: 'selection' });
     const viewport = captureViewport();
-    state.selectedMessageId = next;
+    state.selectedMessageId = state.selectedMessageId === String(id) ? '' : String(id);
     renderChat();
     bindChatActions();
     initFadeObserver();
