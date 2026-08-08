@@ -99,6 +99,14 @@ test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachri
   const afterSyncTop = await page.locator('[data-message-wrap="305"]').evaluate((node) => node.getBoundingClientRect().top);
   expect(Math.abs(afterSyncTop - beforeSyncTop)).toBeLessThanOrEqual(2);
 
+  await expect.poll(async () => page.locator('[data-situation-list]').evaluate((list) => {
+    const card = list.querySelector('[data-situation-card="3"]');
+    if (!card) return 9999;
+    const listRect = list.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    return Math.abs((cardRect.top + cardRect.height / 2) - (listRect.top + listRect.height / 2));
+  })).toBeLessThanOrEqual(12);
+
   // Realer Bedienfall nach dem Scrollen: Eine andere sichtbare Nachricht kann
   // direkt gewählt werden; die alte Markierung verschwindet erst dadurch.
   await page.locator('[data-message-id="305"]').click();
@@ -106,6 +114,36 @@ test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachri
   await expect(page.locator('[data-message-wrap="302"]')).not.toHaveClass(/is-selected/);
   await page.locator('[data-message-id="305"]').click();
   await expect(page.locator('[data-message-wrap="305"]')).not.toHaveClass(/is-selected/);
+});
+
+test('Situationswechsel behalten feste Werkzeughöhen im Chat', async ({ page }) => {
+  await mockReview(page);
+  await page.goto('/review.html');
+  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+
+  const metrics = await page.evaluate(() => {
+    const rect = (selector) => {
+      const node = document.querySelector(selector);
+      const style = node ? getComputedStyle(node) : null;
+      return node && style ? { display: style.display, height: node.getBoundingClientRect().height } : null;
+    };
+    return {
+      activeStart: rect('[data-boundary-start="1"]'),
+      inactiveStart: rect('[data-boundary-start="2"]'),
+      activeEnd: rect('[data-boundary-end="1"]'),
+      inactiveEnd: rect('[data-boundary-end="2"]'),
+      activeCard: rect('[data-end-card="1"]'),
+      inactiveCard: rect('[data-end-card="2"]'),
+    };
+  });
+
+  for (const value of Object.values(metrics)) {
+    expect(value?.display).toBe('flex');
+    expect(value?.height || 0).toBeGreaterThan(20);
+  }
+  expect(Math.abs(metrics.activeStart.height - metrics.inactiveStart.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.activeEnd.height - metrics.inactiveEnd.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.activeCard.height - metrics.inactiveCard.height)).toBeLessThanOrEqual(1);
 });
 
 test('Bestätigen bleibt an derselben Chatstelle und in derselben Situation', async ({ page }) => {
