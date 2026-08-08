@@ -13,11 +13,15 @@ const types = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
 };
+const aliases = new Map([
+  ['vendor/embla-carousel.umd.js', 'node_modules/embla-carousel/embla-carousel.umd.js'],
+]);
 
 function safePath(pathname) {
   const decoded = decodeURIComponent(pathname.split('?')[0]);
   const normalized = normalize(decoded).replace(/^[/\\]+/, '');
-  const file = join(root, normalized || 'tests/visual/review-fixture.html');
+  const relative = aliases.get(normalized) || normalized || 'tests/visual/review-fixture.html';
+  const file = join(root, relative);
   return file.startsWith(root) ? file : null;
 }
 
