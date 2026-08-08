@@ -3,29 +3,23 @@
 
   const MOBILE_BREAKPOINT = 840;
   const nativeScrollIntoView = Element.prototype.scrollIntoView;
+  const nativeScrollTo = Element.prototype.scrollTo;
   const nativeAddEventListener = EventTarget.prototype.addEventListener;
   const messageClickHandlers = new Map();
   const confirmationClickHandlers = new Map();
+  const splitClickHandlers = new Map();
+  const boundaryClickHandlers = new Map();
   const guardedChatScrolls = new WeakSet();
+
   let manualScrollUntil = 0;
   let scrollSyncFrame = 0;
   let suppressChatFocus = false;
-  let confirmationInFlight = false;
+  let stableAction = null;
+  let lastViewportSnapshot = null;
+  let releaseTimer = 0;
 
   function focusOffset() {
-    if (window.innerWidth > MOBILE_BREAKPOINT) return 18;
-    return document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden') ? 62 : 112;
-  }
-
-  function updateMobileHeader(scroll, previousTop) {
-    if (window.innerWidth > MOBILE_BREAKPOINT || performance.now() < manualScrollUntil) return scroll.scrollTop;
-    const current = scroll.scrollTop;
-    const delta = current - previousTop;
-    const shell = document.querySelector('[data-app-shell]');
-    if (!shell) return current;
-    if (delta > 2 && current > 80) shell.classList.add('is-header-hidden');
-    if (delta < -2) shell.classList.remove('is-header-hidden');
-    return current;
+    return window.innerWidth > MOBILE_BREAKPOINT ? 18 : 162;
   }
 
   function currentActiveSituationId() {
@@ -36,11 +30,10 @@
   }
 
   function readingAnchorY(scroll) {
-    const scrollRect = scroll.getBoundingClientRect();
-    const headerHidden = document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden');
-    const topInset = window.innerWidth <= MOBILE_BREAKPOINT ? (headerHidden ? 58 : 108) : 20;
-    const readableHeight = Math.max(1, scrollRect.height - topInset);
-    return scrollRect.top + topInset + readableHeight * 0.42;
+    const rect = scroll.getBoundingClientRect();
+    const topInset = window.innerWidth <= MOBILE_BREAKPOINT ? 154 : 18;
+    const readable = Math.max(1, rect.height - topInset);
+    return rect.top + topInset + readable * .38;
   }
 
   function situationAtScrollAnchor(scroll) {
@@ -48,7 +41,6 @@
     if (!firstMessages.length) return 0;
     const anchor = readingAnchorY(scroll);
     let candidate = Number(firstMessages[0].dataset.messageSituation || 0);
-
     for (const node of firstMessages) {
       if (node.getBoundingClientRect().top > anchor + 1) break;
       const id = Number(node.dataset.messageSituation || 0);
@@ -58,93 +50,139 @@
   }
 
   function visibleViewportAnchor(scroll) {
-    const scrollRect = scroll.getBoundingClientRect();
+    const rect = scroll.getBoundingClientRect();
     const anchorY = readingAnchorY(scroll);
     let best = null;
-    let bestDistance = Infinity;
-
+    let distance = Infinity;
     scroll.querySelectorAll('[data-message-wrap]').forEach((node) => {
-      const rect = node.getBoundingClientRect();
-      if (rect.bottom <= scrollRect.top || rect.top >= scrollRect.bottom) return;
-      const point = Math.min(Math.max(anchorY, rect.top), rect.bottom);
-      const distance = Math.abs(point - anchorY);
-      if (distance < bestDistance) {
+      const nodeRect = node.getBoundingClientRect();
+      if (nodeRect.bottom <= rect.top || nodeRect.top >= rect.bottom) return;
+      const point = Math.min(Math.max(anchorY, nodeRect.top), nodeRect.bottom);
+      const nextDistance = Math.abs(point - anchorY);
+      if (nextDistance < distance) {
         best = node;
-        bestDistance = distance;
+        distance = nextDistance;
       }
     });
     return best;
   }
 
-  function preserveViewportAnchor(scroll, anchorNode, beforeTop) {
-    if (!anchorNode || !Number.isFinite(beforeTop) || !anchorNode.isConnected) return;
-    const afterTop = anchorNode.getBoundingClientRect().top;
-    const delta = afterTop - beforeTop;
-    if (Math.abs(delta) > 0.5) scroll.scrollTop += delta;
-  }
-
   function captureViewportSnapshot(scroll) {
     if (!scroll) return null;
-    const anchorNode = visibleViewportAnchor(scroll);
+    const anchor = visibleViewportAnchor(scroll);
+    const selected = document.querySelector('[data-message-wrap].is-selected');
     return {
-      messageId: String(anchorNode?.dataset.messageWrap || ''),
-      top: anchorNode?.getBoundingClientRect().top,
+      messageId: String(anchor?.dataset.messageWrap || ''),
+      top: anchor?.getBoundingClientRect().top,
       scrollTop: scroll.scrollTop,
+      selectedMessageId: String(selected?.dataset.messageWrap || ''),
+      activeSituationId: currentActiveSituationId(),
+      selectionRestored: false,
     };
   }
 
-  function restoreViewportSnapshot(snapshot) {
+  function restoreViewportSnapshot(snapshot, { restoreSelection = true } = {}) {
     if (!snapshot) return;
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return;
-    const anchorNode = snapshot.messageId
+    const anchor = snapshot.messageId
       ? document.querySelector(`[data-message-wrap="${CSS.escape(snapshot.messageId)}"]`)
       : null;
-    if (anchorNode && Number.isFinite(snapshot.top)) {
-      const delta = anchorNode.getBoundingClientRect().top - snapshot.top;
-      if (Math.abs(delta) > 0.5) scroll.scrollTop += delta;
-      return;
+    if (anchor && Number.isFinite(snapshot.top)) {
+      const delta = anchor.getBoundingClientRect().top - snapshot.top;
+      if (Math.abs(delta) > .5) scroll.scrollTop += delta;
+    } else if (Number.isFinite(snapshot.scrollTop)) {
+      scroll.scrollTop = snapshot.scrollTop;
     }
-    scroll.scrollTop = snapshot.scrollTop || 0;
+
+    if (restoreSelection && snapshot.selectedMessageId && !snapshot.selectionRestored) {
+      const selected = document.querySelector(`[data-message-wrap="${CSS.escape(snapshot.selectedMessageId)}"]`);
+      if (selected && !selected.classList.contains('is-selected')) {
+        const stored = messageClickHandlers.get(snapshot.selectedMessageId);
+        if (stored) {
+          snapshot.selectionRestored = true;
+          stored.listener.call(stored.source, new MouseEvent('click', { bubbles: true }));
+        }
+      } else if (selected) {
+        snapshot.selectionRestored = true;
+      }
+    }
   }
 
-  function nextFrame() {
-    return new Promise((resolve) => requestAnimationFrame(resolve));
+  function updateLastSnapshot(scroll) {
+    const snapshot = captureViewportSnapshot(scroll);
+    if (snapshot) lastViewportSnapshot = snapshot;
+  }
+
+  function releaseStableAction() {
+    clearTimeout(releaseTimer);
+    releaseTimer = 0;
+    stableAction = null;
+    suppressChatFocus = false;
+    const scroll = document.querySelector('[data-chat-scroll]');
+    if (scroll) {
+      updateLastSnapshot(scroll);
+      requestAnimationFrame(() => activateSituationFromScroll(scroll));
+    }
+  }
+
+  function armStableAction() {
+    const scroll = document.querySelector('[data-chat-scroll]');
+    const snapshot = captureViewportSnapshot(scroll) || lastViewportSnapshot;
+    stableAction = {
+      snapshot,
+      expiresAt: performance.now() + 10_000,
+    };
+    suppressChatFocus = true;
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(releaseStableAction, 10_000);
+  }
+
+  function scheduleStableRestore(snapshot) {
+    if (!snapshot) return;
+    requestAnimationFrame(() => {
+      restoreViewportSnapshot(snapshot);
+      requestAnimationFrame(() => {
+        restoreViewportSnapshot(snapshot);
+        manualScrollUntil = performance.now() + 220;
+        clearTimeout(releaseTimer);
+        releaseTimer = setTimeout(releaseStableAction, 260);
+      });
+    });
   }
 
   function activateSituationFromScroll(scroll) {
-    if (suppressChatFocus || performance.now() < manualScrollUntil) return;
+    if (suppressChatFocus || stableAction || performance.now() < manualScrollUntil) return;
     const id = situationAtScrollAnchor(scroll);
     if (!id || id === currentActiveSituationId()) return;
-    const sliderButton = document.querySelector(`[data-slider-situation="${id}"]`);
-    if (!sliderButton) return;
+    const slider = document.querySelector(`[data-slider-situation="${id}"]`);
+    if (!slider) return;
 
-    // Beim Aktivwechsel werden im Chat Grenz-/Bestätigungsblöcke ein- und
-    // ausgeblendet. Das verändert die Dokumenthöhe. Wir halten deshalb eine
-    // bereits sichtbare Nachricht pixelstabil, statt den Chat an eine Grenze zu
-    // fokussieren. So folgt nur die Hervorhebung dem Scrollen.
-    const anchorNode = visibleViewportAnchor(scroll);
-    const beforeTop = anchorNode?.getBoundingClientRect().top;
+    const anchor = visibleViewportAnchor(scroll);
+    const beforeTop = anchor?.getBoundingClientRect().top;
     suppressChatFocus = true;
     try {
-      sliderButton.click();
-      preserveViewportAnchor(scroll, anchorNode, beforeTop);
-      // Zweite synchrone Korrektur fängt Layout-Nachläufe durch Klassenwechsel ab.
-      preserveViewportAnchor(scroll, anchorNode, beforeTop);
+      slider.click();
+      if (anchor?.isConnected && Number.isFinite(beforeTop)) {
+        const delta = anchor.getBoundingClientRect().top - beforeTop;
+        if (Math.abs(delta) > .5) scroll.scrollTop += delta;
+      }
+      window.dispatchEvent(new CustomEvent('truewords:active-situation-change', { detail: { id, source: 'chat-scroll' } }));
     } finally {
       suppressChatFocus = false;
     }
+    updateLastSnapshot(scroll);
   }
 
   function installPassiveChatScroll(scroll) {
     if (guardedChatScrolls.has(scroll)) return;
     guardedChatScrolls.add(scroll);
-    // Browser-Scroll-Anchoring darf unserer expliziten Pixelstabilisierung nicht
-    // entgegenarbeiten, wenn aktive Bearbeitungsblöcke ihre Höhe ändern.
     scroll.style.overflowAnchor = 'none';
-    let previousTop = scroll.scrollTop;
+    document.querySelector('[data-app-shell]')?.classList.remove('is-header-hidden');
+    updateLastSnapshot(scroll);
     nativeAddEventListener.call(scroll, 'scroll', () => {
-      previousTop = updateMobileHeader(scroll, previousTop);
+      document.querySelector('[data-app-shell]')?.classList.remove('is-header-hidden');
+      updateLastSnapshot(scroll);
       if (scrollSyncFrame) cancelAnimationFrame(scrollSyncFrame);
       scrollSyncFrame = requestAnimationFrame(() => {
         scrollSyncFrame = 0;
@@ -153,134 +191,127 @@
     }, { passive: true });
   }
 
-  // Die Kern-App bindet Klicks an einzelne Nachrichtenknoten. renderChat()
-  // ersetzt diese Knoten nach der ersten Auswahl, wodurch die neuen Knoten
-  // sonst keine Handler mehr hätten. Wir speichern die Kern-Handler je ID und
-  // rufen sie delegiert auch für neu gerenderte Nachrichten auf.
+  function handlerKey(element) {
+    if (element.matches('[data-confirm]')) return `confirm:${element.dataset.confirm || ''}`;
+    if (element.matches('[data-split-here]')) return `split:${element.dataset.splitHere || ''}`;
+    if (element.matches('[data-boundary]')) return `boundary:${element.dataset.boundary || ''}`;
+    return '';
+  }
+
   EventTarget.prototype.addEventListener = function patchedAddEventListener(type, listener, options) {
-    if (
-      type === 'click'
-      && this instanceof Element
-      && this.matches?.('[data-message-id]')
-      && typeof listener === 'function'
-    ) {
-      const id = String(this.dataset.messageId || '');
-      if (id) messageClickHandlers.set(id, { listener, source: this });
-      return;
+    if (type === 'click' && this instanceof Element && typeof listener === 'function') {
+      if (this.matches?.('[data-message-id]')) {
+        const id = String(this.dataset.messageId || '');
+        if (id) messageClickHandlers.set(id, { listener, source: this });
+        return;
+      }
+      if (this.matches?.('[data-confirm]')) {
+        const key = handlerKey(this);
+        if (key) confirmationClickHandlers.set(key, { listener, source: this });
+        return;
+      }
+      if (this.matches?.('[data-split-here]')) {
+        const key = handlerKey(this);
+        if (key) splitClickHandlers.set(key, { listener, source: this });
+        return;
+      }
+      if (this.matches?.('[data-boundary]')) {
+        const key = handlerKey(this);
+        if (key) boundaryClickHandlers.set(key, { listener, source: this });
+        return;
+      }
     }
 
-    // Bestätigen/Wiederöffnen rendert die komplette Arbeitsfläche neu und die
-    // Kern-App springt danach automatisch zur nächsten offenen Situation. Wir
-    // übernehmen den Handler delegiert, damit Status und Speicherung unverändert
-    // bleiben, verhindern aber jede automatische Chat-Navigation.
-    if (
-      type === 'click'
-      && this instanceof Element
-      && this.matches?.('[data-confirm]')
-      && typeof listener === 'function'
-    ) {
-      const id = String(this.dataset.confirm || '');
-      if (id) confirmationClickHandlers.set(id, { listener, source: this });
-      return;
-    }
-
-    // Der ursprüngliche Scroll-Handler löscht beim Situationswechsel die aktuell
-    // markierte Nachricht. Wir ersetzen ihn durch einen passiven Sync, der dieselbe
-    // activeId über den Slider setzt, aber weder die Nachrichtenauswahl löscht noch
-    // den Chat an eine Grenze springt.
     if (type === 'scroll' && this instanceof Element && this.matches?.('[data-chat-scroll]')) {
       installPassiveChatScroll(this);
       return;
     }
-
     return nativeAddEventListener.call(this, type, listener, options);
   };
 
-  function scrollElementIntoChatView(element) {
-    const scroll = element?.closest?.('[data-chat-scroll]');
-    if (!scroll) return false;
-    manualScrollUntil = performance.now() + 450;
-    const scrollRect = scroll.getBoundingClientRect();
-    const targetRect = element.getBoundingClientRect();
-    const top = Math.max(0, scroll.scrollTop + targetRect.top - scrollRect.top - focusOffset());
-    scroll.scrollTo({ top, behavior: 'auto' });
-    return true;
-  }
-
   Element.prototype.scrollIntoView = function patchedScrollIntoView(options) {
-    const block = options && typeof options === 'object' ? options.block : undefined;
     const chat = this.closest?.('[data-chat-scroll]');
     if (chat) {
-      if (suppressChatFocus) return;
-      if (block === 'start' && scrollElementIntoChatView(this)) return;
-      // Eine angeklickte Nachricht befindet sich bereits im sichtbaren Bereich.
-      // Das erneute Rendern ihrer Aktionszeile darf den Chat daher nicht bewegen.
+      if (suppressChatFocus || stableAction) return;
+      const block = options && typeof options === 'object' ? options.block : undefined;
       if (block === 'nearest' && this.matches?.('[data-message-wrap]')) return;
+      if (block === 'start') {
+        manualScrollUntil = performance.now() + 450;
+        const scrollRect = chat.getBoundingClientRect();
+        const targetRect = this.getBoundingClientRect();
+        const top = Math.max(0, chat.scrollTop + targetRect.top - scrollRect.top - focusOffset());
+        nativeScrollTo.call(chat, { top, behavior: 'auto' });
+        return;
+      }
     }
     return nativeScrollIntoView.call(this, options);
   };
 
-  function focusSituation(id) {
-    const target = document.querySelector(
-      `[data-message-situation="${Number(id)}"][data-situation-first="true"]`,
-    );
-    if (!target) return;
-    scrollElementIntoChatView(target);
+  Element.prototype.scrollTo = function patchedScrollTo(...args) {
+    if (this.matches?.('[data-chat-scroll]') && (suppressChatFocus || stableAction)) return;
+    return nativeScrollTo.apply(this, args);
+  };
+
+  function runStored(map, key, event, { stable = true } = {}) {
+    const stored = map.get(key);
+    if (!stored) return false;
+    if (stable) armStableAction();
+    stored.listener.call(stored.source, event);
+    return true;
   }
 
-  async function runConfirmation(id, event) {
-    if (!id || confirmationInFlight) return false;
-    const stored = confirmationClickHandlers.get(String(id));
-    if (!stored) return false;
-
-    const activeBefore = currentActiveSituationId() || Number(id);
-    const snapshot = captureViewportSnapshot(document.querySelector('[data-chat-scroll]'));
-    confirmationInFlight = true;
-    suppressChatFocus = true;
-    try {
-      const result = stored.listener.call(stored.source, event);
-      if (result && typeof result.then === 'function') await result;
-
-      // Die Kern-App plant ihre automatische Navigation in requestAnimationFrame.
-      // Wir lassen diesen State-Wechsel auslaufen, blockieren aber dessen Fokus.
-      await nextFrame();
-      await nextFrame();
-
-      // Die gerade bestätigte Situation bleibt aktiv. Das ist eine reine UI-
-      // Auswahl; der gespeicherte Bestätigungsstatus bleibt unverändert.
-      const sliderButton = document.querySelector(`[data-slider-situation="${activeBefore}"]`);
-      sliderButton?.click();
-
-      manualScrollUntil = performance.now() + 180;
-      restoreViewportSnapshot(snapshot);
-      await nextFrame();
-      restoreViewportSnapshot(snapshot);
-      return true;
-    } finally {
-      suppressChatFocus = false;
-      confirmationInFlight = false;
-    }
+  function focusSituation(id) {
+    const target = document.querySelector(`[data-message-situation="${Number(id)}"][data-situation-first="true"]`);
+    if (!target) return;
+    const scroll = target.closest('[data-chat-scroll]');
+    if (!scroll) return;
+    manualScrollUntil = performance.now() + 450;
+    const scrollRect = scroll.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const top = Math.max(0, scroll.scrollTop + targetRect.top - scrollRect.top - focusOffset());
+    nativeScrollTo.call(scroll, { top, behavior: 'auto' });
+    updateLastSnapshot(scroll);
   }
 
   document.addEventListener('click', (event) => {
     const check = event.target.closest?.('.tw-sit-check');
     if (check) {
       const opener = check.closest?.('[data-open-situation]');
-      const id = Number(opener?.dataset.openSituation || 0);
+      const id = String(opener?.dataset.openSituation || '');
       if (!id) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      runConfirmation(id, event);
+      runStored(confirmationClickHandlers, `confirm:${id}`, event);
       return;
     }
 
     const confirm = event.target.closest?.('[data-confirm]');
     if (confirm) {
-      const id = Number(confirm.dataset.confirm || 0);
+      const id = String(confirm.dataset.confirm || '');
       if (!id) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      runConfirmation(id, event);
+      runStored(confirmationClickHandlers, `confirm:${id}`, event);
+      return;
+    }
+
+    const split = event.target.closest?.('[data-split-here]');
+    if (split) {
+      const id = String(split.dataset.splitHere || '');
+      if (!id) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      runStored(splitClickHandlers, `split:${id}`, event);
+      return;
+    }
+
+    const boundary = event.target.closest?.('[data-boundary]');
+    if (boundary) {
+      const action = String(boundary.dataset.boundary || '');
+      if (!action) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      runStored(boundaryClickHandlers, `boundary:${action}`, event);
       return;
     }
 
@@ -292,26 +323,54 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       stored.listener.call(stored.source, event);
+      requestAnimationFrame(() => updateLastSnapshot(document.querySelector('[data-chat-scroll]')));
       return;
     }
 
     const button = event.target.closest?.('[data-open-situation]');
     if (!button) return;
-
     const id = Number(button.dataset.openSituation);
     if (!Number.isInteger(id) || id <= 0) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
+    stableAction = null;
+    suppressChatFocus = false;
     document.querySelector('[data-drawer]')?.classList.remove('is-open');
-
-    const sliderButton = document.querySelector(`[data-slider-situation="${id}"]`);
-    if (!sliderButton) return;
-    sliderButton.click();
-
-    requestAnimationFrame(() => {
-      focusSituation(id);
-      requestAnimationFrame(() => focusSituation(id));
-    });
+    const slider = document.querySelector(`[data-slider-situation="${id}"]`);
+    if (!slider) return;
+    slider.click();
+    requestAnimationFrame(() => focusSituation(id));
   }, true);
+
+  document.addEventListener('submit', (event) => {
+    if (event.target?.id === 'detail-form') armStableAction();
+  }, true);
+
+  document.addEventListener('change', (event) => {
+    if (event.target?.id === 'reviewer-select') {
+      stableAction = null;
+      lastViewportSnapshot = null;
+      suppressChatFocus = false;
+    }
+  }, true);
+
+  const app = document.getElementById('review-app');
+  if (app) {
+    const observer = new MutationObserver((mutations) => {
+      const workspaceReset = mutations.some((mutation) => {
+        if (mutation.type !== 'childList') return false;
+        return [...mutation.addedNodes].some((node) => node instanceof Element && (node.matches?.('.tw-app') || node.querySelector?.('[data-chat-scroll]')));
+      });
+      if (!workspaceReset) return;
+
+      const snapshot = stableAction?.snapshot || lastViewportSnapshot;
+      if (snapshot) scheduleStableRestore(snapshot);
+      requestAnimationFrame(() => {
+        const scroll = document.querySelector('[data-chat-scroll]');
+        if (scroll) installPassiveChatScroll(scroll);
+      });
+    });
+    observer.observe(app, { childList: true });
+  }
 })();
