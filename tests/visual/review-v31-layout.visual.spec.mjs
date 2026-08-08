@@ -74,13 +74,13 @@ test('V31 desktop trennt Flächen, nutzt Logo-Sprecherfarben und zentriert aktiv
   expect(await lena.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgb(242, 108, 131)');
 
   const sidebarBg = await page.locator('.tw-sidebar').evaluate((node) => getComputedStyle(node).backgroundColor);
-  const cardBg = await page.locator('[data-situation-card="2"]').evaluate((node) => getComputedStyle(node).backgroundColor);
+  const cardBg = await page.locator('[data-situation-list] [data-situation-card="2"]').evaluate((node) => getComputedStyle(node).backgroundColor);
   const chatBg = await page.locator('.tw-chat-card').evaluate((node) => getComputedStyle(node).backgroundColor);
   const streamBg = await page.locator('.tw-chat-scroll').evaluate((node) => getComputedStyle(node).backgroundColor);
   expect(sidebarBg).not.toBe(cardBg);
   expect(chatBg).not.toBe(streamBg);
 
-  const positions = await page.locator('[data-situation-card="2"]').evaluate((card) => {
+  const positions = await page.locator('[data-situation-list] [data-situation-card="2"]').evaluate((card) => {
     const check = card.querySelector('.tw-sit-check').getBoundingClientRect();
     const open = card.querySelector('.tw-situation-open').getBoundingClientRect();
     return { checkLeft: check.left, openLeft: open.left };
@@ -91,7 +91,7 @@ test('V31 desktop trennt Flächen, nutzt Logo-Sprecherfarben und zentriert aktiv
   expect(boundaryWidth).toBe('2px');
 
   await page.locator('[data-situation-list] [data-open-situation="3"]').click();
-  await expect(page.locator('[data-situation-card="3"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
   await expect.poll(async () => page.locator('[data-situation-list]').evaluate((list) => {
     const card = list.querySelector('[data-situation-card="3"]');
     const a = list.getBoundingClientRect();
