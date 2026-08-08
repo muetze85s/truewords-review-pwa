@@ -85,11 +85,17 @@ for (const theme of ['light', 'dark']) {
     expect(backdrop).toBe('none');
     expect(backgroundImage).toBe('none');
 
-    await page.getByRole('button', { name: /Situation 2/i }).first().click();
     await expect(page.locator('[data-situation-card="2"]')).toHaveClass(/is-active/);
     await expect(page.locator('[data-situation-card="2"]')).toContainText('Klärung');
     await expect(page.locator('[data-situation-card="2"]')).toContainText('Richtung');
     await expect(page.locator('[data-situation-card="2"]')).toContainText('Muster');
+
+    // Navigate away and back. The second click uses a freshly re-rendered card and
+    // therefore verifies delegated navigation, not only the initial listeners.
+    await page.locator('[data-open-situation="3"]').first().click();
+    await expect(page.locator('[data-situation-card="3"]')).toHaveClass(/is-active/);
+    await page.locator('[data-open-situation="2"]').first().click();
+    await expect(page.locator('[data-situation-card="2"]')).toHaveClass(/is-active/);
 
     const philippBg = await page.locator('.tw-message-wrap.philipp .tw-message').first().evaluate((node) => getComputedStyle(node).backgroundColor);
     const lenaBg = await page.locator('.tw-message-wrap.lena .tw-message').first().evaluate((node) => getComputedStyle(node).backgroundColor);
@@ -119,8 +125,7 @@ test('Review V2 mobile header collapses to synchronized situation slider', async
   await expect(page.locator('[data-situation-slider]')).toBeVisible();
 
   await page.locator('[data-slider-situation="3"]').click();
-  await page.waitForTimeout(250);
-  await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/, { timeout: 4000 });
   const activeFirst = page.locator('[data-message-situation="3"][data-situation-first="true"]');
   await expect(activeFirst).toBeVisible();
 
