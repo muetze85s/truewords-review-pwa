@@ -48,32 +48,16 @@
     card.querySelector('input')?.focus();
   }
 
-  // Explicit navigation must let the chat position drive the active situation.
-  // Capturing here prevents the original click handler from setting a new active
-  // situation before the smooth scroll has reached that situation. Otherwise the
-  // scroll synchronizer can immediately switch back at the old viewport position.
   document.addEventListener('click', (event) => {
-    const slider = event.target.closest?.('[data-slider-situation]');
-    if (slider) {
-      const id = Number(slider.dataset.sliderSituation || 0);
-      if (id && scrollChatToSituation(id)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      return;
-    }
-
+    // Situation cards are re-rendered whenever the active situation changes.
+    // Initial cards have core listeners; replacement cards are handled here.
     const open = event.target.closest?.('[data-open-situation]');
     if (open) {
       const id = Number(open.dataset.openSituation || 0);
-      if (id && scrollChatToSituation(id)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      if (id && scrollChatToSituation(id)) event.preventDefault();
+      return;
     }
-  }, true);
 
-  document.addEventListener('click', (event) => {
     const edit = event.target.closest?.('[data-edit-detail]');
     if (edit) {
       event.preventDefault();
