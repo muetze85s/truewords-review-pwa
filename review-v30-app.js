@@ -38,6 +38,7 @@
     pollTimer: 0,
     toastTimer: 0,
     chatFrame: 0,
+    chatSyncTimer: 0,
     embla: null,
     emblaPointer: false,
     emblaSyncing: false,
@@ -440,25 +441,35 @@
     state.fadeObserver = null;
     if (state.chatFrame) cancelAnimationFrame(state.chatFrame);
     state.chatFrame = 0;
+    clearTimeout(state.chatSyncTimer);
+    state.chatSyncTimer = 0;
   }
 
   function captureViewport() {
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return null;
     const scrollRect = scroll.getBoundingClientRect();
-    const anchorY = scrollRect.top + scrollRect.height * 0.34;
-    let best = null;
-    let bestDistance = Infinity;
-    scroll.querySelectorAll('[data-message-wrap]').forEach((node) => {
-      const rect = node.getBoundingClientRect();
-      if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) return;
-      const point = Math.min(Math.max(anchorY, rect.top), rect.bottom);
-      const distance = Math.abs(point - anchorY);
-      if (distance < bestDistance) {
-        best = node;
-        bestDistance = distance;
-      }
-    });
+    const selected = state.selectedMessageId
+      ? document.querySelector(`[data-message-wrap="${CSS.escape(state.selectedMessageId)}"]`)
+      : null;
+    const selectedRect = selected?.getBoundingClientRect();
+    let best = selected && selectedRect && selectedRect.bottom >= scrollRect.top && selectedRect.top <= scrollRect.bottom
+      ? selected
+      : null;
+    if (!best) {
+      const anchorY = scrollRect.top + scrollRect.height * 0.34;
+      let bestDistance = Infinity;
+      scroll.querySelectorAll('[data-message-wrap]').forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) return;
+        const point = Math.min(Math.max(anchorY, rect.top), rect.bottom);
+        const distance = Math.abs(point - anchorY);
+        if (distance < bestDistance) {
+          best = node;
+          bestDistance = distance;
+        }
+      });
+    }
     return {
       messageId: String(best?.dataset.messageWrap || ''),
       relativeTop: best ? best.getBoundingClientRect().top - scrollRect.top : null,
@@ -512,7 +523,11 @@
     initEmbla();
     initFadeObserver();
     requestAnimationFrame(() => {
-      if (viewport) restoreViewport(viewport);
+      if (viewport) {
+        state.suppressChatSyncUntil = performance.now() + 80;
+        restoreViewport(viewport);
+        requestAnimationFrame(() => restoreViewport(viewport));
+      }
       centerSituationLists(false);
       syncSliderToActive(true);
       updateFadeFallback();
@@ -538,6 +553,9 @@
     const list = document.querySelector(selector);
     const card = list?.querySelector(`[data-situation-card="${state.activeId}"]`);
     if (!list || !card || list.clientHeight <= 0) return;
+    const padding = Math.max(24, Math.ceil(list.clientHeight / 2));
+    list.style.paddingTop = `${padding}px`;
+    list.style.paddingBottom = `${padding}px`;
     const target = card.offsetTop - (list.clientHeight - card.offsetHeight) / 2;
     const max = Math.max(0, list.scrollHeight - list.clientHeight);
     list.scrollTo({ top: Math.min(max, Math.max(0, target)), behavior: smooth ? 'smooth' : 'auto' });
@@ -580,27 +598,32 @@
     else if (source !== 'slider') syncSliderToActive(false);
   }
 
-  function scrollChatToSituation(id, behavior = 'smooth') {
+  function scrollChatToSituation(id, behavior = 'auto') {
     const target = document.querySelector(`[data-message-situation="${Number(id)}"][data-situation-first="true"]`);
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!target || !scroll) return;
     setActive(id, { source: 'manual' });
-    state.suppressChatSyncUntil = performance.now() + (behavior === 'smooth' ? 700 : 120);
+    state.suppressChatSyncUntil = behavior === 'smooth' ? performance.now() + 520 : 0;
     const scrollRect = scroll.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
-    const mobileOffset = window.innerWidth <= MOBILE_BREAKPOINT ? 8 : 14;
-    const top = Math.max(0, scroll.scrollTop + targetRect.top - scrollRect.top - mobileOffset);
+    const top = Math.max(0, scroll.scrollTop + targetRect.top - scrollRect.top - 12);
     scroll.scrollTo({ top, behavior });
   }
 
   function activeFromChatPosition() {
-    if (performance.now() < state.suppressChatSyncUntil) return;
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return;
+    if (performance.now() < state.suppressChatSyncUntil) {
+      clearTimeout(state.chatSyncTimer);
+      state.chatSyncTimer = setTimeout(activeFromChatPosition, Math.max(16, state.suppressChatSyncUntil - performance.now() + 8));
+      return;
+    }
+    const scrollRect = scroll.getBoundingClientRect();
     const anchor = scroll.scrollTop + scroll.clientHeight * 0.34;
     let candidate = Number(orderedSituations()[0]?.id || 0);
     document.querySelectorAll('[data-situation-sentinel]').forEach((node) => {
-      if (node.offsetTop <= anchor + 1) candidate = Number(node.dataset.situationSentinel || candidate);
+      const absoluteTop = scroll.scrollTop + node.getBoundingClientRect().top - scrollRect.top;
+      if (absoluteTop <= anchor + 1) candidate = Number(node.dataset.situationSentinel || candidate);
     });
     if (candidate && candidate !== Number(state.activeId)) setActive(candidate, { source: 'scroll' });
   }
@@ -614,6 +637,7 @@
   }
 
   function initEmbla() {
+    if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const viewport = document.querySelector('[data-embla-viewport]');
     if (!viewport || typeof window.EmblaCarousel !== 'function') return;
     state.embla = window.EmblaCarousel(viewport, {
@@ -629,7 +653,7 @@
     state.embla.on('select', () => {
       if (state.emblaSyncing || !state.emblaPointer) return;
       const item = orderedSituations()[state.embla.selectedScrollSnap()];
-      if (item) scrollChatToSituation(item.id, 'smooth');
+      if (item) scrollChatToSituation(item.id, 'auto');
     });
     syncSliderToActive(true);
   }
@@ -640,6 +664,8 @@
   }
 
   function initFadeObserver() {
+    state.fadeObserver?.disconnect?.();
+    state.fadeObserver = null;
     if (!('IntersectionObserver' in window)) return;
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return;
@@ -658,8 +684,8 @@
 
   function selectMessage(id) {
     const next = state.selectedMessageId === String(id) ? '' : String(id);
-    state.selectedMessageId = next;
     const viewport = captureViewport();
+    state.selectedMessageId = next;
     renderChat();
     bindChatActions();
     initFadeObserver();
@@ -851,6 +877,14 @@
     }
     if (!moved) return;
     const neighborId = sourceId === id ? destinationId : sourceId;
+    if (neighborId && owner(neighborId) !== activeReviewer()) {
+      appendEvent({
+        type: 'boundary_cross_owner_moved',
+        sourceSituationId: sourceId || id,
+        destinationSituationId: destinationId || id,
+        messageId: messageId(moved),
+      });
+    }
     markChanged(id, neighborId);
     const removed = pruneEmptySituations();
     removed.forEach((removedId) => appendEvent({ type: 'empty_situation_removed', situationId: removedId }));
@@ -889,6 +923,7 @@
         <div class="tw-field"><label>Wert</label><textarea name="value" required>${escapeHtml(current?.value || '')}</textarea></div>
         <div class="tw-modal-actions"><button class="tw-action" type="button" data-close-modal>Abbrechen</button><button class="tw-action primary" type="submit">Speichern</button></div>
       </form>`;
+    card.querySelector('[data-close-modal]')?.addEventListener('click', closeModal);
     if (!modal.open) modal.showModal();
     card.querySelector('input')?.focus();
   }
@@ -928,7 +963,7 @@
     document.querySelectorAll('[data-open-situation]').forEach((button) => {
       button.onclick = () => {
         closeDrawer();
-        scrollChatToSituation(Number(button.dataset.openSituation));
+        scrollChatToSituation(Number(button.dataset.openSituation), 'auto');
       };
     });
     document.querySelectorAll('[data-card-confirm]').forEach((button) => {
@@ -973,7 +1008,7 @@
     bindSituationActions();
     bindChatActions();
     document.querySelectorAll('[data-slider-situation]').forEach((button) => {
-      button.onclick = () => scrollChatToSituation(Number(button.dataset.sliderSituation));
+      button.onclick = () => scrollChatToSituation(Number(button.dataset.sliderSituation), 'auto');
     });
     document.getElementById('reviewer-select')?.addEventListener('change', (event) => {
       const next = event.target.value;
@@ -998,7 +1033,6 @@
     document.querySelector('[data-detail-modal]')?.addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeModal();
     });
-    document.querySelector('[data-close-modal]')?.addEventListener('click', closeModal);
     document.querySelector('[data-detail-modal]')?.addEventListener('submit', (event) => {
       if (event.target?.id !== 'detail-form') return;
       event.preventDefault();
