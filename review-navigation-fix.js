@@ -33,18 +33,18 @@
     return Number(card?.dataset.situationCard || 0);
   }
 
-  function situationAtScrollAnchor(scroll) {
-    const firstMessages = [...scroll.querySelectorAll('[data-message-situation][data-situation-first="true"]')];
-    if (!firstMessages.length) return 0;
-
+  function readingAnchorY(scroll) {
     const scrollRect = scroll.getBoundingClientRect();
     const headerHidden = document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden');
     const topInset = window.innerWidth <= MOBILE_BREAKPOINT ? (headerHidden ? 58 : 108) : 20;
     const readableHeight = Math.max(1, scrollRect.height - topInset);
-    // Die aktive Situation folgt dem Lesebereich, nicht erst der oberen Kante.
-    // Dadurch wird die Situation hervorgehoben, die gerade überwiegend gelesen wird,
-    // ohne dass der Chat selbst an deren Anfang springt.
-    const anchor = scrollRect.top + topInset + readableHeight * 0.42;
+    return scrollRect.top + topInset + readableHeight * 0.42;
+  }
+
+  function situationAtScrollAnchor(scroll) {
+    const firstMessages = [...scroll.querySelectorAll('[data-message-situation][data-situation-first="true"]')];
+    if (!firstMessages.length) return 0;
+    const anchor = readingAnchorY(scroll);
     let candidate = Number(firstMessages[0].dataset.messageSituation || 0);
 
     for (const node of firstMessages) {
@@ -55,6 +55,32 @@
     return candidate;
   }
 
+  function visibleViewportAnchor(scroll) {
+    const scrollRect = scroll.getBoundingClientRect();
+    const anchorY = readingAnchorY(scroll);
+    let best = null;
+    let bestDistance = Infinity;
+
+    scroll.querySelectorAll('[data-message-wrap]').forEach((node) => {
+      const rect = node.getBoundingClientRect();
+      if (rect.bottom <= scrollRect.top || rect.top >= scrollRect.bottom) return;
+      const point = Math.min(Math.max(anchorY, rect.top), rect.bottom);
+      const distance = Math.abs(point - anchorY);
+      if (distance < bestDistance) {
+        best = node;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+
+  function preserveViewportAnchor(scroll, anchorNode, beforeTop) {
+    if (!anchorNode || !Number.isFinite(beforeTop) || !anchorNode.isConnected) return;
+    const afterTop = anchorNode.getBoundingClientRect().top;
+    const delta = afterTop - beforeTop;
+    if (Math.abs(delta) > 0.5) scroll.scrollTop += delta;
+  }
+
   function activateSituationFromScroll(scroll) {
     if (performance.now() < manualScrollUntil) return;
     const id = situationAtScrollAnchor(scroll);
@@ -62,23 +88,29 @@
     const sliderButton = document.querySelector(`[data-slider-situation="${id}"]`);
     if (!sliderButton) return;
 
-    // Die Kern-App muss ihren activeId aktualisieren, damit Header, Seitenleiste,
-    // Grenzen und Aktionen zur sichtbaren Situation passen. Der dabei normalerweise
-    // folgende scrollIntoView-Aufruf auf den Chat wird ausschließlich für diesen
-    // Scroll-Sync unterdrückt. Die aktuelle Scrollposition bleibt unverändert.
-    const top = scroll.scrollTop;
+    // Beim Aktivwechsel werden im Chat Grenz-/Bestätigungsblöcke ein- und
+    // ausgeblendet. Das verändert die Dokumenthöhe. Wir halten deshalb eine
+    // bereits sichtbare Nachricht pixelstabil, statt den Chat an eine Grenze zu
+    // fokussieren. So folgt nur die Hervorhebung dem Scrollen.
+    const anchorNode = visibleViewportAnchor(scroll);
+    const beforeTop = anchorNode?.getBoundingClientRect().top;
     suppressChatFocus = true;
     try {
       sliderButton.click();
+      preserveViewportAnchor(scroll, anchorNode, beforeTop);
+      // Zweite synchrone Korrektur fängt Layout-Nachläufe durch Klassenwechsel ab.
+      preserveViewportAnchor(scroll, anchorNode, beforeTop);
     } finally {
       suppressChatFocus = false;
     }
-    if (Math.abs(scroll.scrollTop - top) > 0.5) scroll.scrollTop = top;
   }
 
   function installPassiveChatScroll(scroll) {
     if (guardedChatScrolls.has(scroll)) return;
     guardedChatScrolls.add(scroll);
+    // Browser-Scroll-Anchoring darf unserer expliziten Pixelstabilisierung nicht
+    // entgegenarbeiten, wenn aktive Bearbeitungsblöcke ihre Höhe ändern.
+    scroll.style.overflowAnchor = 'none';
     let previousTop = scroll.scrollTop;
     nativeAddEventListener.call(scroll, 'scroll', () => {
       previousTop = updateMobileHeader(scroll, previousTop);
