@@ -52,7 +52,8 @@
 
   function syncSliderStatuses() {
     document.querySelectorAll('[data-slider-situation]').forEach((node) => {
-      node.dataset.status = statusForSituation(node.dataset.sliderSituation);
+      const status = statusForSituation(node.dataset.sliderSituation);
+      if (node.dataset.status !== status) node.dataset.status = status;
     });
   }
 
