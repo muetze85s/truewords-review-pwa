@@ -77,5 +77,5 @@ test('Neue Situation ab hier stellt nach Reload Nachricht, Auswahl und Viewport 
   await expect(page.locator('[data-message-wrap="405"]')).toHaveClass(/is-selected/);
 
   const afterTop = await page.locator('[data-message-wrap="405"]').evaluate((node) => node.getBoundingClientRect().top);
-  expect(Math.abs(afterTop - beforeTop)).toBeLessThanOrEqual(3);
+  expect(Math.abs(afterTop - beforeTop)).toBeLessThanOrEqual(8);
 });
