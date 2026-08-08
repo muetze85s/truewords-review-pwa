@@ -33,22 +33,8 @@ jobs:
           npm run build
           test -f dist/index.html
           test -f dist/review.html
-          test -f dist/review.js
-          test -f dist/review.css
-          test -f dist/review-boundaries.js
-          test -f dist/review-boundaries.css
-          test -f dist/review-precision.js
-          test -f dist/review-precision.css
-          test -f dist/review-cross-owner-fix.js
-          test -f dist/review-status-colors.css
-          test -f dist/truewords-ui-theme.css
-          test -f dist/truewords-ui-bright.css
-          test -f dist/truewords-ui-theme.js
-          test -f dist/review-v2-situation.css
-          test -f dist/review-v2-situation.js
-          test -f dist/review-v2-timeline.css
-          test -f dist/review-v2-timeline.js
-          test -f dist/review-v2-prototype.html
+          test -f dist/review-v2-app.css
+          test -f dist/review-v2-app.js
           test -f dist/situation-quiz.html
           test -f dist/situation-quiz.css
           test -f dist/situation-quiz.js
@@ -63,26 +49,21 @@ jobs:
           test -f migrations/0004_email_auth.sql
           test -f migrations/0005_balance_pilot_review_owners.sql
           test -f migrations/0006_situation_quiz.sql
-          grep -q 'review.js' dist/review.html
-          grep -q 'review-boundaries.js' dist/review.html
-          grep -q 'review-precision.js' dist/review.html
-          grep -q 'review-cross-owner-fix.js' dist/review.html
-          grep -q 'review-status-colors.css' dist/review.html
-          grep -q 'truewords-ui-theme.css' dist/review.html
-          grep -q 'truewords-ui-bright.css' dist/review.html
-          grep -q 'truewords-ui-theme.js' dist/review.html
-          grep -q 'truewords-ui-theme.css' dist/upload.html
-          grep -q 'truewords-ui-theme.js' dist/upload.html
-          grep -q 'data-speaker="Philipp"' dist/truewords-ui-theme.css
-          grep -q 'data-speaker="Lena"' dist/truewords-ui-theme.css
-          grep -q 'data-theme="dark"' dist/truewords-ui-theme.css
-          grep -q 'truewords/theme' dist/truewords-ui-theme.js
-          grep -q 'status-corrected' dist/review-status-colors.css
-          grep -q 'Telegram-ID-Sprung' dist/review-boundaries.js
-          ! grep -q 'Zwischen-IDs.*fehlen' dist/review-boundaries.js
-          grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
-          grep -q 'boundary_cross_owner_moved' dist/review-precision.js
-          grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
+          grep -q 'review-v2-app.css' dist/review.html
+          grep -q 'review-v2-app.js' dist/review.html
+          ! grep -q 'review.js?v' dist/review.html
+          grep -q 'Neue Situation ab hier' dist/review-v2-app.js
+          grep -q 'truewordsNeedsCorrectedConfirmation' dist/review-v2-app.js
+          grep -q 'boundary_cross_owner_moved' dist/review-v2-app.js
+          grep -q 'data-situation-slider' dist/review-v2-app.js
+          grep -q 'Bestätigung zurücknehmen' dist/review-v2-app.js
+          grep -q '#F3F4F6' dist/review-v2-app.css
+          grep -q '#121214' dist/review-v2-app.css
+          grep -q '#1E1E22' dist/review-v2-app.css
+          grep -q 'border-radius:var(--radius)' dist/review-v2-app.css
+          ! grep -q 'backdrop-filter' dist/review-v2-app.css
+          grep -q 'exactTestFilterWindow' src/worker-review.ts
+          grep -q 'truewords-test-filter/v1' src/worker-review.ts
           grep -q 'precision_review_state_saved' src/worker-review-precision.ts
           grep -q 'worker-situation-quiz.ts' wrangler.jsonc
           grep -q 'review_situation_quiz_results' src/worker-situation-quiz.ts
@@ -91,9 +72,6 @@ jobs:
           grep -q 'situation-quiz.html' dist/login.js
           grep -q 'Lena, lass uns herausfinden, ob du Situationen richtig erkennst' dist/situation-quiz.html
           grep -q 'q10' dist/situation-quiz.js
-          grep -q 'Neue Situation ab hier' dist/review-v2-timeline.js
-          grep -q 'nextTemporarySituationId' dist/review-v2-timeline.js
-          grep -q 'is-header-hidden' dist/review-v2-timeline.css
           grep -q 'api/review/bootstrap' src/worker-review.ts
           grep -q 'philena-2026-pilot-v2' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' src/worker-source-integrity.ts
@@ -123,18 +101,8 @@ jobs:
           import vm from 'node:vm';
 
           const context = {
-            window: {},
-            Date,
-            Intl,
-            Number,
-            String,
-            Boolean,
-            Array,
-            Object,
-            RegExp,
-            Math,
-            Set,
-            Map,
+            window: {}, Date, Intl, Number, String, Boolean, Array, Object,
+            RegExp, Math, Set, Map,
           };
           vm.createContext(context);
           vm.runInContext(fs.readFileSync('pilot-v2.js', 'utf8'), context);
