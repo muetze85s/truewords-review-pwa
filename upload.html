@@ -22,7 +22,7 @@
           <div>
             <div class="eyebrow">Segmentierung · Test 3</div>
             <h1>Unabhängigen V3-Prüfstand starten</h1>
-            <p class="intro">Für jeden Test wird immer der vollständige unveränderte Telegram-Originalexport verwendet. Die KI-Datei enthält Testfilter, Situationsvorschläge und die feste Prüfaufteilung.</p>
+            <p class="intro">Für jeden Test wird immer der vollständige unveränderte Telegram-Originalexport verwendet. Die zweite Datei enthält den Testfilter, die vom <strong>TrueWords-Segmentierungsalgorithmus V3</strong> erzeugten Situationsvorschläge und die feste Prüfaufteilung. Für die Grenzziehung wird keine externe Sprach-KI benötigt.</p>
           </div>
           <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
         </div>
@@ -42,12 +42,12 @@
 
         <section class="card upload-card">
           <div class="eyebrow">Datei 2 von 2</div>
-          <h2>KI-Vorselektion mit Testfilter und Prüfaufteilung</h2>
-          <p class="muted">Verwende <strong>truewords-ki-vorselektion-pilot-v3-unseen-fullsource-owners.json</strong>. Sie enthält 12 Situationsvorschläge, 335 Testereignisse und die feste Aufteilung Philipp 1–6 / Lena 7–12.</p>
+          <h2>TrueWords-V3-Vorschläge mit Testfilter und Prüfaufteilung</h2>
+          <p class="muted">Verwende <strong>truewords-ki-vorselektion-pilot-v3-unseen-fullsource-owners.json</strong>. Der Dateiname ist historisch; die 12 Situationsvorschläge wurden mit dem <strong>TrueWords-Segmentierungsalgorithmus V3</strong> erzeugt. Enthalten sind außerdem 335 Testereignisse und die feste Aufteilung Philipp 1–6 / Lena 7–12.</p>
           <label style="margin-top:14px">
-            <span>KI-Vorselektion V3 + Testfilter + Owner</span>
+            <span>TrueWords V3 + Testfilter + Owner</span>
             <input id="preselection-file" type="file" accept=".json,application/json" required>
-            <small>Die Owner-Zuordnung wird geprüft und unverändert im Prüfstand gespeichert.</small>
+            <small>Algorithmus-Vorschläge und Owner-Zuordnung werden geprüft und unverändert im Prüfstand gespeichert.</small>
           </label>
           <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
         </section>
@@ -60,7 +60,7 @@
             Test 2 bleibt als abgeschlossener Goldstandard erhalten. Test 3 verwendet einen neuen, zuvor ungeprüften Zeitraum, die unveränderte V3-Logik und dieselbe Halbteilung der Prüfung wie Test 2.
           </div>
           <div class="actions">
-            <button id="submit" class="primary" type="submit">Rohchat und KI-Datei prüfen · Test 3 starten</button>
+            <button id="submit" class="primary" type="submit">Rohchat und TrueWords-V3-Vorschläge prüfen · Test 3 starten</button>
             <button id="skip" class="secondary" type="button">Weiter ohne Upload</button>
           </div>
           <div id="progress-wrap" class="progress-wrap" hidden>
@@ -68,7 +68,7 @@
             <progress id="progress" max="100" value="0"></progress>
             <div id="progress-detail" class="progress-detail"></div>
           </div>
-          <div id="status" class="status" role="status" aria-live="polite">Vollständigen Rohchat und KI-Vorselektionsdatei auswählen.</div>
+          <div id="status" class="status" role="status" aria-live="polite">Vollständigen Rohchat und TrueWords-V3-Vorschlagsdatei auswählen.</div>
         </section>
       </form>
     </div>
