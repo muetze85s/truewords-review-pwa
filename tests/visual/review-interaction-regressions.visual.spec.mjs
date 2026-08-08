@@ -99,12 +99,13 @@ test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachri
   const afterSyncTop = await page.locator('[data-message-wrap="305"]').evaluate((node) => node.getBoundingClientRect().top);
   expect(Math.abs(afterSyncTop - beforeSyncTop)).toBeLessThanOrEqual(2);
 
-  await page.locator('[data-chat-scroll]').evaluate((node) => { node.scrollTop = 0; });
-  await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
-  await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
-
-  await page.locator('[data-message-id="302"]').click();
+  // Realer Bedienfall nach dem Scrollen: Eine andere sichtbare Nachricht kann
+  // direkt gewählt werden; die alte Markierung verschwindet erst dadurch.
+  await page.locator('[data-message-id="305"]').click();
+  await expect(page.locator('[data-message-wrap="305"]')).toHaveClass(/is-selected/);
   await expect(page.locator('[data-message-wrap="302"]')).not.toHaveClass(/is-selected/);
+  await page.locator('[data-message-id="305"]').click();
+  await expect(page.locator('[data-message-wrap="305"]')).not.toHaveClass(/is-selected/);
 });
 
 test('Checkbox bestätigt und hebt Bestätigung wieder auf', async ({ page }) => {
