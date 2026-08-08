@@ -150,14 +150,13 @@ test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar',
 
   await page.locator('[data-slider-situation="3"]').click();
   await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/, { timeout: 4000 });
-  const centerDiff = await page.locator('[data-situation-slider]').evaluate((slider) => {
+  await expect.poll(async () => page.locator('[data-situation-slider]').evaluate((slider) => {
     const active = slider.querySelector('[data-slider-situation].is-active');
     if (!active) return 9999;
     const a = slider.getBoundingClientRect();
     const b = active.getBoundingClientRect();
     return Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
-  });
-  expect(centerDiff).toBeLessThanOrEqual(8);
+  })).toBeLessThanOrEqual(8);
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
