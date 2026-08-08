@@ -4,6 +4,7 @@
   let suppressScrollSyncUntil = 0;
   let observer = null;
   const TARGET_KEY = 'truewords-review-v2/pending-target';
+  const VIEW_KEY = 'truewords-review-v2/pending-view';
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -27,14 +28,53 @@
     }, { capture: true, passive: true });
   }
 
+  function readPendingView() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(VIEW_KEY) || 'null');
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function restoreMessageViewport(view) {
+    if (!view?.messageId) return false;
+    const scroll = document.querySelector('[data-chat-scroll]');
+    const node = document.querySelector(`[data-message-wrap="${CSS.escape(String(view.messageId))}"]`);
+    if (!scroll || !node) return false;
+    const targetTop = Number(view.top);
+    if (Number.isFinite(targetTop)) {
+      const delta = node.getBoundingClientRect().top - targetTop;
+      if (Math.abs(delta) > .5) scroll.scrollTop += delta;
+    } else if (Number.isFinite(Number(view.scrollTop))) {
+      scroll.scrollTop = Number(view.scrollTop);
+    }
+    return true;
+  }
+
   function restorePendingTarget() {
     const targetId = Number(sessionStorage.getItem(TARGET_KEY) || 0);
     if (!targetId) return;
-    const button = document.querySelector(`[data-open-situation="${targetId}"]`);
-    if (!button) return;
+    const proxy = document.querySelector(`[data-slider-situation="${targetId}"]`);
+    if (!proxy) return;
+
+    const view = readPendingView();
     sessionStorage.removeItem(TARGET_KEY);
-    suppressAutomaticScrollSync(900);
-    button.click();
+    sessionStorage.removeItem(VIEW_KEY);
+    suppressAutomaticScrollSync(1400);
+    proxy.click();
+
+    requestAnimationFrame(() => {
+      restoreMessageViewport(view);
+      if (view?.selectedMessageId) {
+        const message = document.querySelector(`[data-message-id="${CSS.escape(String(view.selectedMessageId))}"]`);
+        message?.click();
+      }
+      requestAnimationFrame(() => {
+        restoreMessageViewport(view);
+        requestAnimationFrame(() => restoreMessageViewport(view));
+      });
+    });
   }
 
   function watchForWorkspace() {
@@ -95,7 +135,20 @@
     return `${base}A${counter}`;
   }
 
+  function captureViewForSplit(messageId) {
+    const scroll = document.querySelector('[data-chat-scroll]');
+    const selected = document.querySelector(`[data-message-wrap="${CSS.escape(String(messageId))}"]`);
+    const anchor = selected || document.querySelector('[data-message-wrap].is-selected');
+    return {
+      messageId: String(anchor?.dataset.messageWrap || messageId || ''),
+      selectedMessageId: String(messageId || ''),
+      top: anchor?.getBoundingClientRect().top,
+      scrollTop: scroll?.scrollTop || 0,
+    };
+  }
+
   async function persistSplit(messageId) {
+    const pendingView = captureViewForSplit(messageId);
     const bootstrap = await fetchJson('/api/review/bootstrap');
     const annotations = structuredClone(bootstrap.annotations || {});
     const messages = Array.isArray(bootstrap.messages) ? bootstrap.messages : [];
@@ -175,6 +228,7 @@
       body: JSON.stringify({ datasetId: bootstrap.dataset.id, annotations }),
     });
     sessionStorage.setItem(TARGET_KEY, String(newId));
+    sessionStorage.setItem(VIEW_KEY, JSON.stringify({ ...pendingView, situationId: newId }));
     location.reload();
   }
 
