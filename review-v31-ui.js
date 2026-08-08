@@ -3,12 +3,21 @@
 
   const MOBILE_BREAKPOINT = 840;
   const app = document.getElementById('review-app');
+  const EMBLA_OPTIONS = {
+    align: 'center',
+    containScroll: false,
+    loop: false,
+    dragFree: false,
+    skipSnaps: false,
+    duration: 22,
+  };
   let scheduled = 0;
   let lastActiveId = '';
   let mobileExpanded = false;
+  let settleTimers = [];
 
-  /* Capture the single Embla instance created by V30 so V31 can reliably
-     re-center it after active-situation changes and split-view resizes. */
+  /* Capture the Embla instance created by V30. V31 only re-initializes it
+     when the viewport itself changes size (for example iPad Split View). */
   if (typeof window.EmblaCarousel === 'function' && !window.__twV31EmblaWrapped) {
     const factory = window.EmblaCarousel;
     const wrapped = function (...args) {
@@ -29,53 +38,89 @@
     return String(activeCard()?.dataset.situationCard || '');
   }
 
-  function removeListSpacers(list) {
-    list?.querySelectorAll(':scope > .tw-v31-list-spacer').forEach((node) => node.remove());
+  function ensureSpacers(list, card) {
+    let before = list.querySelector(':scope > .tw-v31-list-spacer[data-edge="before"]');
+    let after = list.querySelector(':scope > .tw-v31-list-spacer[data-edge="after"]');
+    if (!before) {
+      before = document.createElement('div');
+      before.className = 'tw-v31-list-spacer';
+      before.dataset.edge = 'before';
+      list.prepend(before);
+    }
+    if (!after) {
+      after = document.createElement('div');
+      after.className = 'tw-v31-list-spacer';
+      after.dataset.edge = 'after';
+      list.append(after);
+    }
+    const height = Math.max(0, (list.clientHeight - Math.min(card.offsetHeight, list.clientHeight)) / 2 - 12);
+    before.style.height = `${height}px`;
+    after.style.height = `${height}px`;
   }
 
-  function centerVerticalList(list, behavior = 'smooth') {
+  function centerVerticalList(list) {
     if (!list || list.clientHeight <= 0) return;
-    removeListSpacers(list);
     const id = activeId();
     if (!id) return;
     const card = list.querySelector(`[data-situation-card="${CSS.escape(id)}"]`);
     if (!card) return;
 
-    const spacerHeight = Math.max(0, (list.clientHeight - card.offsetHeight) / 2 - 12);
-    const before = document.createElement('div');
-    const after = document.createElement('div');
-    before.className = 'tw-v31-list-spacer';
-    after.className = 'tw-v31-list-spacer';
-    before.style.height = `${spacerHeight}px`;
-    after.style.height = `${spacerHeight}px`;
-    list.prepend(before);
-    list.append(after);
-
-    const target = card.offsetTop + card.offsetHeight / 2 - list.clientHeight / 2;
-    const max = Math.max(0, list.scrollHeight - list.clientHeight);
-    list.scrollTo({ top: Math.max(0, Math.min(max, target)), behavior });
+    ensureSpacers(list, card);
+    const listRect = list.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const delta = (cardRect.top + cardRect.height / 2) - (listRect.top + listRect.height / 2);
+    if (Math.abs(delta) > 0.5) list.scrollTop += delta;
   }
 
-  function centerLists(behavior = 'smooth') {
-    centerVerticalList(document.querySelector('[data-situation-list]'), behavior);
+  function centerLists() {
+    centerVerticalList(document.querySelector('[data-situation-list]'));
     const drawer = document.querySelector('[data-drawer]');
     if (drawer?.open || drawer?.classList.contains('is-open')) {
-      centerVerticalList(document.querySelector('[data-drawer-list]'), behavior);
+      centerVerticalList(document.querySelector('[data-drawer-list]'));
     }
+  }
+
+  function clearSettleTimers() {
+    settleTimers.forEach((timer) => clearTimeout(timer));
+    settleTimers = [];
+  }
+
+  function settleListCenters() {
+    clearSettleTimers();
+    centerLists();
+    [60, 180, 360].forEach((delay) => {
+      settleTimers.push(setTimeout(centerLists, delay));
+    });
+  }
+
+  function activeSliderIndex() {
+    const id = activeId();
+    return [...document.querySelectorAll('[data-slider-situation]')]
+      .findIndex((node) => String(node.dataset.sliderSituation) === id);
   }
 
   function centerSlider(jump = false) {
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
-    if (!embla) return;
-    const items = [...document.querySelectorAll('[data-slider-situation]')];
-    const index = items.findIndex((node) => String(node.dataset.sliderSituation) === activeId());
-    if (index < 0) return;
+    const index = activeSliderIndex();
+    if (!embla || index < 0) return;
     try {
-      embla.reInit?.();
-      requestAnimationFrame(() => embla.scrollTo?.(index, jump));
+      embla.scrollTo?.(index, jump);
     } catch (_) {
-      /* V30 keeps the slider functional even if a browser rejects reInit. */
+      /* V30 remains the functional owner of slider navigation. */
+    }
+  }
+
+  function reflowSlider() {
+    if (window.innerWidth > MOBILE_BREAKPOINT) return;
+    const embla = window.__twReviewEmbla;
+    const index = activeSliderIndex();
+    if (!embla || index < 0) return;
+    try {
+      embla.reInit?.(EMBLA_OPTIONS);
+      requestAnimationFrame(() => embla.scrollTo?.(index, true));
+    } catch (_) {
+      centerSlider(true);
     }
   }
 
@@ -179,7 +224,7 @@
     if (opener && !opener.dataset.v31Bound) {
       opener.dataset.v31Bound = '1';
       opener.addEventListener('click', () => {
-        requestAnimationFrame(() => requestAnimationFrame(() => centerVerticalList(document.querySelector('[data-drawer-list]'), 'auto')));
+        requestAnimationFrame(() => requestAnimationFrame(settleListCenters));
       });
     }
   }
@@ -187,13 +232,15 @@
   function stabilize({ initial = false } = {}) {
     if (!document.querySelector('[data-app-shell]')) return;
     const nextId = activeId();
-    if (nextId && nextId !== lastActiveId) {
+    const changed = nextId && nextId !== lastActiveId;
+    if (changed) {
       lastActiveId = nextId;
       mobileExpanded = false;
     }
     renderMobileActive();
     bindDrawerFollow();
-    centerLists(initial ? 'auto' : 'smooth');
+    if (changed || initial) settleListCenters();
+    else centerLists();
     centerSlider(initial);
   }
 
@@ -223,7 +270,13 @@
   });
 
   observer.observe(app, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
-  window.addEventListener('resize', () => schedule(false), { passive: true });
-  window.visualViewport?.addEventListener('resize', () => schedule(false), { passive: true });
+  window.addEventListener('resize', () => {
+    schedule(false);
+    requestAnimationFrame(reflowSlider);
+  }, { passive: true });
+  window.visualViewport?.addEventListener('resize', () => {
+    schedule(false);
+    requestAnimationFrame(reflowSlider);
+  }, { passive: true });
   schedule(true);
 })();
