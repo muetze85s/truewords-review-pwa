@@ -18,6 +18,16 @@
     document.querySelector('[data-detail-modal]')?.classList.remove('is-open');
   }
 
+  function scrollChatToSituation(id, behavior = 'smooth') {
+    const target = document.querySelector(
+      `[data-message-situation="${Number(id)}"][data-situation-first="true"]`,
+    );
+    if (!target) return false;
+    closeDrawer();
+    target.scrollIntoView({ behavior, block: 'start' });
+    return true;
+  }
+
   function openEditor(button, addMode = false) {
     const situationId = Number(button.dataset.editDetail || button.dataset.addDetail || 0);
     if (!situationId) return;
@@ -38,19 +48,32 @@
     card.querySelector('input')?.focus();
   }
 
+  // Explicit navigation must let the chat position drive the active situation.
+  // Capturing here prevents the original click handler from setting a new active
+  // situation before the smooth scroll has reached that situation. Otherwise the
+  // scroll synchronizer can immediately switch back at the old viewport position.
   document.addEventListener('click', (event) => {
-    const open = event.target.closest?.('[data-open-situation]');
-    if (open) {
-      const id = Number(open.dataset.openSituation || 0);
-      const target = document.querySelector(`[data-message-situation="${id}"][data-situation-first="true"]`);
-      if (target) {
+    const slider = event.target.closest?.('[data-slider-situation]');
+    if (slider) {
+      const id = Number(slider.dataset.sliderSituation || 0);
+      if (id && scrollChatToSituation(id)) {
         event.preventDefault();
-        closeDrawer();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        event.stopPropagation();
       }
       return;
     }
 
+    const open = event.target.closest?.('[data-open-situation]');
+    if (open) {
+      const id = Number(open.dataset.openSituation || 0);
+      if (id && scrollChatToSituation(id)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+  }, true);
+
+  document.addEventListener('click', (event) => {
     const edit = event.target.closest?.('[data-edit-detail]');
     if (edit) {
       event.preventDefault();
