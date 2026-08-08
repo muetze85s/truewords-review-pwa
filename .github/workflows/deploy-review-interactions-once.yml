@@ -8,7 +8,7 @@ on:
       - '.github/workflows/deploy-review-interactions-once.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: truewords-review-interactions-once
@@ -61,4 +61,11 @@ jobs:
           grep -Eq '^HTTP/.* 302' review-headers.txt
           grep -Eqi '^location: /login.html' review-headers.txt
 
-# one-time trigger
+      - name: Record successful deployment
+        run: |
+          printf 'review-interactions-live\n' > .github/review-interactions-deploy-success
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/review-interactions-deploy-success
+          git commit -m 'Record successful review interactions deployment'
+          git push
