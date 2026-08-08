@@ -366,7 +366,7 @@
     const active = id && Number(id) === Number(state.activeId);
     const selected = messageId(message) === state.selectedMessageId;
     const splitAllowed = selected && active && isMine(id) && range && index > range.first;
-    const menu = selected ? `<div class="tw-message-menu">${splitAllowed ? `<button class="tw-action" type="button" data-split-here="${escapeHtml(messageId(message))}">Neue Situation ab hier</button>` : '<span></span>'}</div>` : '';
+    const menu = selected && splitAllowed ? `<div class="tw-message-menu"><button class="tw-action" type="button" data-split-here="${escapeHtml(messageId(message))}">Neue Situation ab hier</button></div>` : '';
     const who = speakerKey(message);
     const boundaryStart = groupStart
       ? `<div class="tw-boundary ${active && isMine(id) ? 'is-active' : ''}" data-boundary-start="${id}" data-fade-node><span>Anfang · Situation ${escapeHtml(displayId(item || id))}</span><div class="tw-boundary-actions"><button class="tw-action" type="button" data-boundary="start-earlier">← früher</button><button class="tw-action" type="button" data-boundary="start-later">später →</button></div></div>` : '';
@@ -620,9 +620,16 @@
       state.chatSyncTimer = setTimeout(activeFromChatPosition, Math.max(16, state.suppressChatSyncUntil - performance.now() + 8));
       return;
     }
+    const ordered = orderedSituations();
+    const atBottom = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 2;
+    if (atBottom) {
+      const lastId = Number(ordered.at(-1)?.id || 0);
+      if (lastId && lastId !== Number(state.activeId)) setActive(lastId, { source: 'scroll' });
+      return;
+    }
     const scrollRect = scroll.getBoundingClientRect();
     const anchor = scroll.scrollTop + Math.min(96, scroll.clientHeight * 0.22);
-    let candidate = Number(orderedSituations()[0]?.id || 0);
+    let candidate = Number(ordered[0]?.id || 0);
     document.querySelectorAll('[data-situation-sentinel]').forEach((node) => {
       const absoluteTop = scroll.scrollTop + node.getBoundingClientRect().top - scrollRect.top;
       if (absoluteTop <= anchor + 1) candidate = Number(node.dataset.situationSentinel || candidate);
@@ -684,16 +691,42 @@
     document.querySelectorAll('[data-fade-node]').forEach((node) => state.fadeObserver.observe(node));
   }
 
+  function splitMenuHtml(message) {
+    const id = assignment(message);
+    const range = id ? rangeFor(id) : null;
+    const index = state.messages.findIndex((candidate) => messageId(candidate) === messageId(message));
+    if (!id || !range || index <= range.first || !isMine(id) || Number(id) !== Number(state.activeId)) return '';
+    return `<div class="tw-message-menu"><button class="tw-action" type="button" data-split-here="${escapeHtml(messageId(message))}">Neue Situation ab hier</button></div>`;
+  }
+
   function selectMessage(id) {
     const message = state.messages.find((candidate) => messageId(candidate) === String(id));
-    const messageSituationId = message ? assignment(message) : 0;
+    if (!message) return;
+    const messageSituationId = assignment(message);
     if (messageSituationId) setActive(messageSituationId, { source: 'selection' });
-    const viewport = captureViewport();
-    state.selectedMessageId = state.selectedMessageId === String(id) ? '' : String(id);
-    renderChat();
-    bindChatActions();
-    initFadeObserver();
-    requestAnimationFrame(() => restoreViewport(viewport));
+
+    const previousId = state.selectedMessageId;
+    const nextId = previousId === String(id) ? '' : String(id);
+    state.selectedMessageId = nextId;
+
+    if (previousId) {
+      const previousWrap = document.querySelector(`[data-message-wrap="${CSS.escape(previousId)}"]`);
+      previousWrap?.classList.remove('is-selected');
+      previousWrap?.querySelector('.tw-message-menu')?.remove();
+    }
+
+    if (!nextId) return;
+    const wrap = document.querySelector(`[data-message-wrap="${CSS.escape(nextId)}"]`);
+    if (!wrap) return;
+    wrap.classList.add('is-selected');
+    const menu = splitMenuHtml(message);
+    if (menu) {
+      wrap.insertAdjacentHTML('beforeend', menu);
+      wrap.querySelector('[data-split-here]')?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        splitAt(event.currentTarget.dataset.splitHere).catch((caught) => toast(caught?.message || 'Teilen fehlgeschlagen'));
+      });
+    }
   }
 
   function nextTemporaryDisplayId(sourceId) {
