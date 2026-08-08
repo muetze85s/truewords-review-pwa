@@ -1,4 +1,4 @@
-import baseWorker from './worker-source-integrity';
+import baseWorker from './worker-situation-quiz';
 
 interface Env {
   DB: D1Database;
