@@ -108,6 +108,31 @@ test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachri
   await expect(page.locator('[data-message-wrap="305"]')).not.toHaveClass(/is-selected/);
 });
 
+test('Bestätigen bleibt an derselben Chatstelle und in derselben Situation', async ({ page }) => {
+  await mockReview(page);
+  await page.goto('/review.html');
+  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+
+  await page.locator('[data-open-situation="2"]').first().click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
+
+  await page.locator('[data-message-id="304"]').click();
+  await expect(page.locator('[data-message-wrap="304"]')).toHaveClass(/is-selected/);
+  const beforeTop = await page.locator('[data-message-wrap="304"]').evaluate((node) => node.getBoundingClientRect().top);
+
+  await page.locator('[data-confirm="2"]').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveAttribute('data-status', 'confirmed');
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-message-wrap="304"]')).toHaveClass(/is-selected/);
+  const afterTop = await page.locator('[data-message-wrap="304"]').evaluate((node) => node.getBoundingClientRect().top);
+  expect(Math.abs(afterTop - beforeTop)).toBeLessThanOrEqual(2);
+
+  await page.locator('[data-confirm="2"]').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveAttribute('data-status', 'open');
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-message-wrap="304"]')).toHaveClass(/is-selected/);
+});
+
 test('Checkbox bestätigt und hebt Bestätigung wieder auf', async ({ page }) => {
   await mockReview(page);
   await page.goto('/review.html');
