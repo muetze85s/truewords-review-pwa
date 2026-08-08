@@ -46,6 +46,12 @@ type AnnotationPayload = {
   situations: Array<Record<string, unknown> & { id: number }>;
   assignments: Record<string, number>;
   events?: unknown[];
+  testFilter?: {
+    schemaVersion?: string;
+    selection?: {
+      eventIds?: unknown[];
+    };
+  };
   [key: string]: unknown;
 };
 
@@ -213,6 +219,54 @@ async function reviewWindow(env: Env, dataset: DatasetRow, annotations: Annotati
   return messages.slice(start, end);
 }
 
+async function exactTestFilterWindow(env: Env, dataset: DatasetRow, annotations: AnnotationPayload): Promise<unknown[] | null> {
+  const eventIds = annotations.testFilter?.selection?.eventIds;
+  if (annotations.testFilter?.schemaVersion !== 'truewords-test-filter/v1' || !Array.isArray(eventIds) || !eventIds.length) {
+    return null;
+  }
+  const orderedIds = eventIds.map(String);
+  const wanted = new Set(orderedIds);
+  if (wanted.size !== orderedIds.length) throw new Error('Der Testfilter enthält doppelte Ereignisse.');
+
+  const numericIds = orderedIds
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (numericIds.length !== orderedIds.length) throw new Error('Der Testfilter enthält ungültige Ereignis-IDs.');
+  const firstNeedle = `\"id\":${numericIds[0]}`;
+  const lastNeedle = `\"id\":${numericIds.at(-1)}`;
+  const bounds = await env.DB.prepare(`
+    SELECT
+      MIN(CASE WHEN instr(messages_json, ?2) > 0 THEN chunk_index END) AS first_chunk,
+      MAX(CASE WHEN instr(messages_json, ?3) > 0 THEN chunk_index END) AS last_chunk
+    FROM review_chat_chunks
+    WHERE dataset_id = ?1
+  `).bind(dataset.id, firstNeedle, lastNeedle).first<ChunkBoundsRow>();
+  if (!bounds || bounds.first_chunk === null || bounds.last_chunk === null) {
+    throw new Error('Der freigegebene Testfilter konnte im Rohchat nicht gefunden werden.');
+  }
+
+  const rows = await env.DB.prepare(`
+    SELECT chunk_index, messages_json
+    FROM review_chat_chunks
+    WHERE dataset_id = ?1 AND chunk_index BETWEEN ?2 AND ?3
+    ORDER BY chunk_index
+  `).bind(dataset.id, Number(bounds.first_chunk), Number(bounds.last_chunk)).all<ChatChunkRow>();
+  const found = new Map<string, unknown>();
+  for (const row of rows.results || []) {
+    const parsed = JSON.parse(row.messages_json);
+    if (!Array.isArray(parsed)) continue;
+    for (const message of parsed) {
+      const id = sourceId(message);
+      if (wanted.has(id) && !found.has(id)) found.set(id, message);
+    }
+  }
+  const missing = orderedIds.filter((id) => !found.has(id));
+  if (missing.length) {
+    throw new Error(`Im freigegebenen Testfilter fehlen ${missing.length} Ereignisse im Rohchat.`);
+  }
+  return orderedIds.map((id) => found.get(id));
+}
+
 async function reviewBootstrap(request: Request, env: Env): Promise<Response> {
   const user = await authenticatedUser(request, env);
   if (user instanceof Response) return user;
@@ -225,7 +279,8 @@ async function reviewBootstrap(request: Request, env: Env): Promise<Response> {
     return error('Für den aktiven Rohchat sind noch keine KI-Vorschläge aktiviert.', 409);
   }
 
-  const messages = await reviewWindow(env, dataset, annotations);
+  const filtered = await exactTestFilterWindow(env, dataset, annotations);
+  const messages = filtered || await reviewWindow(env, dataset, annotations);
   const replyMessages = await additionalReplyMessages(env, dataset, messages);
   return json({
     ok: true,
@@ -246,6 +301,7 @@ async function reviewBootstrap(request: Request, env: Env): Promise<Response> {
       messages: messages.length,
       assigned: Object.keys(annotations.assignments).length,
       situations: annotations.situations.length,
+      exactTestFilter: Boolean(filtered),
     },
   });
 }
