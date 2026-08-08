@@ -9,7 +9,11 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./review-v2-app.css?v=1">
-  <style>.tw-progress-ring{background:transparent!important}.tw-progress-ring:after{display:none!important}</style>
+  <style>
+    .tw-progress-ring{background:transparent!important}.tw-progress-ring:after{display:none!important}
+    .tw-chat-stream{padding-bottom:max(360px,52vh)!important}
+    @media(max-width:840px){.tw-chat-stream{padding-bottom:max(430px,62vh)!important}}
+  </style>
   <script src="./review-v2-app.js?v=1" defer></script>
   <script src="./review-v2-events.js?v=1" defer></script>
 </head>
