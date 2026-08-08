@@ -78,17 +78,33 @@ test('Nachricht kann nach Re-Render abgewählt und eine andere ausgewählt werde
   await expect(wrap302()).not.toHaveClass(/is-selected/);
 });
 
-test('Normales Scrollen verändert die aktive Situation nicht', async ({ page }) => {
+test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachrichtenauswahl', async ({ page }) => {
   await mockReview(page);
   await page.goto('/review.html');
   await page.locator('.tw-workspace').waitFor({ state: 'visible' });
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
 
-  await page.locator('[data-chat-scroll]').evaluate((node) => node.scrollTo(0, node.scrollHeight));
-  await page.waitForTimeout(250);
+  await page.locator('[data-message-id="302"]').click();
+  await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
 
+  const requestedBottom = await page.locator('[data-chat-scroll]').evaluate((node) => {
+    const target = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = target;
+    return target;
+  });
+  await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).not.toHaveClass(/is-active/);
+  await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
+
+  const actualBottom = await page.locator('[data-chat-scroll]').evaluate((node) => node.scrollTop);
+  expect(Math.abs(actualBottom - requestedBottom)).toBeLessThanOrEqual(2);
+
+  await page.locator('[data-chat-scroll]').evaluate((node) => { node.scrollTop = 0; });
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
-  await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).not.toHaveClass(/is-active/);
+  await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
+
+  await page.locator('[data-message-id="302"]').click();
+  await expect(page.locator('[data-message-wrap="302"]')).not.toHaveClass(/is-selected/);
 });
 
 test('Checkbox bestätigt und hebt Bestätigung wieder auf', async ({ page }) => {
