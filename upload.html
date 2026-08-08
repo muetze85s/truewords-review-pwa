@@ -3,77 +3,79 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f3f2ef">
+  <meta name="theme-color" content="#f3f4f6">
   <meta name="robots" content="noindex,nofollow">
-  <title>TrueWords · Test 3 vorbereiten</title>
-  <link rel="stylesheet" href="./portal.css?v=13">
-  <link rel="stylesheet" href="./truewords-ui-theme.css?v=2">
-  <script src="./truewords-ui-theme.js?v=2"></script>
+  <title>TrueWords · Test 4 vorbereiten</title>
+  <link rel="stylesheet" href="./truewords-ui-theme.css?v=3">
+  <link rel="stylesheet" href="./portal.css?v=15">
+  <script src="./truewords-ui-theme.js?v=3"></script>
 </head>
 <body>
   <main class="page">
     <div class="shell">
       <section class="card">
-        <div class="portal-brand">
-          <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
-          <span><strong>TrueWords</strong><small>Gemeinsame Prüfung</small></span>
-        </div>
         <div class="header">
           <div>
-            <div class="eyebrow">Segmentierung · Test 3</div>
-            <h1>Unabhängigen V3-Prüfstand starten</h1>
-            <p class="intro">Für jeden Test wird immer der vollständige unveränderte Telegram-Originalexport verwendet. Die zweite Datei enthält den Testfilter, die vom <strong>TrueWords-Segmentierungsalgorithmus V3</strong> erzeugten Situationsvorschläge und die feste Prüfaufteilung. Für die Grenzziehung wird keine externe Sprach-KI benötigt.</p>
+            <div class="portal-brand">
+              <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+              <span><strong>TrueWords</strong><small>Review-PWA</small></span>
+            </div>
+            <div class="eyebrow" style="margin-top:1.3rem">Segmentierung · Test 4</div>
+            <h1>V4 auf einem neuen ungesehenen Abschnitt prüfen.</h1>
+            <p class="intro">Test 4 verwendet den nächsten noch ungeprüften Ereignisblock nach Test 3. Die Grenzen erzeugt ausschließlich der lokale deterministische TrueWords-V4-Algorithmus.</p>
+            <span class="test-badge">Situation = Konversation · Zeitabstand allein erzeugt keine Grenze</span>
           </div>
-          <div class="account"><span id="account-email"></span><br><button id="logout" class="secondary" type="button" style="margin-top:7px;padding:7px 10px">Abmelden</button></div>
+          <div class="account"><span id="account-email"></span><button id="logout" class="secondary" type="button">Abmelden</button></div>
         </div>
       </section>
 
       <form id="upload-form">
-        <section class="card upload-card">
-          <div class="eyebrow">Datei 1 von 2</div>
-          <h2>Vollständigen Telegram-Rohchat auswählen</h2>
-          <p class="muted">Erforderlich ist immer derselbe vollständige, unveränderte Telegram-Originalexport mit <strong>73.946 Exportereignissen</strong>. Gekürzte Jahres- oder Testdateien werden abgelehnt.</p>
-          <label style="margin-top:14px">
-            <span>Vollständiger Telegram-Originalexport</span>
-            <input id="raw-file" type="file" accept=".json,application/json" required>
-            <small>SHA-256, vollständige Ereigniszahl und verlustfreie 2026-Aufbereitung werden geprüft.</small>
-          </label>
-        </section>
+        <div class="upload-bento">
+          <div class="upload-stack">
+            <section class="card upload-card">
+              <div class="eyebrow">Originalquelle</div>
+              <h2>Vollständigen Telegram-Rohchat auswählen</h2>
+              <p class="intro">Erforderlich ist der unveränderte Originalexport mit 73.946 Ereignissen. Testfilter und V4-Vorschläge werden anschließend lokal im Browser erzeugt. Eine zweite Vorselektionsdatei ist nicht mehr erforderlich.</p>
+              <label style="margin-top:16px">
+                <span>Philena_chat(2).json</span>
+                <input id="raw-file" type="file" accept=".json,application/json" required>
+                <small>SHA-256, Ereigniszahl, Verlustfreiheit und Reply-Bezüge werden geprüft.</small>
+              </label>
+              <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
+            </section>
 
-        <section class="card upload-card">
-          <div class="eyebrow">Datei 2 von 2</div>
-          <h2>TrueWords-V3-Vorschläge mit Testfilter und Prüfaufteilung</h2>
-          <p class="muted">Verwende <strong>truewords-ki-vorselektion-pilot-v3-unseen-fullsource-owners.json</strong>. Der Dateiname ist historisch; die 12 Situationsvorschläge wurden mit dem <strong>TrueWords-Segmentierungsalgorithmus V3</strong> erzeugt. Enthalten sind außerdem 335 Testereignisse und die feste Aufteilung Philipp 1–6 / Lena 7–12.</p>
-          <label style="margin-top:14px">
-            <span>TrueWords V3 + Testfilter + Owner</span>
-            <input id="preselection-file" type="file" accept=".json,application/json" required>
-            <small>Algorithmus-Vorschläge und Owner-Zuordnung werden geprüft und unverändert im Prüfstand gespeichert.</small>
-          </label>
-          <div id="detected-files" class="status" role="status" aria-live="polite">Noch keine Datei ausgewählt.</div>
-        </section>
+            <section class="card">
+              <div class="eyebrow">Test-4-Status</div>
+              <h2>Test 3 bleibt unverändert erhalten</h2>
+              <div class="notice">Test 4 erstellt einen eigenen Datensatz und eine eigene Analyseversion. Test 3 wird weder überschrieben noch neu segmentiert. Beim Aktivieren wird Test 4 lediglich zum aktuellen Prüfstand.</div>
+              <div class="actions">
+                <button id="submit" class="primary" type="submit" disabled>Test 4 erzeugen und aktivieren</button>
+                <button id="skip" class="secondary" type="button">Zum Prüfstand</button>
+              </div>
+              <div id="progress-wrap" class="progress-wrap" hidden>
+                <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
+                <progress id="progress" max="100" value="0"></progress>
+                <div id="progress-detail" class="progress-detail"></div>
+              </div>
+              <div id="status" class="status" role="status" aria-live="polite">Vollständigen Telegram-Originalexport auswählen.</div>
+            </section>
+          </div>
 
-        <input id="dataset-id" type="hidden" value="philena-2026-pilot-v3-unseen">
-        <input id="dataset-name" type="hidden" value="Philipp & Lena · Test 3 · V3 ungesehener Ereignisstrom">
-
-        <section class="card">
-          <div class="notice">
-            Test 2 bleibt als abgeschlossener Goldstandard erhalten. Test 3 verwendet einen neuen, zuvor ungeprüften Zeitraum, die unveränderte V3-Logik und dieselbe Halbteilung der Prüfung wie Test 2.
-          </div>
-          <div class="actions">
-            <button id="submit" class="primary" type="submit">Rohchat und TrueWords-V3-Vorschläge prüfen · Test 3 starten</button>
-            <button id="skip" class="secondary" type="button">Weiter ohne Upload</button>
-          </div>
-          <div id="progress-wrap" class="progress-wrap" hidden>
-            <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
-            <progress id="progress" max="100" value="0"></progress>
-            <div id="progress-detail" class="progress-detail"></div>
-          </div>
-          <div id="status" class="status" role="status" aria-live="polite">Vollständigen Rohchat und TrueWords-V3-Vorschlagsdatei auswählen.</div>
-        </section>
+          <section class="card">
+            <div class="eyebrow">V4-Regel</div>
+            <h2>Konversationskontinuität statt Uhr</h2>
+            <div class="rule-list">
+              <div class="rule-row"><span>1</span><div><b>Zeit trennt nicht allein.</b><p>Arbeit, Schlaf oder Zeitverschiebung können eine Antwort um Stunden verzögern.</p></div></div>
+              <div class="rule-row"><span>2</span><div><b>Offene Frage hält die Konversation offen.</b><p>Eine erkennbare Antwort bleibt derselben Situation zugeordnet, auch wenn sie später kommt.</p></div></div>
+              <div class="rule-row"><span>3</span><div><b>Neue Kontaktaufnahme kann trennen.</b><p>Ein neuer Anruf, klarer neuer Einstieg oder ein vorheriger Abschluss sind echte Grenzsignale.</p></div></div>
+              <div class="rule-row"><span>4</span><div><b>Keine gestückelten Situationen.</b><p>Eine beendete Situation wird nach einer dazwischenliegenden anderen Konversation nicht wieder geöffnet; spätere Replies bleiben nur als Bezug erhalten.</p></div></div>
+            </div>
+          </section>
+        </div>
       </form>
     </div>
   </main>
   <script src="./pilot-v2.js?v=2"></script>
-  <script src="./upload.js?v=15"></script>
+  <script type="module" src="./upload.js?v=16"></script>
 </body>
 </html>
