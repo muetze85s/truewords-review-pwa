@@ -93,34 +93,46 @@
     });
   }
 
-  function activeSliderIndex() {
-    const id = activeId();
+  function sliderIndexForId(id) {
     return [...document.querySelectorAll('[data-slider-situation]')]
-      .findIndex((node) => String(node.dataset.sliderSituation) === id);
+      .findIndex((node) => String(node.dataset.sliderSituation) === String(id));
   }
 
-  function centerSlider(jump = false) {
+  function centerSliderId(id, jump = false) {
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
-    const index = activeSliderIndex();
+    const index = sliderIndexForId(id);
     if (!embla || index < 0) return;
     try {
       embla.scrollTo?.(index, jump);
     } catch (_) {
-      /* V30 remains the functional owner of slider navigation. */
+      /* V30 remains the functional owner of drag/navigation semantics. */
     }
+  }
+
+  function centerSlider(jump = false) {
+    centerSliderId(activeId(), jump);
+  }
+
+  function settleSliderId(id) {
+    requestAnimationFrame(() => {
+      centerSliderId(id, true);
+      requestAnimationFrame(() => centerSliderId(id, true));
+    });
+    setTimeout(() => centerSliderId(id, true), 90);
   }
 
   function reflowSlider() {
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
-    const index = activeSliderIndex();
+    const id = activeId();
+    const index = sliderIndexForId(id);
     if (!embla || index < 0) return;
     try {
       embla.reInit?.(EMBLA_OPTIONS);
       requestAnimationFrame(() => embla.scrollTo?.(index, true));
     } catch (_) {
-      centerSlider(true);
+      centerSliderId(id, true);
     }
   }
 
@@ -256,6 +268,12 @@
     const nodes = [...mutation.addedNodes, ...mutation.removedNodes].filter((node) => node.nodeType === Node.ELEMENT_NODE);
     return nodes.length > 0 && nodes.every((node) => node.classList?.contains('tw-v31-list-spacer'));
   }
+
+  app.addEventListener('click', (event) => {
+    const sliderItem = event.target.closest?.('[data-slider-situation]');
+    if (!sliderItem) return;
+    settleSliderId(sliderItem.dataset.sliderSituation);
+  });
 
   const observer = new MutationObserver((mutations) => {
     const relevant = mutations.some((mutation) => {
