@@ -38,8 +38,13 @@
     if (!firstMessages.length) return 0;
 
     const scrollRect = scroll.getBoundingClientRect();
-    const mobileOffset = document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden') ? 58 : 108;
-    const anchor = scrollRect.top + (window.innerWidth <= MOBILE_BREAKPOINT ? mobileOffset : 20);
+    const headerHidden = document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden');
+    const topInset = window.innerWidth <= MOBILE_BREAKPOINT ? (headerHidden ? 58 : 108) : 20;
+    const readableHeight = Math.max(1, scrollRect.height - topInset);
+    // Die aktive Situation folgt dem Lesebereich, nicht erst der oberen Kante.
+    // Dadurch wird die Situation hervorgehoben, die gerade überwiegend gelesen wird,
+    // ohne dass der Chat selbst an deren Anfang springt.
+    const anchor = scrollRect.top + topInset + readableHeight * 0.42;
     let candidate = Number(firstMessages[0].dataset.messageSituation || 0);
 
     for (const node of firstMessages) {
