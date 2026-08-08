@@ -44,17 +44,33 @@ function fixtureBootstrap() {
 }
 
 async function mockReviewApi(page) {
+  const current = structuredClone(fixtureBootstrap());
   let revision = 4;
+
   await page.route('**/api/review/bootstrap', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixtureBootstrap()) });
+    current.dataset.revision = revision;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
   });
+
   await page.route('**/api/state**', async (route) => {
     if (route.request().method() === 'PUT') {
+      const body = JSON.parse(route.request().postData() || '{}');
+      if (body.annotations) {
+        current.annotations = structuredClone(body.annotations);
+        for (const item of current.annotations.situations || []) {
+          if (!current.owners[String(item.id)]) current.owners[String(item.id)] = 'Philipp';
+        }
+      }
       revision += 1;
+      current.dataset.revision = revision;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, revision }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, dataset: { revision }, annotations: fixtureBootstrap().annotations, owners: fixtureBootstrap().owners }) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, dataset: { ...current.dataset, revision }, annotations: current.annotations, owners: current.owners }),
+    });
   });
   await page.route('**/api/auth/logout', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
 }
@@ -91,8 +107,6 @@ for (const theme of ['light', 'dark']) {
     await expect(card2).toContainText('Richtung');
     await expect(card2).toContainText('Muster');
 
-    // Navigate away and back. The second click uses a freshly re-rendered card and
-    // therefore verifies delegated navigation, not only the initial listeners.
     await page.locator('[data-situation-list] [data-open-situation="3"]').click();
     await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
     await page.locator('[data-situation-list] [data-open-situation="2"]').click();
@@ -105,7 +119,8 @@ for (const theme of ['light', 'dark']) {
     await page.locator('[data-message-id="105"]').click();
     await expect(page.getByRole('button', { name: 'Neue Situation ab hier' })).toBeVisible();
     await page.getByRole('button', { name: 'Neue Situation ab hier' }).click();
-    await expect(page.locator('[data-situation-list]')).toContainText('2A');
+    await expect(page.locator('[data-situation-list]')).toContainText('2A', { timeout: 8000 });
+    await expect(page.locator('[data-situation-list] [data-situation-card="5"]')).toHaveClass(/is-active/);
 
     const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
     await testInfo.attach(`review-v2-${theme}.png`, { body: screenshot, contentType: 'image/png' });
