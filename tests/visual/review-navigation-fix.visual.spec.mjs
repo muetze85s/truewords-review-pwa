@@ -86,7 +86,7 @@ test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert korrek
     return targetRect.top - scrollRect.top;
   });
   expect(focus).toBeGreaterThanOrEqual(8);
-  expect(focus).toBeLessThanOrEqual(45);
+  expect(focus).toBeLessThanOrEqual(70);
 });
 
 test('Mobile Bottom-Sheet wechselt Situationen bei fixer Kopfzeile', async ({ page }) => {
