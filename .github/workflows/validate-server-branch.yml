@@ -33,8 +33,9 @@ jobs:
           npm run build
           test -f dist/index.html
           test -f dist/review.html
-          test -f dist/review-v2-app.css
-          test -f dist/review-v2-app.js
+          test -f dist/review-v30.css
+          test -f dist/review-v30-app.js
+          test -f dist/vendor/embla-carousel.umd.js
           test -f dist/situation-info.html
           test -f dist/situation-info.css
           test -f dist/situation-info.js
@@ -54,19 +55,24 @@ jobs:
           test -f migrations/0005_balance_pilot_review_owners.sql
           test -f migrations/0006_situation_quiz.sql
 
-          grep -q 'review-v2-app.css' dist/review.html
-          grep -q 'review-v2-app.js' dist/review.html
-          ! grep -q 'review.js?v' dist/review.html
-          grep -q 'Neue Situation ab hier' dist/review-v2-app.js
-          grep -q 'truewordsNeedsCorrectedConfirmation' dist/review-v2-app.js
-          grep -q 'boundary_cross_owner_moved' dist/review-v2-app.js
-          grep -q 'data-situation-slider' dist/review-v2-app.js
-          grep -q 'Bestätigung zurücknehmen' dist/review-v2-app.js
-          grep -q '#F3F4F6' dist/review-v2-app.css
-          grep -q '#121214' dist/review-v2-app.css
-          grep -q '#1E1E22' dist/review-v2-app.css
-          grep -q 'border-radius:var(--radius)' dist/review-v2-app.css
-          ! grep -q 'backdrop-filter' dist/review-v2-app.css
+          grep -q 'review-v30.css' dist/review.html
+          grep -q 'vendor/embla-carousel.umd.js' dist/review.html
+          grep -q 'review-v30-app.js' dist/review.html
+          ! grep -q 'review-navigation-fix.js' dist/review.html
+          ! grep -q 'review-experience-v29.js' dist/review.html
+          ! grep -q 'review-v2-app.js' dist/review.html
+          grep -q 'Neue Situation ab hier' dist/review-v30-app.js
+          grep -q 'truewordsNeedsCorrectedConfirmation' dist/review-v30-app.js
+          grep -q 'data-situation-slider' dist/review-v30-app.js
+          grep -q 'Bestätigung zurücknehmen' dist/review-v30-app.js
+          grep -q 'EmblaCarousel' dist/review-v30-app.js
+          grep -q 'showModal' dist/review-v30-app.js
+          grep -q 'activeFromChatPosition' dist/review-v30-app.js
+          grep -q '#F3F4F6' dist/review-v30.css
+          grep -q '#121214' dist/review-v30.css
+          grep -q '#1E1E22' dist/review-v30.css
+          grep -q 'border-radius:var(--radius)' dist/review-v30.css
+          grep -q 'tw-embla-viewport' dist/review-v30.css
 
           grep -q 'exactTestFilterWindow' src/worker-review.ts
           grep -q 'truewords-test-filter/v1' src/worker-review.ts
