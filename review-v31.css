@@ -146,7 +146,6 @@ html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{
   .tw-v31-active-empty{padding:11px 0 1px;color:var(--muted);font-size:11px}
 
   .tw-slider{grid-row:3!important;background:var(--tw-review-panel)!important;border-block:1px solid var(--line)!important}
-  .tw-embla-container{padding-inline:calc(50% - 44px)!important}
   .tw-main{grid-row:4!important}
   .tw-chat-card{background:var(--tw-review-chat)!important}
   .tw-chat-scroll{background:var(--tw-review-stream)!important}
