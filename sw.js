@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v30';
+const CACHE = 'truewords-review-pwa-server-v31';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
@@ -13,6 +13,8 @@ const FILES = [
   './upload.js',
   './review-v30.css',
   './review-v30-app.js',
+  './review-v31.css',
+  './review-v31-ui.js',
   './vendor/embla-carousel.umd.js',
   './review-v2-app.css',
   './review-v2-app.js',
