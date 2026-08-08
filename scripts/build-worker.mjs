@@ -8,6 +8,7 @@ const files = [
   'review.html',
   'review-v2-app.css',
   'review-v2-app.js',
+  'review-v2-events.js',
   'review.css',
   'truewords-theme.css',
   'truewords-ui-theme.css',
