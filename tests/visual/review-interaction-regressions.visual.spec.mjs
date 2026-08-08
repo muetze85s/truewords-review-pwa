@@ -87,17 +87,17 @@ test('Scrollen aktiviert sichtbare Situation ohne Chat-Sprung und behält Nachri
   await page.locator('[data-message-id="302"]').click();
   await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
 
-  const requestedBottom = await page.locator('[data-chat-scroll]').evaluate((node) => {
-    const target = Math.max(0, node.scrollHeight - node.clientHeight);
-    node.scrollTop = target;
-    return target;
+  const beforeSyncTop = await page.locator('[data-chat-scroll]').evaluate((node) => {
+    node.scrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    return node.querySelector('[data-message-wrap="305"]')?.getBoundingClientRect().top ?? 0;
   });
+
   await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).not.toHaveClass(/is-active/);
   await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
 
-  const actualBottom = await page.locator('[data-chat-scroll]').evaluate((node) => node.scrollTop);
-  expect(Math.abs(actualBottom - requestedBottom)).toBeLessThanOrEqual(2);
+  const afterSyncTop = await page.locator('[data-message-wrap="305"]').evaluate((node) => node.getBoundingClientRect().top);
+  expect(Math.abs(afterSyncTop - beforeSyncTop)).toBeLessThanOrEqual(2);
 
   await page.locator('[data-chat-scroll]').evaluate((node) => { node.scrollTop = 0; });
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
