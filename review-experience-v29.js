@@ -4,6 +4,7 @@
   const MOBILE_BREAKPOINT = 840;
   let fadeFrame = 0;
   let centerFrame = 0;
+  let settleTimer = 0;
   let dragStartY = null;
 
   function firstName(value) {
@@ -23,9 +24,7 @@
 
   function applyPerspective() {
     const reviewer = currentReviewer().toLocaleLowerCase('de-DE');
-    if (reviewer === 'philipp' || reviewer === 'lena') {
-      document.documentElement.dataset.reviewer = reviewer;
-    }
+    if (reviewer === 'philipp' || reviewer === 'lena') document.documentElement.dataset.reviewer = reviewer;
   }
 
   function shortenDisplayedNames(root = document) {
@@ -63,7 +62,6 @@
       if (!id) return;
       const actions = boundary.querySelector('.tw-boundary-actions');
       if (!actions) return;
-
       let confirm = boundary.querySelector(`[data-confirm="${CSS.escape(id)}"]`);
       const endCard = document.querySelector(`[data-end-card="${CSS.escape(id)}"]`);
       if (!confirm) confirm = endCard?.querySelector(`[data-confirm="${CSS.escape(id)}"]`) || null;
@@ -71,7 +69,6 @@
         confirm.classList.add('tw-boundary-confirm');
         actions.append(confirm);
       }
-
       if (!confirm && !actions.querySelector('.tw-boundary-owner')) {
         const ownerLabel = endCard?.querySelector('.tw-sit-status')?.textContent?.trim();
         if (ownerLabel) {
@@ -142,8 +139,7 @@
     const scroll = document.querySelector('[data-chat-scroll]');
     if (!scroll) return;
     const viewport = scroll.getBoundingClientRect();
-    const nodes = scroll.querySelectorAll('.tw-message-wrap,.tw-group-label,.tw-boundary,.tw-day');
-    nodes.forEach((node) => {
+    scroll.querySelectorAll('.tw-message-wrap,.tw-group-label,.tw-boundary,.tw-day').forEach((node) => {
       const opacity = flowOpacity(node.getBoundingClientRect(), viewport, node.classList.contains('is-selected'));
       node.style.setProperty('--tw-flow-opacity', opacity.toFixed(3));
     });
@@ -158,7 +154,7 @@
     if (!list || list.clientHeight <= 0) return;
     const card = list.querySelector('[data-situation-card].is-active');
     if (!card) return;
-    const spacer = Math.max(24, Math.round(list.clientHeight * .5));
+    const spacer = Math.max(36, Math.round(list.clientHeight * .72));
     const px = `${spacer}px`;
     if (list.style.paddingTop !== px) list.style.paddingTop = px;
     if (list.style.paddingBottom !== px) list.style.paddingBottom = px;
@@ -178,17 +174,17 @@
 
   function centerAll(smooth = true) {
     centerFrame = 0;
-    if (window.innerWidth > MOBILE_BREAKPOINT) {
-      centerVerticalList(document.querySelector('[data-situation-list]'), smooth);
-    }
+    if (window.innerWidth > MOBILE_BREAKPOINT) centerVerticalList(document.querySelector('[data-situation-list]'), smooth);
     const drawer = document.querySelector('[data-drawer]');
-    if (drawer?.classList.contains('is-open')) {
-      centerVerticalList(document.querySelector('[data-drawer-list]'), smooth);
-    }
+    if (drawer?.classList.contains('is-open')) centerVerticalList(document.querySelector('[data-drawer-list]'), smooth);
     centerHorizontalSlider(smooth);
     fadeSituationList(document.querySelector('[data-situation-list]'));
     fadeSituationList(document.querySelector('[data-drawer-list]'));
     fadeSlider();
+    if (smooth) {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => centerAll(false), 320);
+    }
   }
 
   function scheduleCenter(smooth = true) {
@@ -222,9 +218,7 @@
     }, { passive: true });
     panel.addEventListener('touchend', (event) => {
       const endY = event.changedTouches?.[0]?.clientY;
-      if (dragStartY !== null && Number.isFinite(endY) && endY - dragStartY > 85) {
-        document.querySelector('[data-close-drawer]')?.click();
-      }
+      if (dragStartY !== null && Number.isFinite(endY) && endY - dragStartY > 85) document.querySelector('[data-close-drawer]')?.click();
       dragStartY = null;
     }, { passive: true });
   }
@@ -238,18 +232,11 @@
       bindBottomSheetGestures();
       enhance(app);
     });
-    observer.observe(app, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'data-status'],
-    });
+    observer.observe(app, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-status'] });
   }
 
   document.addEventListener('change', (event) => {
-    if (event.target?.id === 'reviewer-select') {
-      requestAnimationFrame(() => enhance(document));
-    }
+    if (event.target?.id === 'reviewer-select') requestAnimationFrame(() => enhance(document));
   }, true);
 
   window.addEventListener('truewords:active-situation-change', () => {
