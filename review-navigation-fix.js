@@ -7,7 +7,6 @@
   const nativeAddEventListener = EventTarget.prototype.addEventListener;
   const messageClickHandlers = new Map();
   const confirmationClickHandlers = new Map();
-  const splitClickHandlers = new Map();
   const boundaryClickHandlers = new Map();
   const guardedChatScrolls = new WeakSet();
 
@@ -129,10 +128,7 @@
   function armStableAction() {
     const scroll = document.querySelector('[data-chat-scroll]');
     const snapshot = captureViewportSnapshot(scroll) || lastViewportSnapshot;
-    stableAction = {
-      snapshot,
-      expiresAt: performance.now() + 10_000,
-    };
+    stableAction = { snapshot, expiresAt: performance.now() + 10_000 };
     suppressChatFocus = true;
     clearTimeout(releaseTimer);
     releaseTimer = setTimeout(releaseStableAction, 10_000);
@@ -193,7 +189,6 @@
 
   function handlerKey(element) {
     if (element.matches('[data-confirm]')) return `confirm:${element.dataset.confirm || ''}`;
-    if (element.matches('[data-split-here]')) return `split:${element.dataset.splitHere || ''}`;
     if (element.matches('[data-boundary]')) return `boundary:${element.dataset.boundary || ''}`;
     return '';
   }
@@ -208,11 +203,6 @@
       if (this.matches?.('[data-confirm]')) {
         const key = handlerKey(this);
         if (key) confirmationClickHandlers.set(key, { listener, source: this });
-        return;
-      }
-      if (this.matches?.('[data-split-here]')) {
-        const key = handlerKey(this);
-        if (key) splitClickHandlers.set(key, { listener, source: this });
         return;
       }
       if (this.matches?.('[data-boundary]')) {
@@ -297,11 +287,10 @@
 
     const split = event.target.closest?.('[data-split-here]');
     if (split) {
-      const id = String(split.dataset.splitHere || '');
-      if (!id) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      runStored(splitClickHandlers, `split:${id}`, event);
+      // Split wird absichtlich vom delegierten Persistenz-Handler in review-v2-events.js
+      // verarbeitet, weil er nach dem Server-Save neu lädt. Wir sichern hier nur den
+      // aktuellen Viewport und lassen das Ereignis unverändert weiterlaufen.
+      armStableAction();
       return;
     }
 
