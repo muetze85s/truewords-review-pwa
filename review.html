@@ -20,6 +20,19 @@
     .tw-message-wrap.is-active.philipp .tw-message{background:rgba(53,190,180,.30)!important}
     .tw-message-wrap.is-active.lena .tw-message{background:rgba(242,108,131,.27)!important}
     .tw-message-wrap.is-selected:not(.is-active) .tw-message-menu{display:none!important}
+
+    /* Situationswechsel dürfen die Höhe des Chatverlaufs nicht verändern.
+       Grenz- und Abschlussbereiche behalten deshalb immer ihren Platz; nur ihre
+       Bedienung wird bei der aktiven Situation vollständig sichtbar. */
+    .tw-boundary{display:flex!important;min-height:44px;margin:7px 4px;padding:7px 10px;opacity:.16;pointer-events:none}
+    .tw-boundary .tw-boundary-actions{visibility:hidden}
+    .tw-boundary.is-active{opacity:1;pointer-events:auto}
+    .tw-boundary.is-active .tw-boundary-actions{visibility:visible}
+    .tw-end-card{display:flex!important;min-height:58px;margin:7px 0 22px;padding:10px 12px;opacity:.18;pointer-events:none}
+    .tw-end-card .tw-confirm,.tw-end-card .tw-sit-status{visibility:hidden}
+    .tw-end-card.is-active{opacity:1;pointer-events:auto}
+    .tw-end-card.is-active .tw-confirm,.tw-end-card.is-active .tw-sit-status{visibility:visible}
+
     html[data-theme="dark"] .tw-situation.is-active{background:#303038!important}
     html[data-theme="dark"] .tw-message-wrap.philipp .tw-message{background:rgba(53,190,180,.25)!important}
     html[data-theme="dark"] .tw-message-wrap.lena .tw-message{background:rgba(242,108,131,.23)!important}
@@ -29,6 +42,7 @@
   </style>
   <script src="./truewords-user-theme.js?v=1"></script>
   <script src="./review-navigation-fix.js?v=4" defer></script>
+  <script src="./review-sidebar-follow.js?v=1" defer></script>
   <script src="./review-v2-app.js?v=1" defer></script>
   <script src="./review-v2-events.js?v=1" defer></script>
 </head>
