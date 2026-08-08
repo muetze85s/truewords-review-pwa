@@ -16,14 +16,73 @@
   let mobileExpanded = false;
   let settleTimers = [];
 
-  /* Capture the Embla instance created by V30. V31 only re-initializes it
-     when the viewport itself changes size (for example iPad Split View). */
+  function installSliderEdges(viewport) {
+    const container = viewport?.querySelector('[data-situation-slider-container]') || viewport?.firstElementChild;
+    if (!container) return { count: 0 };
+    const realSlides = [...container.children].filter((node) => !node.classList.contains('tw-v31-slider-edge'));
+    if (!realSlides.length) return { count: 0 };
+
+    let before = container.querySelector(':scope > .tw-v31-slider-edge[data-edge="before"]');
+    let after = container.querySelector(':scope > .tw-v31-slider-edge[data-edge="after"]');
+    if (!before) {
+      before = document.createElement('div');
+      before.className = 'tw-embla-slide tw-v31-slider-edge';
+      before.dataset.edge = 'before';
+      before.setAttribute('aria-hidden', 'true');
+      container.prepend(before);
+    }
+    if (!after) {
+      after = document.createElement('div');
+      after.className = 'tw-embla-slide tw-v31-slider-edge';
+      after.dataset.edge = 'after';
+      after.setAttribute('aria-hidden', 'true');
+      container.append(after);
+    }
+
+    const sampleWidth = realSlides[0].getBoundingClientRect().width || 120;
+    const edgeSize = Math.max(0, viewport.clientWidth / 2 - sampleWidth / 2);
+    before.style.setProperty('--tw-v31-edge-size', `${edgeSize}px`);
+    after.style.setProperty('--tw-v31-edge-size', `${edgeSize}px`);
+    return { count: realSlides.length };
+  }
+
+  /* V30 owns Embla's interaction model. V31 adds two inert edge slides and
+     maps logical situation indices to physical Embla snaps. This lets every
+     real situation – including the first and last – sit exactly at center. */
   if (typeof window.EmblaCarousel === 'function' && !window.__twV31EmblaWrapped) {
     const factory = window.EmblaCarousel;
-    const wrapped = function (...args) {
-      const instance = factory(...args);
-      window.__twReviewEmbla = instance;
-      return instance;
+    const wrapped = function (viewport, options, plugins) {
+      let edgeState = installSliderEdges(viewport);
+      const raw = factory(viewport, options, plugins);
+      const api = new Proxy(raw, {
+        get(target, property) {
+          if (property === 'scrollTo') {
+            return (logicalIndex, jump) => {
+              const index = Math.max(0, Math.min(Math.max(0, edgeState.count - 1), Number(logicalIndex) || 0));
+              return target.scrollTo(index + 1, jump);
+            };
+          }
+          if (property === 'selectedScrollSnap') {
+            return () => {
+              const physical = Number(target.selectedScrollSnap()) || 0;
+              return Math.max(0, Math.min(Math.max(0, edgeState.count - 1), physical - 1));
+            };
+          }
+          if (property === 'scrollSnapList') {
+            return () => target.scrollSnapList().slice(1, -1);
+          }
+          if (property === 'reInit') {
+            return (nextOptions, nextPlugins) => {
+              edgeState = installSliderEdges(viewport);
+              return target.reInit(nextOptions, nextPlugins);
+            };
+          }
+          const value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      window.__twReviewEmbla = api;
+      return api;
     };
     Object.assign(wrapped, factory);
     window.EmblaCarousel = wrapped;
@@ -266,7 +325,7 @@
 
   function internalSpacerMutation(mutation) {
     const nodes = [...mutation.addedNodes, ...mutation.removedNodes].filter((node) => node.nodeType === Node.ELEMENT_NODE);
-    return nodes.length > 0 && nodes.every((node) => node.classList?.contains('tw-v31-list-spacer'));
+    return nodes.length > 0 && nodes.every((node) => node.classList?.contains('tw-v31-list-spacer') || node.classList?.contains('tw-v31-slider-edge'));
   }
 
   app.addEventListener('click', (event) => {
