@@ -147,6 +147,7 @@ html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{
 
   .tw-slider{grid-row:3!important;background:var(--tw-review-panel)!important;border-block:1px solid var(--line)!important}
   .tw-embla-slide{flex:0 0 120px!important}
+  .tw-v31-slider-edge{flex:0 0 var(--tw-v31-edge-size,0px)!important;min-width:0!important;padding:0!important;pointer-events:none!important}
   .tw-slider-item{width:112px!important}
   .tw-main{grid-row:4!important}
   .tw-chat-card{background:var(--tw-review-chat)!important}
