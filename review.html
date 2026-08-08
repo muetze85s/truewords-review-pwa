@@ -15,9 +15,15 @@
     .tw-sit-check{cursor:pointer}
     .tw-situation[data-status="confirmed"] .tw-sit-check,.tw-situation[data-status="corrected"] .tw-sit-check{background:var(--confirmed);border-color:var(--confirmed);color:#fff}
     .tw-confirm.done{background:var(--unclear)!important;color:#fff!important;border:1px solid var(--unclear)!important}
-    html[data-theme="dark"] .tw-situation.is-active{background:#2A2A30!important}
-    html[data-theme="dark"] .tw-message-wrap.is-active.philipp .tw-message{background:#24514E!important}
-    html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{background:#5A3B49!important}
+    .tw-message-wrap.philipp .tw-message{background:rgba(53,190,180,.18)!important}
+    .tw-message-wrap.lena .tw-message{background:rgba(242,108,131,.16)!important}
+    .tw-message-wrap.is-active.philipp .tw-message{background:rgba(53,190,180,.30)!important}
+    .tw-message-wrap.is-active.lena .tw-message{background:rgba(242,108,131,.27)!important}
+    html[data-theme="dark"] .tw-situation.is-active{background:#303038!important}
+    html[data-theme="dark"] .tw-message-wrap.philipp .tw-message{background:rgba(53,190,180,.25)!important}
+    html[data-theme="dark"] .tw-message-wrap.lena .tw-message{background:rgba(242,108,131,.23)!important}
+    html[data-theme="dark"] .tw-message-wrap.is-active.philipp .tw-message{background:rgba(53,190,180,.40)!important}
+    html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{background:rgba(242,108,131,.37)!important}
     @media(max-width:840px){.tw-chat-stream{padding-bottom:max(430px,62vh)!important}}
   </style>
   <script src="./truewords-user-theme.js?v=1"></script>
