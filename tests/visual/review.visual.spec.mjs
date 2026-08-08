@@ -85,17 +85,18 @@ for (const theme of ['light', 'dark']) {
     expect(backdrop).toBe('none');
     expect(backgroundImage).toBe('none');
 
-    await expect(page.locator('[data-situation-card="2"]')).toHaveClass(/is-active/);
-    await expect(page.locator('[data-situation-card="2"]')).toContainText('Klärung');
-    await expect(page.locator('[data-situation-card="2"]')).toContainText('Richtung');
-    await expect(page.locator('[data-situation-card="2"]')).toContainText('Muster');
+    const card2 = page.locator('[data-situation-list] [data-situation-card="2"]');
+    await expect(card2).toHaveClass(/is-active/);
+    await expect(card2).toContainText('Klärung');
+    await expect(card2).toContainText('Richtung');
+    await expect(card2).toContainText('Muster');
 
     // Navigate away and back. The second click uses a freshly re-rendered card and
     // therefore verifies delegated navigation, not only the initial listeners.
-    await page.locator('[data-open-situation="3"]').first().click();
-    await expect(page.locator('[data-situation-card="3"]')).toHaveClass(/is-active/);
-    await page.locator('[data-open-situation="2"]').first().click();
-    await expect(page.locator('[data-situation-card="2"]')).toHaveClass(/is-active/);
+    await page.locator('[data-situation-list] [data-open-situation="3"]').click();
+    await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
+    await page.locator('[data-situation-list] [data-open-situation="2"]').click();
+    await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
 
     const philippBg = await page.locator('.tw-message-wrap.philipp .tw-message').first().evaluate((node) => getComputedStyle(node).backgroundColor);
     const lenaBg = await page.locator('.tw-message-wrap.lena .tw-message').first().evaluate((node) => getComputedStyle(node).backgroundColor);
@@ -104,7 +105,7 @@ for (const theme of ['light', 'dark']) {
     await page.locator('[data-message-id="105"]').click();
     await expect(page.getByRole('button', { name: 'Neue Situation ab hier' })).toBeVisible();
     await page.getByRole('button', { name: 'Neue Situation ab hier' }).click();
-    await expect(page.locator('.tw-situation-list').first()).toContainText('2A');
+    await expect(page.locator('[data-situation-list]')).toContainText('2A');
 
     const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
     await testInfo.attach(`review-v2-${theme}.png`, { body: screenshot, contentType: 'image/png' });
