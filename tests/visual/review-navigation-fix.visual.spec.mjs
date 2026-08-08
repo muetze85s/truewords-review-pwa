@@ -97,7 +97,7 @@ test('Mobile Bottom-Sheet wechselt Situationen bei fixer Kopfzeile', async ({ pa
 
   await expect(page.locator('.tw-topbar')).toBeVisible();
   await expect(page.locator('[data-situation-slider]')).toBeVisible();
-  await expect(page.locator('.tw-bottom-nav')).toBeHidden();
+  await expect(page.locator('.tw-bottom-nav')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
@@ -109,12 +109,14 @@ test('Mobile Bottom-Sheet wechselt Situationen bei fixer Kopfzeile', async ({ pa
   await page.locator('[data-drawer-list] [data-open-situation="2"]').click();
   await expect(page.locator('[data-slider-situation="2"]')).toHaveClass(/is-active/);
 
+  // In V30 liegt der Chat als eigene Grid-Zeile bereits unter fester Kopfzeile
+  // und Embla-Slider. Deshalb ist kein künstlicher 145px-Innenabstand nötig.
   const focus = await page.locator('[data-message-situation="2"][data-situation-first="true"]').evaluate((node) => {
     const scroll = node.closest('[data-chat-scroll]');
     return node.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
   });
-  expect(focus).toBeGreaterThanOrEqual(145);
-  expect(focus).toBeLessThanOrEqual(190);
+  expect(focus).toBeGreaterThanOrEqual(8);
+  expect(focus).toBeLessThanOrEqual(70);
 });
 
 test('Login startet mit System und angemeldeter Nutzer erhält eigene Theme-Wahl', async ({ page }) => {
