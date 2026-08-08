@@ -70,10 +70,10 @@ test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert korrek
   await page.getByRole('button', { name: 'Bestätigung zurücknehmen' }).click();
   await expect(page.getByRole('button', { name: 'Situation bestätigen' })).toBeVisible();
   await page.getByRole('button', { name: 'Situation bestätigen' }).click();
-  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
 
-  // Regression: Der erste Wechsel rendert die Liste neu. Danach muss ein zweiter
-  // Klick weiterhin funktionieren.
+  await page.locator('[data-situation-list] [data-open-situation="2"]').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
   await page.locator('[data-situation-list] [data-open-situation="1"]').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
   await page.locator('[data-situation-list] [data-open-situation="2"]').click();
@@ -89,17 +89,23 @@ test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert korrek
   expect(focus).toBeLessThanOrEqual(45);
 });
 
-test('Mobiler Drawer kann mehrfach wechseln und hält Fokus unter Navigation', async ({ page }) => {
+test('Mobile Bottom-Sheet wechselt Situationen bei fixer Kopfzeile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockApis(page);
   await page.goto('/review.html');
   await page.locator('.tw-chat-scroll').waitFor({ state: 'visible' });
 
-  await page.getByRole('button', { name: 'Situationen' }).click();
+  await expect(page.locator('.tw-topbar')).toBeVisible();
+  await expect(page.locator('[data-situation-slider]')).toBeVisible();
+  await expect(page.locator('.tw-bottom-nav')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
+  await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
   await page.locator('[data-drawer-list] [data-open-situation="3"]').click();
   await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/);
 
-  await page.getByRole('button', { name: 'Situationen' }).click();
+  await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await page.locator('[data-drawer-list] [data-open-situation="2"]').click();
   await expect(page.locator('[data-slider-situation="2"]')).toHaveClass(/is-active/);
 
@@ -107,8 +113,8 @@ test('Mobiler Drawer kann mehrfach wechseln und hält Fokus unter Navigation', a
     const scroll = node.closest('[data-chat-scroll]');
     return node.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
   });
-  expect(focus).toBeGreaterThanOrEqual(90);
-  expect(focus).toBeLessThanOrEqual(135);
+  expect(focus).toBeGreaterThanOrEqual(145);
+  expect(focus).toBeLessThanOrEqual(190);
 });
 
 test('Login startet mit System und angemeldeter Nutzer erhält eigene Theme-Wahl', async ({ page }) => {
