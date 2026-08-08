@@ -6,6 +6,11 @@ on:
       - agent/server-synchronization
     paths:
       - '.github/workflows/deploy-test4-once.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/deploy-test4-once.yml'
 
 permissions:
   contents: read
