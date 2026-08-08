@@ -51,6 +51,9 @@ async function mockReviewApi(page) {
     current.dataset.revision = revision;
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) });
   });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, user: current.user }) });
+  });
 
   await page.route('**/api/state**', async (route) => {
     if (route.request().method() === 'PUT') {
@@ -78,7 +81,9 @@ async function mockReviewApi(page) {
 for (const theme of ['light', 'dark']) {
   test(`production Review V2 ${theme}`, async ({ page }, testInfo) => {
     await mockReviewApi(page);
-    await page.addInitScript((selectedTheme) => localStorage.setItem('truewords/theme', selectedTheme), theme);
+    await page.addInitScript((selectedTheme) => {
+      localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', selectedTheme);
+    }, theme);
     await page.goto('/review.html');
     await page.locator('.tw-workspace').waitFor({ state: 'visible' });
 
@@ -131,7 +136,7 @@ for (const theme of ['light', 'dark']) {
 test('Review V2 mobile header collapses to synchronized situation slider', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockReviewApi(page);
-  await page.addInitScript(() => localStorage.setItem('truewords/theme', 'dark'));
+  await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
   await page.goto('/review.html');
   await page.locator('.tw-chat-scroll').waitFor({ state: 'visible' });
 
