@@ -1,6 +1,9 @@
 (() => {
   'use strict';
 
+  let suppressScrollSyncUntil = 0;
+  let observer = null;
+
   function escapeHtml(value) {
     return String(value ?? '')
       .replaceAll('&', '&amp;')
@@ -8,6 +11,28 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function suppressAutomaticScrollSync(milliseconds = 700) {
+    suppressScrollSyncUntil = Math.max(suppressScrollSyncUntil, performance.now() + milliseconds);
+  }
+
+  function installScrollGuard() {
+    const scroll = document.querySelector('[data-chat-scroll]');
+    if (!scroll || scroll.dataset.explicitNavigationGuard === '1') return;
+    scroll.dataset.explicitNavigationGuard = '1';
+    scroll.addEventListener('scroll', (event) => {
+      if (performance.now() < suppressScrollSyncUntil) {
+        event.stopImmediatePropagation();
+      }
+    }, { capture: true, passive: true });
+  }
+
+  function watchForWorkspace() {
+    installScrollGuard();
+    if (observer) return;
+    observer = new MutationObserver(installScrollGuard);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   function closeDrawer() {
@@ -18,13 +43,12 @@
     document.querySelector('[data-detail-modal]')?.classList.remove('is-open');
   }
 
-  function scrollChatToSituation(id, behavior = 'smooth') {
-    const target = document.querySelector(
-      `[data-message-situation="${Number(id)}"][data-situation-first="true"]`,
-    );
-    if (!target) return false;
+  function navigateThroughCore(id) {
+    const proxy = document.querySelector(`[data-slider-situation="${Number(id)}"]`);
+    if (!proxy) return false;
+    suppressAutomaticScrollSync();
     closeDrawer();
-    target.scrollIntoView({ behavior, block: 'start' });
+    proxy.click();
     return true;
   }
 
@@ -48,13 +72,23 @@
     card.querySelector('input')?.focus();
   }
 
+  // Mark explicit navigation before the core target listener runs. The scroll guard
+  // then ignores only the programmatic scroll produced by that click. Ordinary
+  // user scrolling continues to use the first/last-message activation rule.
+  document.addEventListener('click', (event) => {
+    if (event.target.closest?.('[data-slider-situation], [data-open-situation], [data-nav="current"]')) {
+      suppressAutomaticScrollSync();
+    }
+  }, true);
+
   document.addEventListener('click', (event) => {
     // Situation cards are re-rendered whenever the active situation changes.
-    // Initial cards have core listeners; replacement cards are handled here.
+    // Their initial core listeners disappear with the old DOM node, so replacement
+    // cards delegate to the persistent slider button, which owns the real app state.
     const open = event.target.closest?.('[data-open-situation]');
     if (open) {
       const id = Number(open.dataset.openSituation || 0);
-      if (id && scrollChatToSituation(id)) event.preventDefault();
+      if (id && navigateThroughCore(id)) event.preventDefault();
       return;
     }
 
@@ -78,4 +112,6 @@
       closeModal();
     }
   });
+
+  watchForWorkspace();
 })();
