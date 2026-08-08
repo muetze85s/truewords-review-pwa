@@ -6,6 +6,8 @@ const dist = resolve(root, 'dist');
 const files = [
   'index.html',
   'review.html',
+  'review-v30.css',
+  'review-v30-app.js',
   'review-v2-app.css',
   'review-v2-app.js',
   'review-v2-events.js',
@@ -68,6 +70,12 @@ await mkdir(dist, { recursive: true });
 for (const file of files) {
   await cp(resolve(root, file), resolve(dist, file));
 }
+
+await mkdir(resolve(dist, 'vendor'), { recursive: true });
+await cp(
+  resolve(root, 'node_modules/embla-carousel/embla-carousel.umd.js'),
+  resolve(dist, 'vendor/embla-carousel.umd.js'),
+);
 
 await writeFile(resolve(dist, '.assetsignore'), '*.map\n', 'utf8');
 console.log(`Worker assets prepared in ${dist}`);
