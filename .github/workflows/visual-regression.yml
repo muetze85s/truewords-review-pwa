@@ -8,11 +8,13 @@ on:
     paths:
       - '**/*.css'
       - '**/*.html'
+      - 'review-v2-app.js'
       - 'review.js'
       - 'review-boundaries.js'
       - 'review-precision.js'
       - 'review-cross-owner-fix.js'
       - 'review-v2-situation.js'
+      - 'review-v2-timeline.js'
       - 'truewords-ui-theme.js'
       - 'situation-quiz.js'
       - 'icon.svg'
@@ -26,11 +28,13 @@ on:
     paths:
       - '**/*.css'
       - '**/*.html'
+      - 'review-v2-app.js'
       - 'review.js'
       - 'review-boundaries.js'
       - 'review-precision.js'
       - 'review-cross-owner-fix.js'
       - 'review-v2-situation.js'
+      - 'review-v2-timeline.js'
       - 'truewords-ui-theme.js'
       - 'situation-quiz.js'
       - 'icon.svg'
@@ -51,7 +55,7 @@ concurrency:
 
 jobs:
   screenshots:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
