@@ -7,6 +7,8 @@
   const messageClickHandlers = new Map();
   const guardedChatScrolls = new WeakSet();
   let manualScrollUntil = 0;
+  let scrollSyncFrame = 0;
+  let suppressChatFocus = false;
 
   function focusOffset() {
     if (window.innerWidth > MOBILE_BREAKPOINT) return 18;
@@ -24,12 +26,62 @@
     return current;
   }
 
+  function currentActiveSituationId() {
+    const slider = document.querySelector('[data-slider-situation].is-active');
+    if (slider) return Number(slider.dataset.sliderSituation || 0);
+    const card = document.querySelector('[data-situation-card].is-active');
+    return Number(card?.dataset.situationCard || 0);
+  }
+
+  function situationAtScrollAnchor(scroll) {
+    const firstMessages = [...scroll.querySelectorAll('[data-message-situation][data-situation-first="true"]')];
+    if (!firstMessages.length) return 0;
+
+    const scrollRect = scroll.getBoundingClientRect();
+    const mobileOffset = document.querySelector('[data-app-shell]')?.classList.contains('is-header-hidden') ? 58 : 108;
+    const anchor = scrollRect.top + (window.innerWidth <= MOBILE_BREAKPOINT ? mobileOffset : 20);
+    let candidate = Number(firstMessages[0].dataset.messageSituation || 0);
+
+    for (const node of firstMessages) {
+      if (node.getBoundingClientRect().top > anchor + 1) break;
+      const id = Number(node.dataset.messageSituation || 0);
+      if (id) candidate = id;
+    }
+    return candidate;
+  }
+
+  function activateSituationFromScroll(scroll) {
+    if (performance.now() < manualScrollUntil) return;
+    const id = situationAtScrollAnchor(scroll);
+    if (!id || id === currentActiveSituationId()) return;
+    const sliderButton = document.querySelector(`[data-slider-situation="${id}"]`);
+    if (!sliderButton) return;
+
+    // Die Kern-App muss ihren activeId aktualisieren, damit Header, Seitenleiste,
+    // Grenzen und Aktionen zur sichtbaren Situation passen. Der dabei normalerweise
+    // folgende scrollIntoView-Aufruf auf den Chat wird ausschließlich für diesen
+    // Scroll-Sync unterdrückt. Die aktuelle Scrollposition bleibt unverändert.
+    const top = scroll.scrollTop;
+    suppressChatFocus = true;
+    try {
+      sliderButton.click();
+    } finally {
+      suppressChatFocus = false;
+    }
+    if (Math.abs(scroll.scrollTop - top) > 0.5) scroll.scrollTop = top;
+  }
+
   function installPassiveChatScroll(scroll) {
     if (guardedChatScrolls.has(scroll)) return;
     guardedChatScrolls.add(scroll);
     let previousTop = scroll.scrollTop;
     nativeAddEventListener.call(scroll, 'scroll', () => {
       previousTop = updateMobileHeader(scroll, previousTop);
+      if (scrollSyncFrame) cancelAnimationFrame(scrollSyncFrame);
+      scrollSyncFrame = requestAnimationFrame(() => {
+        scrollSyncFrame = 0;
+        activateSituationFromScroll(scroll);
+      });
     }, { passive: true });
   }
 
@@ -49,8 +101,10 @@
       return;
     }
 
-    // Der Chat-Scroll darf die aktive Situation nicht mehr umschalten. Nur ein
-    // expliziter Klick auf Situation/Slider ändert den aktiven Fokus.
+    // Der ursprüngliche Scroll-Handler löscht beim Situationswechsel die aktuell
+    // markierte Nachricht. Wir ersetzen ihn durch einen passiven Sync, der dieselbe
+    // activeId über den Slider setzt, aber weder die Nachrichtenauswahl löscht noch
+    // den Chat an eine Grenze springt.
     if (type === 'scroll' && this instanceof Element && this.matches?.('[data-chat-scroll]')) {
       installPassiveChatScroll(this);
       return;
@@ -72,7 +126,14 @@
 
   Element.prototype.scrollIntoView = function patchedScrollIntoView(options) {
     const block = options && typeof options === 'object' ? options.block : undefined;
-    if (block === 'start' && this.closest?.('[data-chat-scroll]') && scrollElementIntoChatView(this)) return;
+    const chat = this.closest?.('[data-chat-scroll]');
+    if (chat) {
+      if (suppressChatFocus) return;
+      if (block === 'start' && scrollElementIntoChatView(this)) return;
+      // Eine angeklickte Nachricht befindet sich bereits im sichtbaren Bereich.
+      // Das erneute Rendern ihrer Aktionszeile darf den Chat daher nicht bewegen.
+      if (block === 'nearest' && this.matches?.('[data-message-wrap]')) return;
+    }
     return nativeScrollIntoView.call(this, options);
   };
 
