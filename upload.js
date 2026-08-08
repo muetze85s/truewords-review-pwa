@@ -162,7 +162,7 @@
       || typeof assignment.owners !== 'object'
       || Array.isArray(assignment.owners)
     ) {
-      throw new Error('Die KI-Datei enthält keine gültige Prüfaufteilung.');
+      throw new Error('Die TrueWords-V3-Datei enthält keine gültige Prüfaufteilung.');
     }
     const sorted = [...situationIds].sort((left, right) => left - right);
     const split = Math.ceil(sorted.length / 2);
@@ -183,16 +183,16 @@
 
   function validatePreselection(annotations, reviewMessageIds) {
     if (annotations?.schemaVersion !== 'truewords-manual-segmentation/v3-unseen') {
-      throw new Error('Die KI-Datei hat nicht das erwartete Test-3-Format.');
+      throw new Error('Die TrueWords-V3-Datei hat nicht das erwartete Test-3-Format.');
     }
     if (annotations.datasetHash !== ORIGINAL_SOURCE_SHA256) {
-      throw new Error('Rohchat und KI-Datei gehören nicht zur selben Originalquelle.');
+      throw new Error('Rohchat und TrueWords-V3-Datei gehören nicht zur selben Originalquelle.');
     }
     if (!Array.isArray(annotations.situations) || annotations.situations.length !== PRESELECTION_SITUATIONS) {
-      throw new Error(`Die KI-Datei muss exakt ${PRESELECTION_SITUATIONS} Situationen enthalten.`);
+      throw new Error(`Die TrueWords-V3-Datei muss exakt ${PRESELECTION_SITUATIONS} Situationen enthalten.`);
     }
     if (!annotations.assignments || typeof annotations.assignments !== 'object' || Array.isArray(annotations.assignments)) {
-      throw new Error('Die KI-Datei enthält keine gültigen Ereigniszuordnungen.');
+      throw new Error('Die TrueWords-V3-Datei enthält keine gültigen Ereigniszuordnungen.');
     }
 
     const situationIds = annotations.situations.map((item) => Number(item?.id));
@@ -201,7 +201,7 @@
       uniqueSituationIds.size !== PRESELECTION_SITUATIONS
       || situationIds.some((id) => !Number.isInteger(id) || id <= 0)
     ) {
-      throw new Error('Die KI-Datei enthält ungültige oder doppelte Situations-IDs.');
+      throw new Error('Die TrueWords-V3-Datei enthält ungültige oder doppelte Situations-IDs.');
     }
     const owners = validateOwners(annotations, uniqueSituationIds);
 
@@ -226,7 +226,7 @@
 
     const assignments = Object.entries(annotations.assignments);
     if (assignments.length !== PRESELECTION_ASSIGNMENTS) {
-      throw new Error(`Die KI-Datei muss exakt ${PRESELECTION_ASSIGNMENTS} Ereigniszuordnungen enthalten.`);
+      throw new Error(`Die TrueWords-V3-Datei muss exakt ${PRESELECTION_ASSIGNMENTS} Ereigniszuordnungen enthalten.`);
     }
     for (const [messageId, situationId] of assignments) {
       if (!filteredIds.has(String(messageId))) throw new Error(`Ereignis ${messageId} liegt außerhalb des Testfilters.`);
@@ -247,7 +247,7 @@
       || integrity?.allSelectedEventsAssignedOrExcluded !== true
       || integrity?.fullOriginalRequired !== true
     ) {
-      throw new Error('Die KI-Datei besteht ihre Integritätsprüfung nicht.');
+      throw new Error('Die TrueWords-V3-Datei besteht ihre Integritätsprüfung nicht.');
     }
     return { owners, filteredIds };
   }
@@ -259,11 +259,11 @@
     if (!rawFile && !preselectionFile) {
       detectedFiles.textContent = 'Noch keine Datei ausgewählt.';
       detectedFiles.dataset.state = 'idle';
-      setStatus('Vollständigen Telegram-Rohchat und KI-Datei auswählen.');
+      setStatus('Vollständigen Telegram-Rohchat und TrueWords-V3-Datei auswählen.');
       return;
     }
     if (!rawFile || !preselectionFile) {
-      const missing = rawFile ? 'KI-Vorselektionsdatei' : 'vollständigen Telegram-Rohchat';
+      const missing = rawFile ? 'TrueWords-V3-Vorschlagsdatei' : 'vollständigen Telegram-Rohchat';
       detectedFiles.textContent = `Noch den ${missing} auswählen.`;
       detectedFiles.dataset.state = 'idle';
       setStatus(`Beide Dateien sind erforderlich. Es fehlt: ${missing}.`);
@@ -271,7 +271,7 @@
     }
 
     submit.disabled = true;
-    detectedFiles.textContent = 'Originalexport, Testfilter, Vorschläge und Prüfaufteilung werden geprüft …';
+    detectedFiles.textContent = 'Originalexport, Testfilter, Algorithmus-Vorschläge und Prüfaufteilung werden geprüft …';
     detectedFiles.dataset.state = 'working';
     setStatus('Beide Dateien werden lokal gelesen und vollständig gegeneinander geprüft …', 'working');
     setProgress(1, 'Dateien werden gelesen …', `${rawFile.name} · ${preselectionFile.name}`);
@@ -289,11 +289,11 @@
         throw new Error('Falscher Rohchat: Erforderlich ist immer der vollständige unveränderte Telegram-Originalexport mit 73.946 Ereignissen.');
       }
       if (preselectionFileHash !== PRESELECTION_SHA256) {
-        throw new Error('Falsche KI-Datei: Verwende die Test-3-Datei mit integriertem Testfilter und Prüfaufteilung.');
+        throw new Error('Falsche TrueWords-V3-Datei: Verwende die Test-3-Datei mit integriertem Testfilter und Prüfaufteilung.');
       }
 
       const original = parseJson(rawText, 'Der Telegram-Originalexport');
-      const annotations = parseJson(preselectionText, 'Die KI-Vorselektionsdatei');
+      const annotations = parseJson(preselectionText, 'Die TrueWords-V3-Vorschlagsdatei');
       const chat = losslessChatFromOriginal(original, pilot, rawFile.name);
       const messageIds = new Set(chat.messages.map((message) => String(message?.id ?? '')));
       if (messageIds.size !== REVIEW_EVENTS) throw new Error('Der 2026-Ereignisstrom enthält fehlende oder doppelte IDs.');
@@ -314,17 +314,17 @@
         <div><strong>Vollständiger Telegram-Rohchat:</strong> ${escapeHtml(rawFile.name)} · ${ORIGINAL_SOURCE_EVENTS.toLocaleString('de-DE')} Originalereignisse</div>
         <div><strong>Verlustfreier Prüfstrom:</strong> ${REVIEW_EVENTS.toLocaleString('de-DE')} Ereignisse aus 2026 · stille Verluste: 0</div>
         <div><strong>Testfilter:</strong> ${FILTER_EVENTS} Ereignisse · IDs ${escapeHtml(annotations.testFilter.selection.firstEventId)}–${escapeHtml(annotations.testFilter.selection.lastEventId)}</div>
-        <div><strong>KI-Vorselektion:</strong> ${annotations.situations.length} Situationen · ${Object.keys(annotations.assignments).length} Zuordnungen</div>
+        <div><strong>TrueWords V3:</strong> ${annotations.situations.length} Situationsvorschläge · ${Object.keys(annotations.assignments).length} Zuordnungen</div>
         <div><strong>Prüfaufteilung:</strong> Philipp 1–6 · Lena 7–12</div>`;
       detectedFiles.dataset.state = 'ok';
-      setProgress(8, 'Test 3 ist vorbereitet', 'Originalquelle, Testfilter, KI-Vorschläge und Owner stimmen überein');
+      setProgress(8, 'Test 3 ist vorbereitet', 'Originalquelle, Testfilter, TrueWords-V3-Vorschläge und Owner stimmen überein');
       setStatus('Beide Dateien sind vollständig. Test 3 kann hochgeladen und aktiviert werden.', 'ok');
     } catch (caught) {
       selected = null;
       detectedFiles.textContent = caught?.message || 'Dateiprüfung fehlgeschlagen.';
       detectedFiles.dataset.state = 'error';
       progressLabel.textContent = 'Vorbereitung abgebrochen';
-      progressDetail.textContent = 'Vollständiger Originalexport und aktuelle KI-Datei müssen exakt zusammenpassen.';
+      progressDetail.textContent = 'Vollständiger Originalexport und aktuelle TrueWords-V3-Datei müssen exakt zusammenpassen.';
       setStatus(caught?.message || 'Dateiprüfung fehlgeschlagen.', 'error');
     } finally {
       submit.disabled = false;
@@ -417,16 +417,19 @@
     const span = rangeEnd - rangeStart;
     setProgress(
       rangeStart + span * 0.1,
-      'KI-Datei wird geprüft …',
+      'TrueWords-V3-Vorschläge werden geprüft …',
       `${annotations.situations.length} Situationen · Philipp 6 · Lena 6`,
     );
     const result = await apiPost('/api/admin/analysis-versions/import', {
       datasetId: DATASET_ID,
       versionId: 'pilot-v3-unseen-fullsource-owners',
-      label: `KI-Vorselektion V3 · ${annotations.situations.length} Situationen · Test 3`,
-      source: 'chatgpt-ai-preselection-v3-unseen-fullsource',
+      label: `TrueWords-Segmentierungsalgorithmus V3 · ${annotations.situations.length} Situationen · Test 3`,
+      source: 'truewords-segmentation-v3-unseen',
       parameters: {
         ...(annotations.preselection || {}),
+        segmentationEngine: 'TrueWords Segmentation V3',
+        boundarySource: 'local-deterministic-algorithm',
+        externalLlmBoundaryGeneration: false,
         testFilter: annotations.testFilter,
         ownerAssignment: annotations.ownerAssignment,
         sourceFileHash: entry.preselectionFileHash,
@@ -464,7 +467,7 @@
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selected) {
-      setStatus('Zuerst den vollständigen Telegram-Rohchat und die aktuelle KI-Datei auswählen.', 'error');
+      setStatus('Zuerst den vollständigen Telegram-Rohchat und die aktuelle TrueWords-V3-Datei auswählen.', 'error');
       return;
     }
     submit.disabled = true;
@@ -476,7 +479,7 @@
       await uploadRaw(selected, 8, 86);
       await uploadAnalysis(selected, 86, 100);
       setProgress(100, 'Test 3 ist bereit', 'Prüfansicht wird geöffnet …');
-      setStatus('Test 3 wurde mit vollständigem Rohchat, Testfilter, KI-Vorschlägen und Prüfaufteilung aktiviert.', 'ok');
+      setStatus('Test 3 wurde mit vollständigem Rohchat, Testfilter, TrueWords-V3-Vorschlägen und Prüfaufteilung aktiviert.', 'ok');
       setTimeout(() => location.replace('/review.html'), 900);
     } catch (caught) {
       const details = caught?.details;
