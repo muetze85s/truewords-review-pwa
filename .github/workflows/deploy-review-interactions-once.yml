@@ -60,3 +60,5 @@ jobs:
           curl --silent --show-error -D review-headers.txt -o /dev/null "$base/review.html"
           grep -Eq '^HTTP/.* 302' review-headers.txt
           grep -Eqi '^location: /login.html' review-headers.txt
+
+# one-time trigger
