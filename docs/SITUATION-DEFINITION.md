@@ -1,76 +1,77 @@
 # TrueWords: verbindliche Definition einer Situation
 
-Status: verbindliche Arbeitsdefinition für Segmentierung, Prüfstand und spätere TrueWords-Analyse.
+Status: verbindliche Arbeitsdefinition für Segmentierung, Prüfstand und spätere TrueWords-Analyse ab Test 4.
 
 ## Kurzdefinition
 
-> **Eine Situation ist eine zusammenhängende Gesprächsepisode zwischen den Partnern.**
+> **Situation = Konversation.**
 
-Eine Situation beschreibt **nicht ein einzelnes Thema**, sondern einen zusammenhängenden kommunikativen Vorgang mit erkennbarem Beginn, Verlauf und Ende beziehungsweise Abbruch.
+Eine Situation ist eine **zusammenhängende Konversation zwischen den Partnern**. Sie bildet einen chronologisch zusammenhängenden Kommunikationsabschnitt. Ein übergeordnetes Gespräch kann sich über mehrere Konversationen beziehungsweise Situationen erstrecken.
+
+## Begriffe
+
+- **Gespräch** = übergeordneter Kommunikationsverlauf. Er kann mehrere Konversationen umfassen und später wieder aufgegriffen werden.
+- **Situation / Konversation** = ein zusammenhängender konkreter Kommunikationsabschnitt.
+- **Thema** = worüber innerhalb einer oder mehrerer Konversationen gesprochen wird.
+- **Muster/Ereignis** = kommunikative Dynamik innerhalb einer Situation, zum Beispiel Rechtfertigung, Rückzug, Gegenkritik, Reparatur oder Annäherung.
 
 ## Was daraus folgt
 
 - Eine Situation kann mehrere Themen enthalten.
 - Ein Themenwechsel allein erzeugt keine neue Situation.
 - Dasselbe Thema kann in mehreren Situationen vorkommen.
-- Eine Zeitpause allein erzeugt keine neue Situation.
-- Eine Situation kann sich über Stunden oder über Nacht fortsetzen, wenn der Gesprächsvorgang erkennbar offen geblieben ist und später unmittelbar daran angeknüpft wird.
-- Eine neue Situation beginnt, wenn der vorherige Gesprächsvorgang beendet oder abgebrochen war und später ein neuer eigenständiger Gesprächsvorgang startet – auch wenn dabei wieder dasselbe Thema aufgegriffen wird.
-- Antworten, Reply-Verknüpfungen und inhaltliche Bezüge sind Hinweise auf Zusammenhang, aber keine automatische Garantie dafür, dass es noch dieselbe Situation ist.
+- Eine Zeitpause allein erzeugt **niemals** eine neue Situation.
+- Eine Situation kann über Stunden oder über Nacht laufen, wenn dieselbe Konversation wegen Arbeit, Schlaf, Zeitverschiebung oder anderer Verfügbarkeit nur verzögert fortgesetzt wird.
+- Eine direkte Antwort auf eine noch offene Frage kann deshalb auch nach mehreren Stunden zur selben Situation gehören.
+- Eine neue Situation beginnt, wenn eine **neue eigenständige Konversation** eröffnet wird: zum Beispiel nach erkennbarem Abschluss, durch einen neuen Kontaktversuch oder durch einen klaren neuen Gesprächseinstieg.
+- Ein späterer Reply oder Rückbezug kann Situationen miteinander verbinden. Er darf eine bereits beendete Situation aber nicht über eine dazwischenliegende andere Situation hinweg wieder öffnen.
+- Jede Situation bleibt ein zusammenhängender chronologischer Bereich. Konstruktionen wie `4,4,4,6,4,4` sind unzulässig.
 
-## Beispiele
+## Asynchrone Kommunikation
 
-### Eine Situation trotz mehrerer Themen
+Zeitabstände sind nur Indizien. Beispiel:
 
-10:00 Organisation des Tages → Terminfrage → alter Streit von vorgestern → zurück zur Tagesplanung, ohne dass das laufende Gespräch abreißt.
+08:00 Lena: „Kannst du heute beim Vermieter anrufen?“  
+12:00 Philipp: „Ja, mache ich in der Mittagspause.“  
+16:00 Lena: „Hat es geklappt?“  
+20:00 Philipp: „Ja, Termin ist Donnerstag.“
 
-**Ergebnis: eine Situation.** Die Themen wechseln, der Gesprächsvorgang bleibt zusammenhängend.
+**Ergebnis: eine Situation.** Die Antworten kommen jeweils vier Stunden später, aber die Konversation bleibt dieselbe.
 
-### Zwei Situationen trotz gleichen Themas
+## Neue Konversation trotz gleichem Gespräch
 
-10:00–10:30 Streit über Geld; das Gespräch endet. Um 18:00 beginnt erneut: „Ich möchte noch einmal über heute Morgen sprechen.“
+Eine frühere Konversation kann später aufgegriffen werden:
 
-**Ergebnis: zwei Situationen.** Das Thema ist gleich, aber es handelt sich um zwei getrennte Gesprächsepisoden.
+Situation 1: abendlicher Kontaktversuch und offene Frage.  
+Situation 2: später beginnt eine neue eigenständige Konversation und nimmt einen Punkt von Situation 1 wieder auf.
 
-### Pause über Nacht kann dieselbe Situation bleiben
-
-Abends bleibt eine konkrete Frage oder Klärung offen. Am nächsten Morgen wird ohne neuen Gesprächseinstieg direkt auf genau diese offene Klärung reagiert.
-
-**Ergebnis: kann dieselbe Situation sein.** Die Uhrzeit ist nur ein Indiz; entscheidend ist die Gesprächskontinuität.
+**Ergebnis: zwei Situationen mit Rückbezug.** Der Bezug verbindet die Situationen, verschmilzt sie aber nicht.
 
 ## Operative Grenzregel
 
-Eine Situationsgrenze wird dort gesetzt, wo der **kommunikative Vorgang** endet und ein neuer beginnt. Für die Entscheidung werden gemeinsam betrachtet:
+Die Prüffrage lautet:
 
-1. Gesprächskontinuität und Sprecherwechsel,
-2. erkennbare Abschlüsse, Abbrüche oder neue Einstiege,
-3. Antworten und Bezugnahmen,
-4. zeitliche Abstände als Indiz – niemals als alleinige Regel,
-5. Wechsel der kommunikativen Aufgabe, sofern dadurch tatsächlich ein neuer Gesprächsvorgang entsteht.
+> **„Ist das noch dieselbe Konversation – oder beginnt hier eine neue?“**
 
-**Nicht als alleinige Grenzregel verwenden:** Themenwechsel, Tageswechsel oder eine feste Anzahl Minuten/Stunden.
+Gemeinsam betrachtet werden:
 
-## Warum TrueWords Situationen braucht
+1. direkte Antworten und Reply-Bezüge,
+2. noch offene Fragen oder kommunikative Aufgaben,
+3. erkennbare Abschlüsse oder Abbrüche,
+4. neue Kontaktversuche und klare neue Gesprächseinstiege,
+5. zeitliche Abstände ausschließlich als unterstützendes Indiz.
 
-TrueWords soll nicht nur einzelne Nachrichten oder Themen bewerten, sondern verstehen, **wie Kommunikation zwischen zwei Menschen abläuft**. Dafür benötigt die Analyse vollständige Gesprächsepisoden:
+**Nicht als alleinige Grenzregel verwenden:** Zeitpause, Tageswechsel, Themenwechsel oder eine feste Anzahl Minuten/Stunden.
 
-- Was war der Ausgangspunkt?
-- Wie reagierte der andere Partner?
-- Wie entwickelte sich die Dynamik?
-- Entstanden Rechtfertigung, Rückzug, Gegenkritik, Schuldumkehr, Reparatur oder Annäherung?
-- Welche Formulierungen hatten bei diesem konkreten Paar welche Wirkung?
-- Wie endete die Episode?
+## TrueWords-Segmentierungsalgorithmus V4
 
-Eine falsche Segmentierung verfälscht diese Zusammenhänge. Zu kleine Situationen zerreißen Ursache und Wirkung; zu große Situationen vermischen unabhängige Gesprächsvorgänge.
+Test 4 setzt diese Definition erstmals direkt als Algorithmusregel um:
 
-## Hierarchie im TrueWords-Modell
+- `timeGapAloneCreatesBoundary = false`
+- direkte Replies halten die aktuelle Konversation offen,
+- offene Fragen dürfen lange Antwortpausen überstehen,
+- neue Kontaktversuche und explizite Abschlüsse können Grenzen auslösen,
+- Rückbezüge dürfen bereits beendete Situationen nicht nicht-kontiguierlich wieder öffnen,
+- externe Sprach-KI erzeugt keine Situationsgrenzen.
 
-**Situation** = zusammenhängende Gesprächsepisode  
-**Thema** = worüber innerhalb der Situation gesprochen wird  
-**Muster/Ereignis** = kommunikative Dynamik innerhalb der Situation
-
-Beispiele für Muster/Ereignisse: Rechtfertigung, Rückzug, Gegenkritik, Aufrechnen, Verantwortungsverschiebung, Reparatur und Annäherung.
-
-## Vorschläge im Prüfstand
-
-Die Situationsgrenzen im Prüfstand sind **Vorschläge des TrueWords-Segmentierungsalgorithmus**. Die manuelle Prüfung erzeugt den Goldstandard, mit dem der Algorithmus anschließend gemessen und verbessert wird. Eine externe Sprach-KI soll die Grenzziehung nicht ersetzen; sie kann später für semantische Tiefenanalyse innerhalb bereits abgegrenzter Situationen eingesetzt werden.
+Test 4 verwendet einen neuen, zuvor ungeprüften Ereignisbereich nach Test 3. Seine manuelle Prüfung erzeugt den nächsten Goldstandard. Test 3 bleibt unverändert als eigener Validierungsstand erhalten.
