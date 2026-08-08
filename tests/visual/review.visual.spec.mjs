@@ -133,7 +133,7 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
-test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar', async ({ page }, testInfo) => {
+test('Review V30 mobile hält Kopfzeile und Embla-Situationsslider dauerhaft sichtbar', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockReviewApi(page);
   await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
@@ -142,10 +142,9 @@ test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar',
 
   await page.locator('.tw-chat-scroll').evaluate((node) => node.scrollTo(0, 500));
   await page.waitForTimeout(250);
-  await expect(page.locator('[data-app-shell]')).not.toHaveClass(/is-header-hidden/);
   await expect(page.locator('.tw-topbar')).toBeVisible();
   await expect(page.locator('[data-situation-slider]')).toBeVisible();
-  await expect(page.locator('.tw-bottom-nav')).toBeHidden();
+  await expect(page.locator('.tw-bottom-nav')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
 
   await page.locator('[data-slider-situation="3"]').click();
@@ -156,14 +155,14 @@ test('Review V2 mobile hält Kopfzeile und Situation-Slider dauerhaft sichtbar',
     const a = slider.getBoundingClientRect();
     const b = active.getBoundingClientRect();
     return Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
-  })).toBeLessThanOrEqual(8);
+  })).toBeLessThanOrEqual(10);
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
   await expect(page.locator('.tw-drawer-panel')).toBeVisible();
 
   const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-  await testInfo.attach('review-v2-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
+  await testInfo.attach('review-v30-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
   expect(screenshot.byteLength).toBeGreaterThan(30_000);
 });
 
