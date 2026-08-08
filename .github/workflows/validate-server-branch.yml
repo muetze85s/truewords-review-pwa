@@ -35,6 +35,9 @@ jobs:
           test -f dist/review.html
           test -f dist/review-v2-app.css
           test -f dist/review-v2-app.js
+          test -f dist/situation-info.html
+          test -f dist/situation-info.css
+          test -f dist/situation-info.js
           test -f dist/situation-quiz.html
           test -f dist/situation-quiz.css
           test -f dist/situation-quiz.js
@@ -69,7 +72,11 @@ jobs:
           grep -q 'review_situation_quiz_results' src/worker-situation-quiz.ts
           grep -q '/api/situation-quiz/submit' src/worker-situation-quiz.ts
           grep -q '/situation-quiz.html' src/worker-situation-quiz.ts
-          grep -q 'situation-quiz.html' dist/login.js
+          grep -q '/situation-info.html' src/worker-situation-quiz.ts
+          grep -q 'situation-info.html' dist/login.js
+          grep -q 'Situation = zusammenhängende Gesprächsepisode' dist/situation-info.html
+          grep -q 'TrueWords-Segmentierungsalgorithmus V3' dist/situation-info.html
+          grep -q 'Zum kurzen Situations-Quiz' dist/situation-info.js
           grep -q 'Lena, lass uns herausfinden, ob du Situationen richtig erkennst' dist/situation-quiz.html
           grep -q 'q10' dist/situation-quiz.js
           grep -q 'api/review/bootstrap' src/worker-review.ts
@@ -78,7 +85,8 @@ jobs:
           grep -q 'ABORTED_LOSSY_PREPROCESSING' src/worker-source-integrity.ts
           grep -q 'philena-2026-pilot-v3-unseen' wrangler.jsonc
           grep -q 'Vollständigen Telegram-Rohchat auswählen' dist/upload.html
-          grep -q 'Testfilter und Prüfaufteilung' dist/upload.html
+          grep -q 'TrueWords-V3-Vorschläge' dist/upload.html
+          grep -q 'keine externe Sprach-KI' dist/upload.html
           grep -q 'Weiter ohne Upload' dist/upload.html
           grep -q 'PRESELECTION_SITUATIONS = 12' dist/upload.js
           grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
