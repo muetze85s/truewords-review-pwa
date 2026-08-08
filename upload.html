@@ -77,6 +77,19 @@
     </div>
   </main>
   <script src="./pilot-v2.js?v=2"></script>
+  <script>
+    (() => {
+      const key = 'truewords/review-after-upload';
+      const status = document.getElementById('status');
+      const markReviewNext = () => sessionStorage.setItem(key, '1');
+      document.getElementById('skip')?.addEventListener('click', markReviewNext, { capture: true });
+      if (status) {
+        new MutationObserver(() => {
+          if (status.dataset.state === 'ok' && status.textContent.includes('Test 4 ist aktiv')) markReviewNext();
+        }).observe(status, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-state'] });
+      }
+    })();
+  </script>
   <script type="module" src="./upload.js?v=16"></script>
 </body>
 </html>
