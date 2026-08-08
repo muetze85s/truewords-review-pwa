@@ -10,6 +10,7 @@ const files = [
   'review-v2-app.js',
   'review-v2-events.js',
   'review-navigation-fix.js',
+  'review-sidebar-follow.js',
   'review.css',
   'truewords-theme.css',
   'truewords-ui-theme.css',
