@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "truewords-review-sync",
-  "main": "src/worker-situation-quiz.ts",
+  "main": "src/worker-source-integrity-v4.ts",
   "compatibility_date": "2026-08-05",
   "workers_dev": true,
   "preview_urls": false,
@@ -18,6 +18,6 @@
     }
   ],
   "vars": {
-    "ACTIVE_DATASET_ID": "philena-2026-pilot-v3-unseen"
+    "ACTIVE_DATASET_ID": "philena-2026-pilot-v4-unseen"
   }
 }
