@@ -34,9 +34,8 @@ html[data-theme="dark"]{
 .tw-sit-check{grid-column:1;grid-row:1;margin:14px 0 0 14px!important}
 .tw-situation-open{grid-column:2;grid-row:1;padding-left:12px!important}
 
-/* The list has no giant static padding. V31 inserts measured spacers instead. */
+/* V31 calculates the real centering space per viewport and active card. */
 .tw-situation-list{padding:12px!important;scroll-behavior:auto!important}
-.tw-v31-list-spacer{display:block;flex:0 0 auto;width:1px;pointer-events:none}
 .tw-drawer-body .tw-situation-list{padding:12px!important}
 .tw-drawer .tw-details{display:none!important}
 
@@ -145,10 +144,11 @@ html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{
   .tw-v31-active-detail dd{margin:0;font-size:11px;line-height:1.4}
   .tw-v31-active-empty{padding:11px 0 1px;color:var(--muted);font-size:11px}
 
-  .tw-slider{grid-row:3!important;background:var(--tw-review-panel)!important;border-block:1px solid var(--line)!important}
-  .tw-embla-slide{flex:0 0 120px!important}
-  .tw-v31-slider-edge{flex:0 0 var(--tw-v31-edge-size,0px)!important;min-width:0!important;padding:0!important;pointer-events:none!important}
-  .tw-slider-item{width:112px!important}
+  .tw-slider{grid-row:3!important;background:var(--tw-review-panel)!important;border-block:1px solid var(--line)!important;overscroll-behavior-x:contain}
+  .tw-embla-viewport{touch-action:pan-y pinch-zoom!important}
+  .tw-embla-container{touch-action:pan-y pinch-zoom!important;user-select:none;-webkit-user-select:none}
+  .tw-embla-slide{flex:0 0 120px!important;min-width:0!important}
+  .tw-slider-item{width:112px!important;touch-action:pan-y!important;-webkit-tap-highlight-color:transparent}
   .tw-main{grid-row:4!important}
   .tw-chat-card{background:var(--tw-review-chat)!important}
   .tw-chat-scroll{background:var(--tw-review-stream)!important}
