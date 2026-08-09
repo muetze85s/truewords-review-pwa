@@ -66,29 +66,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build temporary offline source snapshot
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p disaster-backup/source
-          printf 'TrueWords disaster recovery source snapshot\nCommit: %s\nCreated: %s\n\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > disaster-backup/RECOVERY_METADATA.txt
-          printf 'Secrets are intentionally not included.\n' >> disaster-backup/RECOVERY_METADATA.txt
-          git ls-files | grep -v '^.github/workflows/truewords-disaster-backup-once.yml$' > disaster-backup/TRACKED_FILES.txt
-          while IFS= read -r file; do
-            mkdir -p "disaster-backup/source/$(dirname "$file")"
-            cp -p "$file" "disaster-backup/source/$file"
-          done < disaster-backup/TRACKED_FILES.txt
-          (cd disaster-backup && find source -type f -print0 | sort -z | xargs -0 sha256sum) > disaster-backup/SHA256SUMS.txt
-          tar -czf truewords-source-snapshot.tar.gz -C disaster-backup .
-
-      - name: Upload offline source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: truewords-disaster-recovery-source-${{ github.run_id }}
-          path: truewords-source-snapshot.tar.gz
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Install project dependencies
         run: npm install
 
