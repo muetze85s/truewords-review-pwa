@@ -85,7 +85,7 @@ for (const theme of ['light', 'dark']) {
       localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', selectedTheme);
     }, theme);
     await page.goto('/review.html');
-    await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+    await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
 
     const bodyBg = await page.locator('body').evaluate((node) => getComputedStyle(node).backgroundColor);
     const card = page.locator('.tw-sidebar');
@@ -112,9 +112,9 @@ for (const theme of ['light', 'dark']) {
     await expect(card2).toContainText('Richtung');
     await expect(card2).toContainText('Muster');
 
-    await page.locator('[data-situation-list] [data-open-situation="3"]').click();
+    await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="3"] .tw-situation-open').click();
     await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
-    await page.locator('[data-situation-list] [data-open-situation="2"]').click();
+    await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="2"] .tw-situation-open').click();
     await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
 
     const philippBg = await page.locator('.tw-message-wrap.philipp .tw-message').first().evaluate((node) => getComputedStyle(node).backgroundColor);
