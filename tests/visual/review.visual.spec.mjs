@@ -133,36 +133,39 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
-test('Review V30 mobile hält Kopfzeile und Embla-Situationsslider dauerhaft sichtbar', async ({ page }, testInfo) => {
+test('Review V33 mobile hält Kopfzeile und festen Situationsslot dauerhaft sichtbar', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockReviewApi(page);
   await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
   await page.goto('/review.html');
   await page.locator('.tw-chat-scroll').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-mobile-strip]').waitFor({ state: 'visible' });
 
   await page.locator('.tw-chat-scroll').evaluate((node) => node.scrollTo(0, 500));
   await page.waitForTimeout(250);
   await expect(page.locator('.tw-topbar')).toBeVisible();
-  await expect(page.locator('[data-situation-slider]')).toBeVisible();
+  await expect(page.locator('[data-v33-mobile-strip]')).toBeVisible();
   await expect(page.locator('.tw-bottom-nav')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
 
-  await page.locator('[data-slider-situation="3"]').click();
-  await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/, { timeout: 4000 });
-  await expect.poll(async () => page.locator('[data-situation-slider]').evaluate((slider) => {
-    const active = slider.querySelector('[data-slider-situation].is-active');
+  await page.locator('[data-v33-mobile-strip] [data-v33-nav-id="3"]').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/, { timeout: 4000 });
+  await expect(page.locator('[data-v33-mobile-strip] .tw-v33-strip-center [data-v33-nav-id="3"]')).toBeVisible();
+  await expect.poll(async () => page.locator('[data-v33-mobile-strip]').evaluate((strip) => {
+    const active = strip.querySelector('.tw-v33-strip-center [data-v33-nav-id]');
     if (!active) return 9999;
-    const a = slider.getBoundingClientRect();
+    const a = strip.getBoundingClientRect();
     const b = active.getBoundingClientRect();
     return Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
-  })).toBeLessThanOrEqual(10);
+  })).toBeLessThanOrEqual(2);
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
   await expect(page.locator('.tw-drawer-panel')).toBeVisible();
+  await expect(page.locator('[data-v33-fixed-list="drawer"] .tw-v33-list-center [data-v33-nav-id="3"]')).toBeVisible();
 
   const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
-  await testInfo.attach('review-v30-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
+  await testInfo.attach('review-v33-mobile-dark.png', { body: screenshot, contentType: 'image/png' });
   expect(screenshot.byteLength).toBeGreaterThan(30_000);
 });
 
