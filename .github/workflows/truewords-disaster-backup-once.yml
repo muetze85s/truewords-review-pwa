@@ -1,0 +1,42 @@
+name: TrueWords disaster recovery source snapshot
+
+on:
+  push:
+    branches:
+      - agent/server-synchronization
+    paths:
+      - '.github/workflows/truewords-disaster-backup-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build offline source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p disaster-backup
+          printf 'TrueWords disaster recovery source snapshot\nCommit: %s\nCreated: %s\n\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > disaster-backup/RECOVERY_METADATA.txt
+          printf 'Repository files are stored with their original relative paths.\nSecrets are intentionally not included.\n' >> disaster-backup/RECOVERY_METADATA.txt
+          git ls-files | grep -v '^.github/workflows/truewords-disaster-backup-once.yml$' > disaster-backup/TRACKED_FILES.txt
+          while IFS= read -r file; do
+            mkdir -p "disaster-backup/source/$(dirname "$file")"
+            cp -p "$file" "disaster-backup/source/$file"
+          done < disaster-backup/TRACKED_FILES.txt
+          (cd disaster-backup && find source -type f -print0 | sort -z | xargs -0 sha256sum) > disaster-backup/SHA256SUMS.txt
+          tar -czf truewords-source-snapshot.tar.gz -C disaster-backup .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: truewords-disaster-recovery-source
+          path: truewords-source-snapshot.tar.gz
+          if-no-files-found: error
+          retention-days: 7
