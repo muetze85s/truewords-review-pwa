@@ -59,12 +59,12 @@ async function mockApis(page) {
   await page.route('**/api/auth/logout', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
 }
 
-test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert korrekt', async ({ page }) => {
+test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert die Anfangsgrenze', async ({ page }) => {
   await mockApis(page);
   await page.goto('/review.html');
-  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
 
-  await page.locator('[data-situation-list] [data-open-situation="1"]').click();
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="1"] .tw-situation-open').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
 
   await page.getByRole('button', { name: 'Bestätigung zurücknehmen' }).click();
@@ -72,51 +72,50 @@ test('Situation bleibt nach Re-Render mehrfach auswählbar und fokussiert korrek
   await page.getByRole('button', { name: 'Situation bestätigen' }).click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
 
-  await page.locator('[data-situation-list] [data-open-situation="2"]').click();
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="2"] .tw-situation-open').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
-  await page.locator('[data-situation-list] [data-open-situation="1"]').click();
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="1"] .tw-situation-open').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveClass(/is-active/);
-  await page.locator('[data-situation-list] [data-open-situation="2"]').click();
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="2"] .tw-situation-open').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
 
-  const focus = await page.locator('[data-message-situation="2"][data-situation-first="true"]').evaluate((node) => {
+  const boundaryFocus = await page.locator('[data-boundary-start="2"]').evaluate((node) => {
     const scroll = node.closest('[data-chat-scroll]');
-    const targetRect = node.getBoundingClientRect();
-    const scrollRect = scroll.getBoundingClientRect();
-    return targetRect.top - scrollRect.top;
+    return node.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
   });
-  expect(focus).toBeGreaterThanOrEqual(8);
-  expect(focus).toBeLessThanOrEqual(70);
+  expect(boundaryFocus).toBeGreaterThanOrEqual(6);
+  expect(boundaryFocus).toBeLessThanOrEqual(18);
 });
 
-test('Mobile Bottom-Sheet wechselt Situationen bei fixer Kopfzeile', async ({ page }) => {
+test('Mobile Bottom-Sheet und feste Leiste wechseln synchron Situationen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockApis(page);
   await page.goto('/review.html');
   await page.locator('.tw-chat-scroll').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-mobile-strip]').waitFor({ state: 'visible' });
 
   await expect(page.locator('.tw-topbar')).toBeVisible();
-  await expect(page.locator('[data-situation-slider]')).toBeVisible();
+  await expect(page.locator('[data-v33-mobile-strip]')).toBeVisible();
   await expect(page.locator('.tw-bottom-nav')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Situationsliste öffnen' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
-  await page.locator('[data-drawer-list] [data-open-situation="3"]').click();
-  await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/);
+  await page.locator('[data-v33-fixed-list="drawer"] [data-v33-nav-id="3"] .tw-situation-open').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-v33-mobile-strip] .tw-v33-strip-center [data-v33-nav-id="3"]')).toBeVisible();
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
-  await page.locator('[data-drawer-list] [data-open-situation="2"]').click();
-  await expect(page.locator('[data-slider-situation="2"]')).toHaveClass(/is-active/);
+  await page.locator('[data-v33-fixed-list="drawer"] [data-v33-nav-id="2"] .tw-situation-open').click();
+  await expect(page.locator('[data-situation-list] [data-situation-card="2"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-v33-mobile-strip] .tw-v33-strip-center [data-v33-nav-id="2"]')).toBeVisible();
 
-  // In V30 liegt der Chat als eigene Grid-Zeile bereits unter fester Kopfzeile
-  // und Embla-Slider. Deshalb ist kein künstlicher 145px-Innenabstand nötig.
-  const focus = await page.locator('[data-message-situation="2"][data-situation-first="true"]').evaluate((node) => {
+  const boundaryFocus = await page.locator('[data-boundary-start="2"]').evaluate((node) => {
     const scroll = node.closest('[data-chat-scroll]');
     return node.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
   });
-  expect(focus).toBeGreaterThanOrEqual(8);
-  expect(focus).toBeLessThanOrEqual(70);
+  expect(boundaryFocus).toBeGreaterThanOrEqual(6);
+  expect(boundaryFocus).toBeLessThanOrEqual(18);
 });
 
 test('Login startet mit System und angemeldeter Nutzer erhält eigene Theme-Wahl', async ({ page }) => {
