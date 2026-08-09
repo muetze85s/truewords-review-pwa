@@ -66,26 +66,29 @@ test('Nachricht kann nach Re-Render abgewählt und eine andere ausgewählt werde
   await expect(wrap302()).not.toHaveClass(/is-selected/);
 });
 
-test('Scrollen aktiviert Situation ohne Chat-Sprung und hält linke Karte mittig', async ({ page }) => {
+test('Scrollen aktiviert Situation ohne Chat-Sprung und hält den sichtbaren Mittelslot fest', async ({ page }) => {
   await mockReview(page);
   await page.goto('/review.html');
-  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
   await page.locator('[data-message-id="302"]').click();
+  const centerBefore = await page.locator('[data-v33-fixed-list="sidebar"] .tw-v33-list-center').evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  });
   const beforeSyncTop = await page.locator('[data-chat-scroll]').evaluate((node) => {
     node.scrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
     return node.querySelector('[data-message-wrap="305"]')?.getBoundingClientRect().top ?? 0;
   });
   await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-v33-fixed-list="sidebar"] .tw-v33-list-center [data-v33-nav-id="3"]')).toBeVisible();
   await expect(page.locator('[data-message-wrap="302"]')).toHaveClass(/is-selected/);
   const afterSyncTop = await page.locator('[data-message-wrap="305"]').evaluate((node) => node.getBoundingClientRect().top);
   expect(Math.abs(afterSyncTop - beforeSyncTop)).toBeLessThanOrEqual(2);
-  await expect.poll(async () => page.locator('[data-situation-list]').evaluate((list) => {
-    const card = list.querySelector('[data-situation-card="3"]');
-    if (!card) return 9999;
-    const a = list.getBoundingClientRect();
-    const b = card.getBoundingClientRect();
-    return Math.abs((b.top + b.height / 2) - (a.top + a.height / 2));
-  })).toBeLessThanOrEqual(14);
+  const centerAfter = await page.locator('[data-v33-fixed-list="sidebar"] .tw-v33-list-center').evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  });
+  expect(Math.abs(centerAfter - centerBefore)).toBeLessThanOrEqual(1);
 });
 
 test('Ende-Zeile enthält Bestätigung und separater Abschlussblock ist entfernt', async ({ page }) => {
@@ -106,8 +109,8 @@ test('Ende-Zeile enthält Bestätigung und separater Abschlussblock ist entfernt
 test('Bestätigen bleibt an derselben Chatstelle und in derselben Situation', async ({ page }) => {
   await mockReview(page);
   await page.goto('/review.html');
-  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
-  await page.locator('[data-open-situation="2"]').first().click();
+  await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="2"] .tw-situation-open').click();
   await page.locator('[data-message-id="304"]').click();
   const beforeTop = await page.locator('[data-message-wrap="304"]').evaluate((node) => node.getBoundingClientRect().top);
   await page.locator('[data-boundary-end="2"] [data-confirm="2"]').click();
@@ -123,15 +126,15 @@ test('Bestätigen bleibt an derselben Chatstelle und in derselben Situation', as
 test('Checkbox bestätigt und hebt Bestätigung wieder auf', async ({ page }) => {
   await mockReview(page);
   await page.goto('/review.html');
-  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
-  const check1 = page.locator('[data-situation-list] [data-situation-card="1"] .tw-sit-check');
+  await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
+  const check1 = page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="1"] .tw-sit-check');
   await check1.click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveAttribute('data-status', 'confirmed');
   const undo = page.locator('[data-boundary-end="1"] [data-confirm="1"]');
   const rgb = (await undo.evaluate((node) => getComputedStyle(node).backgroundColor)).match(/\d+/g)?.map(Number) || [];
   expect(rgb[0]).toBeGreaterThan(rgb[1]);
   expect(rgb[0]).toBeGreaterThan(rgb[2]);
-  await page.locator('[data-situation-list] [data-situation-card="1"] .tw-sit-check').click();
+  await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="1"] .tw-sit-check').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="1"]')).toHaveAttribute('data-status', 'open');
 });
 
@@ -139,7 +142,7 @@ test('TrueWords Farben, Perspektive, Vornamen und Statusrahmen sind konsistent',
   await mockReview(page);
   await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
   await page.goto('/review.html');
-  await page.locator('.tw-workspace').waitFor({ state: 'visible' });
+  await page.locator('[data-v33-fixed-list="sidebar"]').waitFor({ state: 'visible' });
   await expect(page.locator('[data-message-id="301"] .tw-message-meta strong')).toHaveText('Philipp');
   await expect(page.locator('[data-message-id="302"] .tw-message-meta strong')).toHaveText('Lena');
   const philipp = await page.locator('[data-message-wrap="301"] .tw-message').evaluate((node) => getComputedStyle(node).backgroundColor);
@@ -151,7 +154,7 @@ test('TrueWords Farben, Perspektive, Vornamen und Statusrahmen sind konsistent',
     lena: document.querySelector('[data-message-wrap="302"] .tw-message')?.getBoundingClientRect().left || 0,
   }));
   expect(positions.philipp).toBeGreaterThan(positions.lena);
-  const borders = await page.locator('[data-situation-card="1"]').first().evaluate((node) => {
+  const borders = await page.locator('[data-v33-fixed-list="sidebar"] [data-v33-nav-id="1"]').evaluate((node) => {
     const style = getComputedStyle(node);
     return [style.borderTopColor, style.borderRightColor, style.borderBottomColor, style.borderLeftColor];
   });
