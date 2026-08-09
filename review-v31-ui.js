@@ -16,19 +16,37 @@
   let mobileExpanded = false;
   let settleTimers = [];
 
+  function normalizeEmblaViewport(viewport = window.__twReviewEmblaViewport) {
+    if (!viewport) return;
+    if (viewport.scrollLeft !== 0) viewport.scrollLeft = 0;
+    if (viewport.scrollTop !== 0) viewport.scrollTop = 0;
+  }
+
+  function installEmblaViewportGuard(viewport) {
+    if (!viewport || viewport.dataset.v31ViewportGuard === '1') return;
+    viewport.dataset.v31ViewportGuard = '1';
+    const normalize = () => normalizeEmblaViewport(viewport);
+    viewport.addEventListener('scroll', normalize, { passive: true });
+    viewport.addEventListener('focusin', () => requestAnimationFrame(normalize));
+    viewport.addEventListener('pointerdown', normalize, { passive: true });
+    normalize();
+  }
+
   /*
    * Keep Embla standard. V31 previously wrapped the carousel in a Proxy and
    * inserted artificial edge slides. That made the logical and physical snap
-   * indices diverge and proved brittle on real touch devices. We now let Embla
-   * own dragging/snapping exactly as designed and only keep a reference so the
-   * active situation can be re-centered after external chat/list changes.
+   * indices diverge. The real remaining drift came from the hidden viewport
+   * acquiring scrollLeft while Embla simultaneously moves the track by
+   * transform. The viewport must therefore stay at scrollLeft=0 at all times.
    */
   if (typeof window.EmblaCarousel === 'function' && !window.__twV31EmblaWrapped) {
     const factory = window.EmblaCarousel;
     const wrapped = function (viewport, options = {}, plugins) {
+      installEmblaViewportGuard(viewport);
       const api = factory(viewport, { ...options, ...EMBLA_OPTIONS }, plugins);
       window.__twReviewEmbla = api;
       window.__twReviewEmblaViewport = viewport;
+      normalizeEmblaViewport(viewport);
       return api;
     };
     Object.assign(wrapped, factory);
@@ -111,15 +129,13 @@
     const embla = window.__twReviewEmbla;
     const index = sliderIndexForId(id);
     if (!embla || index < 0) return;
+    normalizeEmblaViewport();
     try {
       embla.scrollTo(index, jump);
     } catch (_) {
-      /* Embla remains the sole owner of horizontal movement. */
+      return;
     }
-  }
-
-  function centerSlider(jump = true) {
-    centerSliderId(activeId(), jump);
+    requestAnimationFrame(() => normalizeEmblaViewport());
   }
 
   function settleSlider(id = activeId()) {
@@ -136,6 +152,7 @@
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
     if (!embla) return;
+    normalizeEmblaViewport();
     try {
       embla.reInit({ ...EMBLA_OPTIONS });
     } catch (_) {
@@ -254,6 +271,7 @@
     if (!embla || embla.__twV31SettleBound) return;
     embla.__twV31SettleBound = true;
     embla.on?.('settle', () => {
+      normalizeEmblaViewport();
       const id = activeId();
       if (id) centerSliderId(id, true);
     });
@@ -270,6 +288,7 @@
     renderMobileActive();
     bindDrawerFollow();
     bindEmblaSettle();
+    normalizeEmblaViewport();
     if (changed || initial) {
       settleListCenters();
       settleSlider(nextId);
@@ -285,12 +304,6 @@
       stabilize({ initial });
     });
   }
-
-  app.addEventListener('click', (event) => {
-    const sliderItem = event.target.closest?.('[data-slider-situation]');
-    if (!sliderItem) return;
-    settleSlider(sliderItem.dataset.sliderSituation);
-  });
 
   const observer = new MutationObserver((mutations) => {
     const relevant = mutations.some((mutation) => {
