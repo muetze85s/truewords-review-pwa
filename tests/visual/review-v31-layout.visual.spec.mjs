@@ -115,7 +115,7 @@ test('V31 mobile zeigt kompakte Analysekarte oberhalb des Sliders, draggt mit Em
   await page.goto('/review.html');
   await page.locator('[data-v31-mobile-active]').waitFor({ state: 'visible' });
 
-  await page.locator('[data-slider-situation="3"]').click();
+  await page.locator('[data-slider-situation="3"]').evaluate((node) => node.click());
   await expect(page.locator('[data-slider-situation="3"]')).toHaveClass(/is-active/);
   await expect(page.locator('[data-v31-mobile-active]')).toHaveAttribute('data-situation-id', '3');
 
@@ -143,6 +143,13 @@ test('V31 mobile zeigt kompakte Analysekarte oberhalb des Sliders, draggt mit Em
   await expectActiveCentered(page, '[data-situation-slider]');
 
   const viewport = page.locator('[data-embla-viewport]');
+  await viewport.evaluate((node) => {
+    node.scrollLeft = 101;
+    node.dispatchEvent(new Event('scroll'));
+  });
+  await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBe(0);
+  await expectActiveCentered(page, '[data-situation-slider]');
+
   const box = await viewport.boundingBox();
   if (!box) throw new Error('Embla viewport fehlt');
   const y = box.y + box.height / 2;
