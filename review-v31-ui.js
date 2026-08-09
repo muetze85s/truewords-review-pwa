@@ -9,79 +9,26 @@
     loop: false,
     dragFree: false,
     skipSnaps: false,
-    duration: 22,
+    duration: 20,
   };
   let scheduled = 0;
   let lastActiveId = '';
   let mobileExpanded = false;
   let settleTimers = [];
 
-  function installSliderEdges(viewport) {
-    const container = viewport?.querySelector('[data-situation-slider-container]') || viewport?.firstElementChild;
-    if (!container) return { count: 0 };
-    const realSlides = [...container.children].filter((node) => !node.classList.contains('tw-v31-slider-edge'));
-    if (!realSlides.length) return { count: 0 };
-
-    let before = container.querySelector(':scope > .tw-v31-slider-edge[data-edge="before"]');
-    let after = container.querySelector(':scope > .tw-v31-slider-edge[data-edge="after"]');
-    if (!before) {
-      before = document.createElement('div');
-      before.className = 'tw-embla-slide tw-v31-slider-edge';
-      before.dataset.edge = 'before';
-      before.setAttribute('aria-hidden', 'true');
-      container.prepend(before);
-    }
-    if (!after) {
-      after = document.createElement('div');
-      after.className = 'tw-embla-slide tw-v31-slider-edge';
-      after.dataset.edge = 'after';
-      after.setAttribute('aria-hidden', 'true');
-      container.append(after);
-    }
-
-    const sampleWidth = realSlides[0].getBoundingClientRect().width || 120;
-    const edgeSize = Math.max(0, viewport.clientWidth / 2 - sampleWidth / 2);
-    before.style.setProperty('--tw-v31-edge-size', `${edgeSize}px`);
-    after.style.setProperty('--tw-v31-edge-size', `${edgeSize}px`);
-    return { count: realSlides.length };
-  }
-
-  /* V30 owns Embla's interaction model. V31 adds two inert edge slides and
-     maps logical situation indices to physical Embla snaps. This lets every
-     real situation – including the first and last – sit exactly at center. */
+  /*
+   * Keep Embla standard. V31 previously wrapped the carousel in a Proxy and
+   * inserted artificial edge slides. That made the logical and physical snap
+   * indices diverge and proved brittle on real touch devices. We now let Embla
+   * own dragging/snapping exactly as designed and only keep a reference so the
+   * active situation can be re-centered after external chat/list changes.
+   */
   if (typeof window.EmblaCarousel === 'function' && !window.__twV31EmblaWrapped) {
     const factory = window.EmblaCarousel;
-    const wrapped = function (viewport, options, plugins) {
-      let edgeState = installSliderEdges(viewport);
-      const raw = factory(viewport, options, plugins);
-      const api = new Proxy(raw, {
-        get(target, property) {
-          if (property === 'scrollTo') {
-            return (logicalIndex, jump) => {
-              const index = Math.max(0, Math.min(Math.max(0, edgeState.count - 1), Number(logicalIndex) || 0));
-              return target.scrollTo(index + 1, jump);
-            };
-          }
-          if (property === 'selectedScrollSnap') {
-            return () => {
-              const physical = Number(target.selectedScrollSnap()) || 0;
-              return Math.max(0, Math.min(Math.max(0, edgeState.count - 1), physical - 1));
-            };
-          }
-          if (property === 'scrollSnapList') {
-            return () => target.scrollSnapList().slice(1, -1);
-          }
-          if (property === 'reInit') {
-            return (nextOptions, nextPlugins) => {
-              edgeState = installSliderEdges(viewport);
-              return target.reInit(nextOptions, nextPlugins);
-            };
-          }
-          const value = Reflect.get(target, property, target);
-          return typeof value === 'function' ? value.bind(target) : value;
-        },
-      });
+    const wrapped = function (viewport, options = {}, plugins) {
+      const api = factory(viewport, { ...options, ...EMBLA_OPTIONS }, plugins);
       window.__twReviewEmbla = api;
+      window.__twReviewEmblaViewport = viewport;
       return api;
     };
     Object.assign(wrapped, factory);
@@ -89,32 +36,34 @@
     window.__twV31EmblaWrapped = true;
   }
 
-  function activeCard() {
-    return document.querySelector('[data-situation-list] [data-situation-card].is-active');
+  function activeCard(root = document) {
+    return root.querySelector('[data-situation-card].is-active');
   }
 
   function activeId() {
-    return String(activeCard()?.dataset.situationCard || '');
+    return String(activeCard(document.querySelector('[data-situation-list]') || document)?.dataset.situationCard || '');
   }
 
-  function ensureSpacers(list, card) {
-    let before = list.querySelector(':scope > .tw-v31-list-spacer[data-edge="before"]');
-    let after = list.querySelector(':scope > .tw-v31-list-spacer[data-edge="after"]');
-    if (!before) {
-      before = document.createElement('div');
-      before.className = 'tw-v31-list-spacer';
-      before.dataset.edge = 'before';
-      list.prepend(before);
+  function installListScrollGuard(list) {
+    if (!list || list.dataset.v31ScrollGuard === '1') return;
+    const nativeScrollTo = typeof list.scrollTo === 'function' ? list.scrollTo.bind(list) : null;
+    if (nativeScrollTo) {
+      list.scrollTo = (first, second) => {
+        if (first && typeof first === 'object') {
+          return nativeScrollTo({ ...first, behavior: 'auto' });
+        }
+        return nativeScrollTo(first, second);
+      };
     }
-    if (!after) {
-      after = document.createElement('div');
-      after.className = 'tw-v31-list-spacer';
-      after.dataset.edge = 'after';
-      list.append(after);
-    }
-    const height = Math.max(0, (list.clientHeight - Math.min(card.offsetHeight, list.clientHeight)) / 2 - 12);
-    before.style.height = `${height}px`;
-    after.style.height = `${height}px`;
+    list.dataset.v31ScrollGuard = '1';
+  }
+
+  function prepareVerticalList(list, card) {
+    installListScrollGuard(list);
+    const usableCardHeight = Math.min(card.offsetHeight || 0, list.clientHeight || 0);
+    const edge = Math.max(12, Math.floor((list.clientHeight - usableCardHeight) / 2));
+    list.style.setProperty('padding-top', `${edge}px`, 'important');
+    list.style.setProperty('padding-bottom', `${edge}px`, 'important');
   }
 
   function centerVerticalList(list) {
@@ -124,7 +73,7 @@
     const card = list.querySelector(`[data-situation-card="${CSS.escape(id)}"]`);
     if (!card) return;
 
-    ensureSpacers(list, card);
+    prepareVerticalList(list, card);
     const listRect = list.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
     const delta = (cardRect.top + cardRect.height / 2) - (listRect.top + listRect.height / 2);
@@ -147,7 +96,7 @@
   function settleListCenters() {
     clearSettleTimers();
     centerLists();
-    [60, 180, 360].forEach((delay) => {
+    [40, 120, 260, 520].forEach((delay) => {
       settleTimers.push(setTimeout(centerLists, delay));
     });
   }
@@ -157,42 +106,42 @@
       .findIndex((node) => String(node.dataset.sliderSituation) === String(id));
   }
 
-  function centerSliderId(id, jump = false) {
+  function centerSliderId(id, jump = true) {
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
     const index = sliderIndexForId(id);
     if (!embla || index < 0) return;
     try {
-      embla.scrollTo?.(index, jump);
+      embla.scrollTo(index, jump);
     } catch (_) {
-      /* V30 remains the functional owner of drag/navigation semantics. */
+      /* Embla remains the sole owner of horizontal movement. */
     }
   }
 
-  function centerSlider(jump = false) {
+  function centerSlider(jump = true) {
     centerSliderId(activeId(), jump);
   }
 
-  function settleSliderId(id) {
+  function settleSlider(id = activeId()) {
+    if (!id) return;
     requestAnimationFrame(() => {
       centerSliderId(id, true);
       requestAnimationFrame(() => centerSliderId(id, true));
     });
-    setTimeout(() => centerSliderId(id, true), 90);
+    setTimeout(() => centerSliderId(id, true), 80);
+    setTimeout(() => centerSliderId(id, true), 220);
   }
 
   function reflowSlider() {
     if (window.innerWidth > MOBILE_BREAKPOINT) return;
     const embla = window.__twReviewEmbla;
-    const id = activeId();
-    const index = sliderIndexForId(id);
-    if (!embla || index < 0) return;
+    if (!embla) return;
     try {
-      embla.reInit?.(EMBLA_OPTIONS);
-      requestAnimationFrame(() => embla.scrollTo?.(index, true));
+      embla.reInit({ ...EMBLA_OPTIONS });
     } catch (_) {
-      centerSliderId(id, true);
+      return;
     }
+    settleSlider();
   }
 
   function textOf(root, selector) {
@@ -209,7 +158,7 @@
   function renderMobileActive() {
     const shell = document.querySelector('[data-app-shell]');
     const slider = document.querySelector('[data-situation-slider]');
-    const source = activeCard();
+    const source = activeCard(document.querySelector('[data-situation-list]') || document);
     if (!shell || !slider || !source) return;
 
     let panel = shell.querySelector('[data-v31-mobile-active]');
@@ -300,6 +249,16 @@
     }
   }
 
+  function bindEmblaSettle() {
+    const embla = window.__twReviewEmbla;
+    if (!embla || embla.__twV31SettleBound) return;
+    embla.__twV31SettleBound = true;
+    embla.on?.('settle', () => {
+      const id = activeId();
+      if (id) centerSliderId(id, true);
+    });
+  }
+
   function stabilize({ initial = false } = {}) {
     if (!document.querySelector('[data-app-shell]')) return;
     const nextId = activeId();
@@ -310,9 +269,13 @@
     }
     renderMobileActive();
     bindDrawerFollow();
-    if (changed || initial) settleListCenters();
-    else centerLists();
-    centerSlider(initial);
+    bindEmblaSettle();
+    if (changed || initial) {
+      settleListCenters();
+      settleSlider(nextId);
+    } else {
+      centerLists();
+    }
   }
 
   function schedule(initial = false) {
@@ -323,21 +286,16 @@
     });
   }
 
-  function internalSpacerMutation(mutation) {
-    const nodes = [...mutation.addedNodes, ...mutation.removedNodes].filter((node) => node.nodeType === Node.ELEMENT_NODE);
-    return nodes.length > 0 && nodes.every((node) => node.classList?.contains('tw-v31-list-spacer') || node.classList?.contains('tw-v31-slider-edge'));
-  }
-
   app.addEventListener('click', (event) => {
     const sliderItem = event.target.closest?.('[data-slider-situation]');
     if (!sliderItem) return;
-    settleSliderId(sliderItem.dataset.sliderSituation);
+    settleSlider(sliderItem.dataset.sliderSituation);
   });
 
   const observer = new MutationObserver((mutations) => {
     const relevant = mutations.some((mutation) => {
       if (mutation.target.closest?.('[data-v31-mobile-active]')) return false;
-      if (mutation.type === 'childList') return !internalSpacerMutation(mutation);
+      if (mutation.type === 'childList') return true;
       if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
         return mutation.target.matches?.('[data-situation-card],[data-slider-situation],[data-drawer]');
       }
