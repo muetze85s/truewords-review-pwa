@@ -61,6 +61,19 @@ async function mockApis(page) {
   await page.route('**/api/auth/logout', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
 }
 
+async function expectActiveCentered(page, selector, tolerance = 10) {
+  await expect.poll(async () => page.locator(selector).evaluate((root) => {
+    const active = root.querySelector('[data-slider-situation].is-active, [data-situation-card].is-active');
+    if (!active) return 9999;
+    const a = root.getBoundingClientRect();
+    const b = active.getBoundingClientRect();
+    const horizontal = Boolean(root.querySelector('[data-slider-situation]'));
+    return horizontal
+      ? Math.abs((a.left + a.width / 2) - (b.left + b.width / 2))
+      : Math.abs((a.top + a.height / 2) - (b.top + b.height / 2));
+  })).toBeLessThanOrEqual(tolerance);
+}
+
 test('V31 desktop trennt Flächen, nutzt Logo-Sprecherfarben und zentriert aktive Karte', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockApis(page);
@@ -92,16 +105,11 @@ test('V31 desktop trennt Flächen, nutzt Logo-Sprecherfarben und zentriert aktiv
 
   await page.locator('[data-situation-list] [data-open-situation="3"]').click();
   await expect(page.locator('[data-situation-list] [data-situation-card="3"]')).toHaveClass(/is-active/);
-  await expect.poll(async () => page.locator('[data-situation-list]').evaluate((list) => {
-    const card = list.querySelector('[data-situation-card="3"]');
-    const a = list.getBoundingClientRect();
-    const b = card.getBoundingClientRect();
-    return Math.abs((a.top + a.height / 2) - (b.top + b.height / 2));
-  })).toBeLessThanOrEqual(10);
+  await expectActiveCentered(page, '[data-situation-list]');
 });
 
-test('V31 mobile zeigt kompakte Analysekarte oberhalb des zentrierten Sliders und sauberes Bottom-Sheet', async ({ page }) => {
-  await page.setViewportSize({ width: 600, height: 900 });
+test('V31 mobile zeigt kompakte Analysekarte oberhalb des Sliders, draggt mit Embla und hält aktiv mittig', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await mockApis(page);
   await page.addInitScript(() => localStorage.setItem('truewords/theme/user/philipp:philipp@example.test', 'dark'));
   await page.goto('/review.html');
@@ -130,21 +138,26 @@ test('V31 mobile zeigt kompakte Analysekarte oberhalb des zentrierten Sliders un
   await expect(page.locator('.tw-v31-active-details')).toBeVisible();
   await expect(page.locator('.tw-v31-active-details')).toContainText('Klassifizierung');
   await expect(page.locator('.tw-v31-active-details')).toContainText('Richtung');
+  await toggle.click();
 
-  await expect.poll(async () => page.locator('[data-situation-slider]').evaluate((slider) => {
-    const active = slider.querySelector('[data-slider-situation].is-active');
-    const a = slider.getBoundingClientRect();
-    const b = active.getBoundingClientRect();
-    return Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
-  })).toBeLessThanOrEqual(10);
+  await expectActiveCentered(page, '[data-situation-slider]');
+
+  const viewport = page.locator('[data-embla-viewport]');
+  const box = await viewport.boundingBox();
+  if (!box) throw new Error('Embla viewport fehlt');
+  const y = box.y + box.height / 2;
+  const startX = box.x + box.width / 2;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX - 135, y, { steps: 12 });
+  await page.mouse.up();
+
+  await expect(page.locator('[data-slider-situation="4"]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-v31-mobile-active]')).toHaveAttribute('data-situation-id', '4');
+  await expectActiveCentered(page, '[data-situation-slider]');
 
   await page.getByRole('button', { name: 'Situationsliste öffnen' }).click();
   await expect(page.locator('[data-drawer]')).toHaveClass(/is-open/);
-  await expect.poll(async () => page.locator('[data-drawer-list]').evaluate((list) => {
-    const active = list.querySelector('[data-situation-card].is-active');
-    const a = list.getBoundingClientRect();
-    const b = active.getBoundingClientRect();
-    return Math.abs((a.top + a.height / 2) - (b.top + b.height / 2));
-  })).toBeLessThanOrEqual(10);
-  expect(await page.locator('[data-drawer-list]').evaluate((node) => getComputedStyle(node).paddingTop)).toBe('12px');
+  await expectActiveCentered(page, '[data-drawer-list]');
+  expect(parseFloat(await page.locator('[data-drawer-list]').evaluate((node) => getComputedStyle(node).paddingTop))).toBeGreaterThan(12);
 });
