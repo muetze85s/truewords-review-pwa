@@ -8,6 +8,21 @@
   let scheduled = 0;
   let mobileExpanded = false;
   let suppressVirtualClickUntil = 0;
+  let syncSequence = 0;
+  let syncGuard = null;
+
+  function beginSync(source, targetId) {
+    const token = ++syncSequence;
+    syncGuard = { source, targetId: String(targetId || ''), token };
+    document.documentElement.dataset.twSyncSource = source;
+    return token;
+  }
+
+  function endSync(token) {
+    if (!syncGuard || syncGuard.token !== token) return;
+    syncGuard = null;
+    delete document.documentElement.dataset.twSyncSource;
+  }
 
   function sourceSituationList() {
     return document.querySelector('[data-situation-list]');
@@ -92,24 +107,30 @@
     scroll.scrollTop = Math.min(max, Math.max(0, scroll.scrollTop + delta));
   }
 
-  function settleBoundary(id) {
+  function settleBoundary(id, token) {
     alignBoundary(id);
     requestAnimationFrame(() => {
       alignBoundary(id);
-      requestAnimationFrame(() => alignBoundary(id));
+      requestAnimationFrame(() => {
+        alignBoundary(id);
+        endSync(token);
+      });
     });
   }
 
   function navigateTo(id) {
     const value = String(id || '');
     if (!value) return;
+    if (syncGuard) return;
     const source = document.querySelector(`[data-situation-list] [data-open-situation="${CSS.escape(value)}"]`);
     if (!source) return;
+    const token = beginSync('navigation', value);
     source.click();
-    settleBoundary(value);
+    settleBoundary(value, token);
   }
 
   function navigateRelative(delta) {
+    if (syncGuard) return;
     const ids = orderedIds();
     const index = activeIndex();
     if (index < 0 || !ids.length) return;
@@ -175,6 +196,7 @@
     nav.addEventListener('wheel', (event) => {
       if (detailsCanScroll(event.target, event.deltaY)) return;
       event.preventDefault();
+      if (syncGuard) return;
       wheelTotal += event.deltaY;
       clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => { wheelTotal = 0; }, 140);
@@ -184,7 +206,7 @@
     }, { passive: false });
 
     nav.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || syncGuard) return;
       pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
     }, { passive: true });
 
@@ -258,9 +280,8 @@
       nav = document.createElement('div');
       nav.className = `tw-v33-fixed-list tw-v33-fixed-list-${kind}`;
       nav.dataset.v33FixedList = kind;
-      nav.setAttribute('aria-label', isDrawer ? 'Situationen' : 'Situationen');
-      if (isDrawer) host.insertBefore(nav, source);
-      else host.insertBefore(nav, source);
+      nav.setAttribute('aria-label', 'Situationen');
+      host.insertBefore(nav, source);
       bindFixedList(nav);
     }
     source.setAttribute('aria-hidden', 'true');
@@ -358,7 +379,7 @@
     let wheelTimer = 0;
 
     strip.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || syncGuard) return;
       pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
     }, { passive: true });
 
@@ -377,6 +398,7 @@
     strip.addEventListener('wheel', (event) => {
       if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
       event.preventDefault();
+      if (syncGuard) return;
       wheelTotal += event.deltaX;
       clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => { wheelTotal = 0; }, 140);
