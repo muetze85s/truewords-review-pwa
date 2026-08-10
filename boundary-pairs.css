@@ -163,8 +163,28 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
   margin-bottom: 12px;
 }
 .dp-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
-.dp-dispute-messages { border-left: 2px solid var(--tw-border); padding-left: 10px; margin-bottom: 10px; }
-.dp-dispute-messages .dp-message { padding: 4px 0; }
+.dp-dispute-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-weight: 700; background: var(--tw-status-open-surface); color: var(--tw-status-open);
+}
+
+/* Geklärte Streitfälle bleiben lesbar, treten aber sichtbar zurück. */
+.dp-dispute.geklaert { border-color: var(--tw-status-open); background: var(--tw-status-open-surface); }
+.dp-dispute.geklaert .dp-dispute-messages { opacity: .82; }
+.dp-dispute.decision-cut .dp-dispute-badge { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+.dp-dispute.decision-cut { border-color: var(--tw-status-unclear); background: var(--tw-status-unclear-surface); }
+
+/* Nachrichtendarstellung wie im Prüfstand — gleiche Abstände, kein Abschneiden. */
+.dp-dispute-messages {
+  border-left: 2px solid var(--tw-border);
+  padding-left: 10px;
+  margin-bottom: 10px;
+  max-height: none;
+  overflow: visible;
+}
+.dp-dispute-messages .dp-message { padding: 8px 12px; }
+.dp-dispute-messages .dp-message-text { font-size: 15.5px; }
+.dp-dispute-messages .dp-message.dim .dp-message-text { font-size: 15.5px; }
 
 .dp-dispute-seam { position: relative; height: 30px; margin: 2px 0; }
 .dp-dispute-seam .line {
@@ -185,6 +205,22 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-seam.central.marked-philipp .line,
 .dp-dispute-seam.central.marked-lena .line,
 .dp-dispute-seam.central.marked-both .line { background: var(--tw-status-unclear); }
+
+/* Die strittige Naht ist antippbar — wie die Nähte im Prüfstand. */
+button.dp-dispute-seam {
+  display: block; width: 100%; padding: 0; border: 0; background: none;
+  cursor: pointer; font: inherit; text-align: center;
+}
+button.dp-dispute-seam:hover .label { text-decoration: underline; }
+button.dp-dispute-seam:focus-visible { outline: 2px solid var(--tw-status-unclear); outline-offset: 2px; }
+button.dp-dispute-seam[data-decision-state="cut"] .line { height: 2px; background: var(--tw-status-unclear); }
+button.dp-dispute-seam[data-decision-state="cut"] .label {
+  color: var(--tw-status-unclear); background: var(--tw-status-unclear-surface); font-weight: 700;
+}
+button.dp-dispute-seam[data-decision-state="no_cut"] .line { height: 1px; background: var(--tw-border); }
+button.dp-dispute-seam[data-decision-state="no_cut"] .label {
+  color: var(--tw-text-muted); background: var(--tw-surface); font-weight: 400; text-decoration: line-through;
+}
 .dp-dispute-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .dp-dispute-actions button {
   border: 1px solid var(--tw-button-border);

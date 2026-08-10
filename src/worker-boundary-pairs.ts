@@ -526,7 +526,9 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     };
   }
 
-  const CONTEXT_RADIUS = 2;
+  /** Nachrichten vor und nach der strittigen Naht. Genug, dass der
+   *  Gesprächsverlauf beurteilbar ist, ohne die halbe Runde zu wiederholen. */
+  const CONTEXT_RADIUS = 6;
 
   function disputeEntry(position: number, setBy: Role) {
     const seamMessageId = positionToId.get(position) as string;
@@ -534,7 +536,6 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     const after = messages[position];
     const resolution = resolutions.get(seamMessageId);
 
-    // Zwei Nachrichten davor und danach, damit der Gesprächsverlauf sichtbar wird.
     const contextStart = Math.max(0, position - CONTEXT_RADIUS);
     const contextEnd = Math.min(messages.length, position + CONTEXT_RADIUS);
     const context = messages.slice(contextStart, contextEnd);
@@ -559,10 +560,17 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     };
   }
 
+  // Offene Streitfälle zuerst, geklärte ans Ende — serverseitig sortiert,
+  // damit beide Partner exakt dieselbe Reihenfolge sehen.
   const disputes = [
     ...comparison.onlyA.map((position) => disputeEntry(position, 'Philipp')),
     ...comparison.onlyB.map((position) => disputeEntry(position, 'Lena')),
-  ].sort((a, b) => a.position - b.position);
+  ].sort((a, b) => {
+    const aResolved = a.decision !== 'open' ? 1 : 0;
+    const bResolved = b.decision !== 'open' ? 1 : 0;
+    if (aResolved !== bResolved) return aResolved - bResolved;
+    return a.position - b.position;
+  });
 
   return json({
     ok: true,
