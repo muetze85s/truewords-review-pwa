@@ -508,17 +508,44 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   `).bind(dataset.id, round).all<ResolutionRow>();
   const resolutions = new Map((resolutionRows.results || []).map((row) => [row.seam_message_id, row]));
 
+  const philippByPosition = new Map(marksPhilipp.map((mark) => [mark.position, mark.mark]));
+  const lenaByPosition = new Map(marksLena.map((mark) => [mark.position, mark.mark]));
+
+  /** Wer hat diesen Zwischenraum wie markiert — für die Anzeige im Kontext um einen Streitfall. */
+  function seamMarks(position: number) {
+    return {
+      position,
+      seamMessageId: positionToId.get(position) as string,
+      philipp: philippByPosition.get(position) || null,
+      lena: lenaByPosition.get(position) || null,
+    };
+  }
+
+  const CONTEXT_RADIUS = 2;
+
   function disputeEntry(position: number, setBy: Role) {
     const seamMessageId = positionToId.get(position) as string;
     const before = messages[position - 1];
     const after = messages[position];
     const resolution = resolutions.get(seamMessageId);
+
+    // Zwei Nachrichten davor und danach, damit der Gesprächsverlauf sichtbar wird.
+    const contextStart = Math.max(0, position - CONTEXT_RADIUS);
+    const contextEnd = Math.min(messages.length, position + CONTEXT_RADIUS);
+    const context = messages.slice(contextStart, contextEnd);
+    const seams = [];
+    for (let seamPosition = contextStart + 1; seamPosition <= contextEnd - 1; seamPosition += 1) {
+      seams.push(seamMarks(seamPosition));
+    }
+
     return {
       seamMessageId,
       position,
       setBy,
       before,
       after,
+      context,
+      seams,
       pauseSeconds: Math.max(0, after.t - before.t),
       decision: resolution?.decision || 'open',
       note: resolution?.note || '',
@@ -546,6 +573,9 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
       vsLena: { agreementF1: agreementF1(vsLena), kappa: cohensKappa(vsLena, totalSeams) },
       vsCombined: { agreementF1: agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
     },
+    // Roh-Diagnose: wie viele Grenzen die Automatik überhaupt gesetzt hat, unabhängig
+    // vom Vergleich. 0 bei >0 menschlichen Grenzen erklärt sofort eine 0.00-Übereinstimmung.
+    automaticRaw: { boundaryCount: automaticResult.boundaries.length, totalSeams },
     messages,
     combined: {
       cuts: combined.cuts.map((position) => positionToId.get(position)).filter(Boolean),
@@ -624,6 +654,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
   let totalAutoOnlyCombined = 0;
   let openDisputes = 0;
   let resolvedDisputes = 0;
+  let totalAutomaticBoundaries = 0;
   const perRound: Array<{
     round: number;
     philippCuts: number;
@@ -632,6 +663,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     kappa: number;
     disputes: number;
     resolved: number;
+    automaticBoundaryCount: number;
   }> = [];
 
   for (const round of readyRounds) {
@@ -663,6 +695,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalAutoPairs += vsCombined.pairs.length;
     totalAutoOnlyAuto += vsCombined.onlyA.length;
     totalAutoOnlyCombined += vsCombined.onlyB.length;
+    totalAutomaticBoundaries += automaticResult.boundaries.length;
 
     const resolutionRows = await env.DB.prepare(`
       SELECT decision FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
@@ -680,6 +713,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
       kappa: comparison.kappa,
       disputes: disputeCount,
       resolved: resolvedCount,
+      automaticBoundaryCount: automaticResult.boundaries.length,
     });
   }
 
@@ -698,6 +732,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     automaticVsCombined: {
       agreementF1: autoTotal ? (2 * totalAutoPairs) / autoTotal : null,
     },
+    automaticBoundariesTotal: totalAutomaticBoundaries,
     disputes: { open: openDisputes, resolved: resolvedDisputes },
     perRound,
   });

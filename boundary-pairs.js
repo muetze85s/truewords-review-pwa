@@ -37,12 +37,12 @@
     return { text: message.text, placeholder: false };
   }
 
-  function messageHtml(message) {
+  function messageHtml(message, dim) {
     const { text, placeholder } = messageText(message);
     const time = message.t ? new Date(message.t * 1000).toLocaleString('de-DE', {
       day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
     }) : '';
-    return `<div class="dp-message" data-speaker="${escapeHtml(message.from)}">
+    return `<div class="dp-message${dim ? ' dim' : ''}" data-speaker="${escapeHtml(message.from)}">
       <div class="dp-message-meta"><b>${escapeHtml(message.from)}</b> · ${escapeHtml(time)}</div>
       <div class="dp-message-text${placeholder ? ' placeholder' : ''}">${escapeHtml(text)}</div>
     </div>`;
@@ -206,13 +206,45 @@
     });
   }
 
+  function seamMarkLabel(mark) {
+    if (mark === 'cut') return 'Grenze';
+    if (mark === 'doubt') return 'unsicher';
+    return '';
+  }
+
+  /** Baut Kontext + Streitfall-Naht als eine durchgehende Kette aus Nachrichten und Naht-Markern. */
+  function disputeContextHtml(dispute) {
+    const parts = [];
+    dispute.context.forEach((message, index) => {
+      if (index > 0) {
+        const before = dispute.context[index - 1];
+        const seam = dispute.seams.find((entry) => entry.seamMessageId === message.id);
+        const isCentral = seam && seam.position === dispute.position;
+        const tags = [];
+        if (seam?.philipp) tags.push(`Philipp: ${seamMarkLabel(seam.philipp)}`);
+        if (seam?.lena) tags.push(`Lena: ${seamMarkLabel(seam.lena)}`);
+        const label = tags.length ? tags.join(' · ') : pauseLabel(before, message);
+        const markedClass = seam?.philipp && seam?.lena ? ' marked-both'
+          : seam?.philipp ? ' marked-philipp'
+          : seam?.lena ? ' marked-lena' : '';
+        parts.push(`<div class="dp-dispute-seam${isCentral ? ' central' : ''}${markedClass}">
+          <span class="line"></span><span class="label">${escapeHtml(label)}</span>
+        </div>`);
+      }
+      const isEdge = message.id !== dispute.before.id && message.id !== dispute.after.id;
+      parts.push(messageHtml(message, isEdge));
+    });
+    return parts.join('');
+  }
+
   function renderAgreement(data) {
     $('dp-agreement-number').textContent = data.agreementF1 === null ? '–' : data.agreementF1.toFixed(2);
     $('dp-agreement-label').textContent = `Übereinstimmung · n=${data.n}`;
     $('dp-kappa-label').textContent = `κ = ${data.kappa.toFixed(2)}`;
     $('dp-automatic-row').innerHTML = `Automatik gegen Philipp: <b>${data.automatic.vsPhilipp.agreementF1.toFixed(2)}</b>
       · gegen Lena: <b>${data.automatic.vsLena.agreementF1.toFixed(2)}</b>
-      · gegen gemeinsame Fassung: <b>${data.automatic.vsCombined.agreementF1.toFixed(2)}</b>`;
+      · gegen gemeinsame Fassung: <b>${data.automatic.vsCombined.agreementF1.toFixed(2)}</b>
+      <br><span class="dp-hint">Automatik hat roh ${data.automaticRaw.boundaryCount} von ${data.automaticRaw.totalSeams} Zwischenräumen als Grenze erkannt.</span>`;
 
     const disputesContainer = $('dp-disputes');
     if (!data.disputes.length) {
@@ -222,7 +254,7 @@
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
       <div class="dp-dispute" data-seam="${escapeHtml(dispute.seamMessageId)}">
         <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b></div>
-        <div class="dp-dispute-messages">${messageHtml(dispute.before)}${messageHtml(dispute.after)}</div>
+        <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
           <button type="button" data-decision="cut" class="${dispute.decision === 'cut' ? 'active' : ''}">ist eine Grenze</button>
           <button type="button" data-decision="no_cut" class="${dispute.decision === 'no_cut' ? 'active' : ''}">ist keine</button>
@@ -291,6 +323,7 @@
         <td class="n">${row.agreementF1.toFixed(2)}</td>
         <td class="n">${row.kappa.toFixed(2)}</td>
         <td class="n">${row.resolved}/${row.disputes}</td>
+        <td class="n">${row.automaticBoundaryCount}</td>
       </tr>
     `).join('');
 
@@ -300,12 +333,13 @@
         <div class="dp-agreement-number">${overall}</div>
         <div class="dp-agreement-meta"><span>Übereinstimmung über ${data.roundsReady} abgeschlossene Runden</span></div>
         <div class="dp-automatic-row">Automatik gegen die gemeinsame Fassung: <b>${auto}</b></div>
+        <div class="dp-automatic-row">Automatik hat roh ${data.automaticBoundariesTotal} Grenzen über alle abgeschlossenen Runden gesetzt.</div>
         <div class="dp-automatic-row">Streitfälle: ${data.disputes.resolved} geklärt, ${data.disputes.open} offen</div>
       </div>
       <div class="dp-card" style="overflow-x:auto">
         <table class="dp-overview-table">
-          <tr><th>Runde</th><th class="n">Philipp</th><th class="n">Lena</th><th class="n">Übereinst.</th><th class="n">κ</th><th class="n">Streitfälle</th></tr>
-          ${rows || '<tr><td colspan="6">Noch keine beidseitig abgegebene Runde.</td></tr>'}
+          <tr><th>Runde</th><th class="n">Philipp</th><th class="n">Lena</th><th class="n">Übereinst.</th><th class="n">κ</th><th class="n">Streitfälle</th><th class="n">Automatik roh</th></tr>
+          ${rows || '<tr><td colspan="7">Noch keine beidseitig abgegebene Runde.</td></tr>'}
         </table>
       </div>
     `;
