@@ -163,13 +163,51 @@ export function compareReviewers(marksA, marksB, { totalSeams, tolerance = 1, do
 }
 
 /**
+ * Übersetzt die gespeicherten Auflösungen (review_boundary_resolutions) in
+ * Positionen im Fenster — analog zu toPositionalMarks für die Markierungen.
+ */
+export function toPositionalResolutions(rows, positions) {
+  const out = [];
+  for (const row of rows) {
+    const position = positions.get(row.seam_message_id);
+    if (position !== undefined) out.push({ position, decision: row.decision });
+  }
+  return out;
+}
+
+/**
  * Gemeinsame Fassung: von beiden gesetzte Grenzen (Paare) gelten als Grenze,
  * nur einseitig gesetzte als unsicher. Maßstab für den Automatik-Vergleich.
+ *
+ * Geklärte Streitfälle gehen mit ein, sonst bliebe die Klärungsarbeit ohne
+ * Wirkung auf jede Kennzahl: 'cut' macht aus einem strittigen Zwischenraum
+ * eine gesetzte Grenze, 'no_cut' streicht ihn, 'open' lässt ihn unsicher.
+ * Die Auflösungen sind dabei maßgeblich — sie sind die spätere, gemeinsame
+ * Entscheidung über die ursprüngliche Einzelmarkierung.
+ *
+ * Ohne Auflösungen verhält sich die Funktion unverändert.
  */
-export function combinedBoundary({ pairs, onlyA, onlyB }) {
+export function combinedBoundary({ pairs, onlyA, onlyB }, resolutions = []) {
+  const decisionByPosition = new Map();
+  for (const entry of resolutions) decisionByPosition.set(entry.position, entry.decision);
+
+  const cuts = new Set(pairs.map(([a, b]) => Math.round((a + b) / 2)));
+  const uncertain = new Set([...onlyA, ...onlyB]);
+
+  for (const [position, decision] of decisionByPosition) {
+    if (decision === 'cut') {
+      uncertain.delete(position);
+      cuts.add(position);
+    } else if (decision === 'no_cut') {
+      uncertain.delete(position);
+      cuts.delete(position);
+    }
+    // 'open' — bleibt unsicher, genau wie eine ungeklärte Abweichung
+  }
+
   return {
-    cuts: pairs.map(([a, b]) => Math.round((a + b) / 2)),
-    uncertain: [...onlyA, ...onlyB].sort((x, y) => x - y),
+    cuts: [...cuts].sort((x, y) => x - y),
+    uncertain: [...uncertain].sort((x, y) => x - y),
   };
 }
 
