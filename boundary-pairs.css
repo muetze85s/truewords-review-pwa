@@ -100,6 +100,8 @@ body.dp {
 .dp-message[data-speaker="Lena"] .dp-message-meta b { color: var(--tw-lena-text); }
 .dp-message-text { font-size: 15.5px; white-space: pre-wrap; word-break: break-word; }
 .dp-message-text.placeholder { font-style: italic; color: var(--tw-text-muted); }
+.dp-message.dim { opacity: .58; filter: saturate(.7); }
+.dp-message.dim .dp-message-text { font-size: 14px; }
 
 .dp-seam {
   display: block;
@@ -163,6 +165,26 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
 .dp-dispute-messages { border-left: 2px solid var(--tw-border); padding-left: 10px; margin-bottom: 10px; }
 .dp-dispute-messages .dp-message { padding: 4px 0; }
+
+.dp-dispute-seam { position: relative; height: 30px; margin: 2px 0; }
+.dp-dispute-seam .line {
+  position: absolute; left: 4px; right: 4px; top: 50%; height: 1px;
+  transform: translateY(-50%); background: var(--tw-border);
+}
+.dp-dispute-seam .label {
+  position: relative; display: inline-block; background: var(--tw-surface);
+  padding: 2px 8px; font-size: 11px; color: var(--tw-text-muted); top: 7px;
+}
+.dp-dispute-seam.central .line { height: 2px; background: var(--tw-status-unclear); }
+.dp-dispute-seam.central .label {
+  color: var(--tw-status-unclear); font-weight: 700; background: var(--tw-status-unclear-surface);
+}
+.dp-dispute-seam.marked-philipp .label { color: var(--tw-philipp-text); background: var(--tw-philipp-surface); }
+.dp-dispute-seam.marked-lena .label { color: var(--tw-lena-text); background: var(--tw-lena-surface); }
+.dp-dispute-seam.marked-both .label { color: var(--tw-status-open); background: var(--tw-status-open-surface); }
+.dp-dispute-seam.central.marked-philipp .line,
+.dp-dispute-seam.central.marked-lena .line,
+.dp-dispute-seam.central.marked-both .line { background: var(--tw-status-unclear); }
 .dp-dispute-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .dp-dispute-actions button {
   border: 1px solid var(--tw-button-border);
@@ -185,9 +207,10 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 }
 .dp-dispute-status { font-size: 12px; color: var(--tw-text-muted); margin-top: 6px; }
 
-.dp-overview-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.dp-overview-table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
 .dp-overview-table th, .dp-overview-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--tw-border); }
-.dp-overview-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.dp-overview-table th.n, .dp-overview-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.dp-overview-table th { font-size: 12px; color: var(--tw-text-muted); font-weight: 700; }
 .dp-lowdata { background: var(--tw-status-open-surface); border: 1px solid var(--tw-status-open); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 14px; }
 
 @media (max-width: 620px) {

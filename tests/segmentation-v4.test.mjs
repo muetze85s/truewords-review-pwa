@@ -70,4 +70,23 @@ function msg(id, hour, from, text, extra = {}) {
   );
 }
 
+{
+  // Regression: with real gaps present (date_unixtime in seconds, matching
+  // worker-boundary-pairs.ts's ViewMessage.t), the automatic comparison must
+  // actually be able to find a boundary — not just avoid crashing. A silent
+  // unit mismatch (e.g. milliseconds instead of seconds) would make every
+  // gap huge or every gap ~0 without throwing, quietly producing 0 boundaries
+  // forever and a permanently 0.00 "Automatik" score.
+  const base = Date.parse('2026-05-10T00:00:00Z') / 1000;
+  const messages = [
+    { id: '1', date_unixtime: String(base), text: 'Kannst du heute beim Vermieter anrufen?' },
+    { id: '2', date_unixtime: String(base + 200), text: 'Ja, mache ich.' },
+    { id: '3', date_unixtime: String(base + 300), text: 'Ich muss jetzt los, wir sprechen später.' },
+    { id: '4', date_unixtime: String(base + 8 * 3600), text: 'Guten Abend, bist du schon zu Hause?' },
+  ];
+  const result = segmentConversationWindow(messages);
+  assert.ok(result.boundaries.length >= 1, 'ein expliziter Abschluss plus spätere Begrüßung muss eine Grenze erzeugen');
+  assert.equal(result.boundaries[0].beforeEventId, '4');
+}
+
 console.log('segmentation-v4 tests: PASS');
