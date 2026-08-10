@@ -9,6 +9,7 @@ import {
   pickRoundStart,
   buildRoundView,
   agreementGate,
+  toSegmentationInput,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
@@ -65,6 +66,9 @@ type ViewMessage = {
   t: number;
   text: string;
   kind: 'text' | 'medien' | 'anruf' | 'leer';
+  /** Nur für die automatische Segmentierung: ohne die Antwortbeziehung
+   *  schneidet sie mitten in laufenden Wechselreden. */
+  replyToId?: string;
 };
 
 type RoundRow = {
@@ -183,12 +187,6 @@ function messageSeconds(message: RawMessage): number {
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
 }
 
-function messageYear(message: RawMessage): number | null {
-  const seconds = messageSeconds(message);
-  if (!seconds) return null;
-  return new Date(seconds * 1000).getUTCFullYear();
-}
-
 function isForwarded(message: RawMessage): boolean {
   return Boolean(message.forwarded_from || message.forwarded_from_id || message.saved_from);
 }
@@ -212,9 +210,9 @@ function isService(message: RawMessage): boolean {
   return !isCallAction(action);
 }
 
-function isReviewable(message: RawMessage, year: number): boolean {
-  return messageYear(message) === year
-    && !isForwarded(message)
+/** Ganzer Chat, ohne Weiterleitungen, Sticker und Service-Ereignisse — keine Jahresgrenze mehr. */
+function isReviewable(message: RawMessage): boolean {
+  return !isForwarded(message)
     && !isSticker(message)
     && !isService(message);
 }
@@ -226,16 +224,18 @@ function toView(message: RawMessage): ViewMessage {
     : (message.photo || message.file || message.media_type || message.mime_type)
       ? 'medien'
       : (flattenText(message.text).trim() ? 'text' : 'leer');
+  const replyTo = message.reply_to_message_id;
   return {
     id: rawId(message),
     from: String(message.from || message.actor || message.sender || '?'),
     t: messageSeconds(message),
     text: String(message.truewords_original_text || flattenText(message.text) || '').trim(),
     kind,
+    ...(replyTo === undefined || replyTo === null ? {} : { replyToId: String(replyTo) }),
   };
 }
 
-async function filteredSequence(env: Env, datasetId: string, year: number): Promise<RawMessage[]> {
+async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
   const rows = await env.DB.prepare(`
     SELECT messages_json FROM review_chat_chunks WHERE dataset_id = ?1 ORDER BY chunk_index
   `).bind(datasetId).all<{ messages_json: string }>();
@@ -250,7 +250,7 @@ async function filteredSequence(env: Env, datasetId: string, year: number): Prom
     }
     if (!Array.isArray(parsed)) continue;
     for (const message of parsed) {
-      if (message && typeof message === 'object' && isReviewable(message as RawMessage, year)) {
+      if (message && typeof message === 'object' && isReviewable(message as RawMessage)) {
         out.push(message as RawMessage);
       }
     }
@@ -275,7 +275,7 @@ async function loadRoundWindow(
   dataset: DatasetRow,
   round: number,
 ): Promise<{ round: RoundRow; messages: ViewMessage[] }> {
-  const sequence = await filteredSequence(env, dataset.id, dataset.year);
+  const sequence = await filteredSequence(env, dataset.id);
   if (sequence.length < ROUND_WINDOW_SIZE) {
     throw new Error('Die gefilterte Nachrichtenfolge ist kürzer als eine Runde.');
   }
@@ -491,7 +491,7 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   const combined = combinedBoundary(comparison);
 
   const automaticResult = segmentConversationWindow(
-    messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+    toSegmentationInput(messages),
   );
   const automaticPositions = automaticResult.boundaries
     .map((boundary) => positions.get(boundary.beforeEventId))
@@ -682,7 +682,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     const combined = combinedBoundary(comparison);
 
     const automaticResult = segmentConversationWindow(
-      messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+      toSegmentationInput(messages),
     );
     const automaticPositions = automaticResult.boundaries
       .map((boundary) => positions.get(boundary.beforeEventId))

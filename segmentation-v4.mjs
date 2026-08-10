@@ -146,6 +146,32 @@ export function boundaryDecision(messages, startIndex, currentIndex) {
   return { boundary: false, reason: 'conversation_continues', gapMinutes };
 }
 
+/** Rohwert des Zeitstempels, so wie er in der Nachricht steht — für Notfall-Beschriftungen. */
+function rawTimestampValue(message) {
+  const raw = message?.date_unixtime ?? message?.timestamp ?? message?.date;
+  if (raw === undefined || raw === null || raw === '') return '?';
+  return String(raw);
+}
+
+/**
+ * Beschriftet eine Situation mit Tag/Monat der ersten Nachricht. Ein einzelner
+ * krummer Zeitstempel (null, leer, unparsbarer String) darf niemals die ganze
+ * Auswertung sprengen: Intl.DateTimeFormat wirft bei einem ungültigen Datum
+ * "Invalid time value", deshalb wird hier abgefangen und stattdessen der
+ * Rohwert durchgereicht.
+ */
+function formatSituationDate(message) {
+  try {
+    return new Intl.DateTimeFormat('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: 'Asia/Bangkok',
+    }).format(new Date(timestamp(message) * 1000));
+  } catch {
+    return rawTimestampValue(message);
+  }
+}
+
 export function segmentConversationWindow(messages) {
   if (!Array.isArray(messages) || !messages.length) {
     return { situations: [], assignments: {}, boundaries: [], decisions: [] };
@@ -163,11 +189,7 @@ export function segmentConversationWindow(messages) {
     for (let index = startIndex; index <= endIndex; index += 1) {
       assignments[String(messages[index]?.id)] = situationId;
     }
-    const date = new Intl.DateTimeFormat('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      timeZone: 'Asia/Bangkok',
-    }).format(new Date(timestamp(first) * 1000));
+    const date = formatSituationDate(first);
     situations.push({
       id: situationId,
       label: `V4 ${String(situationId).padStart(2, '0')} · ${date}`,

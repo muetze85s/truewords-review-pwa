@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   hashSeed,
   pickRoundStart,
@@ -10,7 +11,9 @@ import {
   combinedBoundary,
   buildRoundView,
   agreementGate,
+  toSegmentationInput,
 } from '../boundary-pairs-logic.mjs';
+import { segmentConversationWindow } from '../segmentation-v4.mjs';
 
 // --- Paarung mit Toleranz -----------------------------------------------
 
@@ -216,6 +219,96 @@ assert.ok(hashSeed('a') !== hashSeed('b'), 'unterschiedliche Eingaben sollten un
 {
   const gate = agreementGate({ reviewer: 'Philipp', philippSubmittedAt: '2026-08-10T07:00:00Z', lenaSubmittedAt: '2026-08-10T08:00:00Z' });
   assert.equal(gate, null, 'beide abgegeben -> Vergleich freigegeben');
+}
+
+// --- Automatik-Verdrahtung: getSummary/getAgreement füttern die Segmentierung ---
+
+{
+  // Diese Nachrichten haben genau die Form, die toView() in
+  // worker-boundary-pairs.ts erzeugt (id/from/t/text/kind/replyToId) — der
+  // Test läuft also über dieselbe Verdrahtung wie GET /api/agreement/summary,
+  // nicht über handgebaute Segmentierungs-Eingaben.
+  const base = Date.parse('2026-05-10T06:00:00Z') / 1000;
+  const view = [];
+  let clock = base;
+  const push = (from, text, kind = 'text', extra = {}) => {
+    view.push({ id: String(1000 + view.length), from, t: clock, text, kind, ...extra });
+  };
+
+  for (let index = 0; index < 6; index += 1) {
+    push(index % 2 ? 'Lena' : 'Philipp Sellin', 'Der Zug fuhr pünktlich ab.');
+    clock += 300;
+  }
+  clock += 8 * 3600;
+  push('Lena', 'Guten Morgen, schön von dir zu lesen.');
+  clock += 300;
+  push('Philipp Sellin', 'Die Katze lag wieder auf der Fensterbank.');
+  clock += 2 * 3600;
+  push('Lena', '', 'anruf');
+  clock += 300;
+  push('Lena', 'Ich muss jetzt los, wir sprechen später.');
+  clock += 3600;
+  push('Philipp Sellin', 'Der Termin beim Vermieter steht.');
+
+  const input = toSegmentationInput(view);
+
+  // Die Felder, ohne die segmentation-v4.mjs blind ist, müssen ankommen.
+  assert.equal(input[0].text, 'Der Zug fuhr pünktlich ab.', 'Text muss durchgereicht werden');
+  assert.equal(input[0].from, 'Philipp Sellin', 'Absender muss durchgereicht werden');
+  assert.equal(input[0].date_unixtime, base, 'Zeitstempel muss durchgereicht werden');
+  assert.equal(input[8].truewords_service_type, 'call', "kind 'anruf' muss als call ankommen");
+
+  const result = segmentConversationWindow(input);
+  assert.ok(
+    result.boundaries.length > 0,
+    `die Automatik muss über die echte Verdrahtung Grenzen finden, fand aber ${result.boundaries.length}`,
+  );
+  assert.ok(
+    !result.decisions.every((decision) => decision.reason === 'no_previous_event'),
+    'no_previous_event für jeden Übergang heißt: der Segmentierung fehlen Text und Art',
+  );
+
+  // Gegenprobe: genau die alte Verdrahtung (nur id + Zeitstempel). Ohne Text
+  // gilt keine Nachricht als bedeutsam, boundaryDecision steigt vor jeder
+  // Regel aus — daher dauerhaft 0 Grenzen und eine Automatik von 0,00.
+  const gestrippt = segmentConversationWindow(
+    view.map((message) => ({ id: message.id, date_unixtime: message.t })),
+  );
+  assert.equal(gestrippt.boundaries.length, 0, 'die alte Verdrahtung konnte gar keine Grenze finden');
+}
+
+{
+  // reply_to_message_id muss ankommen, sonst greift direct_reply_continuation
+  // nicht und die Automatik schneidet mitten in laufenden Wechselreden.
+  const input = toSegmentationInput([
+    { id: '1', from: 'Lena', t: 1000, text: 'Frage?', kind: 'text' },
+    { id: '2', from: 'Philipp Sellin', t: 2000, text: 'Antwort.', kind: 'text', replyToId: '1' },
+    { id: '3', from: 'Lena', t: 3000, text: 'Foto', kind: 'medien' },
+  ]);
+  assert.equal(input[1].reply_to_message_id, '1', 'Antwortbeziehung muss durchgereicht werden');
+  assert.equal(input[2].truewords_media_type, 'media', "kind 'medien' muss als media ankommen");
+  assert.equal(input[0].reply_to_message_id, undefined, 'ohne Antwortbeziehung bleibt das Feld weg');
+}
+
+{
+  // Beide Aufrufstellen (getAgreement UND getSummary) müssen über
+  // toSegmentationInput gehen. Genau hier ist der Fehler entstanden: die
+  // Abbildung stand zweimal wörtlich im Code, und eine der beiden Stellen
+  // wurde beim Beheben übersehen — die Übersicht blieb bei 0,00, während der
+  // Rundenvergleich schon richtig rechnete. Ein Unit-Test über die reine
+  // Logik kann das nicht sehen, deshalb wird hier die Quelle geprüft.
+  const worker = readFileSync(new URL('../src/worker-boundary-pairs.ts', import.meta.url), 'utf8');
+  const calls = worker.match(/segmentConversationWindow\(/gu) || [];
+  assert.equal(calls.length, 2, 'erwartet werden genau zwei Aufrufe der Segmentierung');
+  assert.equal(
+    (worker.match(/toSegmentationInput\(messages\)/gu) || []).length,
+    2,
+    'beide Aufrufstellen müssen toSegmentationInput benutzen',
+  );
+  assert.ok(
+    !/date_unixtime:\s*message\.t/u.test(worker),
+    'keine Aufrufstelle darf die Nachrichten noch selbst auf id und Zeitstempel zusammenstreichen',
+  );
 }
 
 console.log('boundary-pairs-logic tests: PASS');
