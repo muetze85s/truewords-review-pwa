@@ -675,34 +675,9 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     );
     const combined = combinedBoundary(comparison);
 
-    // TEMP DIAG (will be reverted): log the raw value that feeds
-    // Intl.DateTimeFormat/new Date inside segmentConversationWindow's
-    // close(), for every message in the window (not just the first) — a
-    // boundary can move close()'s "first" to any message in the round.
-    // Deliberately does NOT swallow a formatting failure: it re-throws
-    // (with the raw value attached) so the crash still reaches the outer
-    // catch and shows up in the response, now with a full stack trace.
-    const automaticInput = messages.map((message) => ({ id: message.id, date_unixtime: message.t }));
-    console.error('[DIAG summary] segmentConversationWindow input', {
-      round,
-      reviewer,
-      windowSize: automaticInput.length,
-      rawTimestamps: automaticInput.map((m) => ({ id: m.id, date_unixtime: m.date_unixtime, type: typeof m.date_unixtime })),
-    });
-    let automaticResult;
-    try {
-      automaticResult = segmentConversationWindow(automaticInput);
-    } catch (caught) {
-      const diagError = caught instanceof Error ? caught : new Error(String(caught));
-      console.error('[DIAG summary] segmentConversationWindow threw', {
-        round,
-        reviewer,
-        message: diagError.message,
-        stack: diagError.stack,
-      });
-      diagError.message = `[DIAG round=${round} reviewer=${reviewer}] ${diagError.message}`;
-      throw diagError;
-    }
+    const automaticResult = segmentConversationWindow(
+      messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+    );
     const automaticPositions = automaticResult.boundaries
       .map((boundary) => positions.get(boundary.beforeEventId))
       .filter((position): position is number => position !== undefined);
@@ -788,14 +763,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     return error('Endpunkt nicht gefunden.', 404);
   } catch (caught) {
     console.error('Boundary pairs API error', caught);
-    // TEMP DIAG (will be reverted): expose the full stack in the response
-    // body so it's visible in the browser Network tab without needing a
-    // live wrangler tail session.
-    return json({
-      ok: false,
-      error: caught instanceof Error ? caught.message : 'Runde konnte nicht verarbeitet werden.',
-      diagStack: caught instanceof Error ? caught.stack : undefined,
-    }, 500);
+    return error(caught instanceof Error ? caught.message : 'Runde konnte nicht verarbeitet werden.', 500);
   }
 }
 

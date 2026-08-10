@@ -53,21 +53,66 @@ function msg(id, hour, from, text, extra = {}) {
 
 {
   // Regression: worker-boundary-pairs.ts feeds segmentConversationWindow
-  // stripped-down messages for the automatic-segmentation comparison. If a
-  // caller ever strips the timestamp too, close() formats an Invalid Date
-  // via Intl.DateTimeFormat and throws "Invalid time value" instead of
-  // producing a result — must not happen as long as date_unixtime is present.
+  // stripped-down messages for the automatic-segmentation comparison.
   const result = segmentConversationWindow([
     { id: 1, date_unixtime: '1746864000' },
     { id: 2, date_unixtime: '1746864600' },
   ]);
   assert.equal(result.situations.length, 1);
+}
 
-  assert.throws(
-    () => segmentConversationWindow([{ id: 1 }, { id: 2 }]),
-    /Invalid time value/u,
-    'messages without a timestamp must fail loudly, not silently — this documents why callers must always pass date_unixtime',
-  );
+{
+  // Regression: a single broken timestamp must never block the whole
+  // overview. close() formats the first message of each situation via
+  // Intl.DateTimeFormat, which throws "Invalid time value" on an invalid
+  // date — that used to take down GET /api/agreement/summary completely.
+  // Now the raw value is passed through instead of throwing.
+  const brokenTimestamps = [null, undefined, '', '   ', 'kaputt', 'NaN', {}, []];
+  for (const broken of brokenTimestamps) {
+    const result = segmentConversationWindow([
+      { id: 1, date_unixtime: broken },
+      { id: 2, date_unixtime: broken },
+    ]);
+    assert.equal(
+      result.situations.length,
+      1,
+      `ungültiger Zeitstempel ${JSON.stringify(broken)} darf die Auswertung nicht sprengen`,
+    );
+    assert.ok(
+      result.situations[0].label.startsWith('V4 01 · '),
+      'die Situation muss trotzdem eine Beschriftung bekommen',
+    );
+  }
+}
+
+{
+  // Same, but in the exact shape getSummary/getAgreement build in
+  // worker-boundary-pairs.ts ({ id, date_unixtime: message.t }) and with the
+  // broken timestamp sitting in the middle of an otherwise healthy window —
+  // that is the case that actually reaches production.
+  const base = Date.parse('2026-05-10T00:00:00Z') / 1000;
+  const messages = [];
+  for (let index = 0; index < 20; index += 1) {
+    messages.push({ id: String(1000 + index), date_unixtime: String(base + index * 300) });
+  }
+  messages[7].date_unixtime = null;
+  messages[12].date_unixtime = 'kaputt';
+  messages[15].date_unixtime = '';
+
+  const result = segmentConversationWindow(messages);
+  assert.ok(result.situations.length >= 1, 'die Auswertung muss durchlaufen');
+  assert.equal(Object.keys(result.assignments).length, messages.length, 'jede Nachricht braucht eine Zuordnung');
+  for (const situation of result.situations) {
+    assert.ok(situation.label, 'jede Situation braucht eine Beschriftung');
+  }
+
+  // Und der Nachschlag, den getSummary danach macht, muss weiter funktionieren.
+  const positions = new Map();
+  for (let index = 1; index < messages.length; index += 1) positions.set(messages[index].id, index);
+  const mapped = result.boundaries
+    .map((boundary) => positions.get(boundary.beforeEventId))
+    .filter((position) => position !== undefined);
+  assert.equal(mapped.length, result.boundaries.length, 'jede gefundene Grenze muss auf eine Position abbildbar bleiben');
 }
 
 {
