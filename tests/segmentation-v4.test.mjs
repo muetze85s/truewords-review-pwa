@@ -51,4 +51,23 @@ function msg(id, hour, from, text, extra = {}) {
   assert.equal(result.situations.length, 1, 'Eine lange Pause allein darf keine Grenze erzeugen.');
 }
 
+{
+  // Regression: worker-boundary-pairs.ts feeds segmentConversationWindow
+  // stripped-down messages for the automatic-segmentation comparison. If a
+  // caller ever strips the timestamp too, close() formats an Invalid Date
+  // via Intl.DateTimeFormat and throws "Invalid time value" instead of
+  // producing a result — must not happen as long as date_unixtime is present.
+  const result = segmentConversationWindow([
+    { id: 1, date_unixtime: '1746864000' },
+    { id: 2, date_unixtime: '1746864600' },
+  ]);
+  assert.equal(result.situations.length, 1);
+
+  assert.throws(
+    () => segmentConversationWindow([{ id: 1 }, { id: 2 }]),
+    /Invalid time value/u,
+    'messages without a timestamp must fail loudly, not silently — this documents why callers must always pass date_unixtime',
+  );
+}
+
 console.log('segmentation-v4 tests: PASS');

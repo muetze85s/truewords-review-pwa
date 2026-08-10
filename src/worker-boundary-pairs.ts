@@ -490,7 +490,9 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   const comparison = compareReviewers(marksPhilipp, marksLena, { totalSeams, tolerance, doubtMode });
   const combined = combinedBoundary(comparison);
 
-  const automaticResult = segmentConversationWindow(messages.map((message) => ({ id: message.id })));
+  const automaticResult = segmentConversationWindow(
+    messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+  );
   const automaticPositions = automaticResult.boundaries
     .map((boundary) => positions.get(boundary.beforeEventId))
     .filter((position): position is number => position !== undefined);
@@ -647,7 +649,9 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     );
     const combined = combinedBoundary(comparison);
 
-    const automaticResult = segmentConversationWindow(messages.map((message) => ({ id: message.id })));
+    const automaticResult = segmentConversationWindow(
+      messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+    );
     const automaticPositions = automaticResult.boundaries
       .map((boundary) => positions.get(boundary.beforeEventId))
       .filter((position): position is number => position !== undefined);

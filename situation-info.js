@@ -2,6 +2,7 @@
   'use strict';
 
   const continueButton = document.querySelector('[data-continue]');
+  const doppelpruefungButton = document.querySelector('[data-doppelpruefung]');
   const uploadButton = document.querySelector('[data-upload]');
   const account = document.querySelector('[data-account]');
   const logout = document.querySelector('[data-logout]');
@@ -48,6 +49,8 @@
     const destination = continueButton.dataset.destination || '/review.html';
     location.replace(destination);
   });
+
+  doppelpruefungButton.addEventListener('click', () => location.replace('/doppelpruefung.html'));
 
   uploadButton.addEventListener('click', () => location.replace('/upload.html'));
 
