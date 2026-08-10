@@ -56,7 +56,9 @@ jobs:
           test -f dist/truewords-ui-theme.css
           test -f migrations/0001_review_sync.sql
           grep -q 'philena-2026-pilot-v4-unseen' wrangler.jsonc
-          grep -q 'worker-source-integrity-v4.ts' wrangler.jsonc
+          main_entry=$(sed -n 's/.*"main"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' wrangler.jsonc)
+          test -n "$main_entry"
+          test -f "$main_entry"
           grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
           grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
           grep -q 'Vollständigen Telegram-Rohchat auswählen' dist/upload.html
