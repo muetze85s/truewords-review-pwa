@@ -49,6 +49,27 @@ export declare function combinedBoundary(pairing: SeamPairing): {
   uncertain: number[];
 };
 
+export type SegmentationInputMessage = {
+  id: string;
+  from: string;
+  t: number;
+  text: string;
+  kind: 'text' | 'medien' | 'anruf' | 'leer';
+  replyToId?: string;
+};
+
+export declare function toSegmentationInput(
+  messages: SegmentationInputMessage[],
+): Array<{
+  id: string;
+  date_unixtime: number;
+  from: string;
+  text: string;
+  truewords_service_type?: string;
+  truewords_media_type?: string;
+  reply_to_message_id?: string;
+}>;
+
 export declare function buildRoundView(options: {
   reviewer: 'Philipp' | 'Lena';
   messages: unknown[];

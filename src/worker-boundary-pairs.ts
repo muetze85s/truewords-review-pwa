@@ -9,6 +9,7 @@ import {
   pickRoundStart,
   buildRoundView,
   agreementGate,
+  toSegmentationInput,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
@@ -65,6 +66,9 @@ type ViewMessage = {
   t: number;
   text: string;
   kind: 'text' | 'medien' | 'anruf' | 'leer';
+  /** Nur für die automatische Segmentierung: ohne die Antwortbeziehung
+   *  schneidet sie mitten in laufenden Wechselreden. */
+  replyToId?: string;
 };
 
 type RoundRow = {
@@ -220,12 +224,14 @@ function toView(message: RawMessage): ViewMessage {
     : (message.photo || message.file || message.media_type || message.mime_type)
       ? 'medien'
       : (flattenText(message.text).trim() ? 'text' : 'leer');
+  const replyTo = message.reply_to_message_id;
   return {
     id: rawId(message),
     from: String(message.from || message.actor || message.sender || '?'),
     t: messageSeconds(message),
     text: String(message.truewords_original_text || flattenText(message.text) || '').trim(),
     kind,
+    ...(replyTo === undefined || replyTo === null ? {} : { replyToId: String(replyTo) }),
   };
 }
 
@@ -485,7 +491,7 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   const combined = combinedBoundary(comparison);
 
   const automaticResult = segmentConversationWindow(
-    messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+    toSegmentationInput(messages),
   );
   const automaticPositions = automaticResult.boundaries
     .map((boundary) => positions.get(boundary.beforeEventId))
@@ -676,7 +682,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     const combined = combinedBoundary(comparison);
 
     const automaticResult = segmentConversationWindow(
-      messages.map((message) => ({ id: message.id, date_unixtime: message.t })),
+      toSegmentationInput(messages),
     );
     const automaticPositions = automaticResult.boundaries
       .map((boundary) => positions.get(boundary.beforeEventId))

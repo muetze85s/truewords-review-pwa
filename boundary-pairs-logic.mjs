@@ -174,6 +174,40 @@ export function combinedBoundary({ pairs, onlyA, onlyB }) {
 }
 
 /**
+ * Übersetzt die Anzeigenachrichten (ViewMessage aus worker-boundary-pairs.ts)
+ * in die Form, die segmentConversationWindow versteht.
+ *
+ * Das ist bewusst eine eigene Funktion und keine Inline-Abbildung an zwei
+ * Aufrufstellen: Wird hier ein Feld vergessen, fällt die Automatik still auf
+ * null Grenzen zurück. Genau das war der Fehler — übergeben wurden nur id und
+ * date_unixtime, also ohne Text und ohne Art. Ohne Text gilt in
+ * segmentation-v4.mjs keine Nachricht als „bedeutsam", lastMeaningfulIndex
+ * findet nie einen Vorgänger, und boundaryDecision steigt mit
+ * no_previous_event aus, bevor überhaupt eine Zeit- oder Musterregel geprüft
+ * wird. Ergebnis: dauerhaft 0,00 für die Automatik, unabhängig von den
+ * Schwellen.
+ *
+ * kind wird zurück auf die Felder abgebildet, die eventKind() dort liest:
+ * 'anruf' -> service_type 'call', 'medien' -> media_type.
+ */
+export function toSegmentationInput(messages) {
+  return messages.map((message) => {
+    const input = {
+      id: message.id,
+      date_unixtime: message.t,
+      from: message.from,
+      text: message.text,
+    };
+    if (message.kind === 'anruf') input.truewords_service_type = 'call';
+    if (message.kind === 'medien') input.truewords_media_type = 'media';
+    // Ohne die Antwortbeziehung greift direct_reply_continuation nie, und die
+    // Automatik schneidet mitten in laufenden Wechselreden.
+    if (message.replyToId) input.reply_to_message_id = message.replyToId;
+    return input;
+  });
+}
+
+/**
  * Formt die Antwort von GET /api/rounds/:round. Nimmt bewusst BEIDE
  * Markierungslisten und BEIDE Abgabezeiten entgegen (genau das, was der
  * Worker aus D1 laden könnte) und muss trotzdem garantieren, dass niemals
