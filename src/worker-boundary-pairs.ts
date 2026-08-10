@@ -183,12 +183,6 @@ function messageSeconds(message: RawMessage): number {
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : 0;
 }
 
-function messageYear(message: RawMessage): number | null {
-  const seconds = messageSeconds(message);
-  if (!seconds) return null;
-  return new Date(seconds * 1000).getUTCFullYear();
-}
-
 function isForwarded(message: RawMessage): boolean {
   return Boolean(message.forwarded_from || message.forwarded_from_id || message.saved_from);
 }
@@ -212,9 +206,9 @@ function isService(message: RawMessage): boolean {
   return !isCallAction(action);
 }
 
-function isReviewable(message: RawMessage, year: number): boolean {
-  return messageYear(message) === year
-    && !isForwarded(message)
+/** Ganzer Chat, ohne Weiterleitungen, Sticker und Service-Ereignisse — keine Jahresgrenze mehr. */
+function isReviewable(message: RawMessage): boolean {
+  return !isForwarded(message)
     && !isSticker(message)
     && !isService(message);
 }
@@ -235,7 +229,7 @@ function toView(message: RawMessage): ViewMessage {
   };
 }
 
-async function filteredSequence(env: Env, datasetId: string, year: number): Promise<RawMessage[]> {
+async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
   const rows = await env.DB.prepare(`
     SELECT messages_json FROM review_chat_chunks WHERE dataset_id = ?1 ORDER BY chunk_index
   `).bind(datasetId).all<{ messages_json: string }>();
@@ -250,7 +244,7 @@ async function filteredSequence(env: Env, datasetId: string, year: number): Prom
     }
     if (!Array.isArray(parsed)) continue;
     for (const message of parsed) {
-      if (message && typeof message === 'object' && isReviewable(message as RawMessage, year)) {
+      if (message && typeof message === 'object' && isReviewable(message as RawMessage)) {
         out.push(message as RawMessage);
       }
     }
@@ -275,7 +269,7 @@ async function loadRoundWindow(
   dataset: DatasetRow,
   round: number,
 ): Promise<{ round: RoundRow; messages: ViewMessage[] }> {
-  const sequence = await filteredSequence(env, dataset.id, dataset.year);
+  const sequence = await filteredSequence(env, dataset.id);
   if (sequence.length < ROUND_WINDOW_SIZE) {
     throw new Error('Die gefilterte Nachrichtenfolge ist kürzer als eine Runde.');
   }
