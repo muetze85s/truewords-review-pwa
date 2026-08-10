@@ -134,4 +134,40 @@ function msg(id, hour, from, text, extra = {}) {
   assert.equal(result.boundaries[0].beforeEventId, '4');
 }
 
+// --- Rückblick auf offene Fragen (OPEN_QUESTION_LOOKBACK) ------------------
+
+{
+  // Eine offene Frage der Gegenseite, die unmittelbar vorausgeht, muss eine
+  // Grenze weiterhin verhindern — das ist der Zweck der Bremse.
+  const result = segmentConversationWindow([
+    msg(1, 0, 'Lena', 'Kannst du morgen beim Vermieter anrufen?'),
+    msg(2, 9, 'Philipp Sellin', 'Guten Morgen, ich melde mich später dazu.'),
+  ]);
+  assert.equal(
+    result.situations.length,
+    1,
+    'eine direkt vorausgehende offene Frage muss die Grenze weiterhin unterdrücken',
+  );
+}
+
+{
+  // Liegt die Frage dagegen mehrere eigene Nachrichten zurück, ist die
+  // Konversation praktisch beendet — hier darf die Begrüßung nach neun
+  // Stunden eine neue Situation eröffnen. Mit dem früheren Fenster von 8
+  // wurde auch dieser Fall noch unterdrückt.
+  const result = segmentConversationWindow([
+    msg(10, 0, 'Lena', 'Kannst du morgen beim Vermieter anrufen?'),
+    msg(11, 0.1, 'Philipp Sellin', 'Der Zug fuhr pünktlich ab.'),
+    msg(12, 0.2, 'Philipp Sellin', 'Die Katze lag auf der Fensterbank.'),
+    msg(13, 9, 'Philipp Sellin', 'Guten Morgen, ich melde mich später dazu.'),
+  ]);
+  assert.equal(
+    result.situations.length,
+    2,
+    'eine mehrere Wortwechsel zurückliegende Frage darf die Grenze nicht mehr unterdrücken',
+  );
+  assert.equal(result.boundaries[0].beforeEventId, '13');
+  assert.equal(result.boundaries[0].reason, 'new_greeting_after_pause');
+}
+
 console.log('segmentation-v4 tests: PASS');

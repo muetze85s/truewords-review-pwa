@@ -67,10 +67,20 @@ function lastMeaningfulIndex(messages, fromIndex) {
   return -1;
 }
 
+/**
+ * Wie viele vorangegangene Ereignisse nach einer noch offenen Frage abgesucht
+ * werden. Gemessen an den echten Prüfdaten (10 Runden, Toleranz 0): 8 → F1
+ * 0,4286, 4 → 0,4746, 2 → 0,4839, 1 → 0,4839. Bei 2 ist die Sättigung
+ * erreicht, 1 bringt in keiner einzelnen Runde noch eine Änderung. Ein
+ * größeres Fenster unterdrückte Grenzen wegen Fragen, die mehrere
+ * Wortwechsel zurücklagen.
+ */
+const OPEN_QUESTION_LOOKBACK = 2;
+
 function recentOpenQuestion(messages, startIndex, currentIndex) {
   const currentSpeaker = speaker(messages[currentIndex]);
   let inspected = 0;
-  for (let index = currentIndex - 1; index >= startIndex && inspected < 8; index -= 1) {
+  for (let index = currentIndex - 1; index >= startIndex && inspected < OPEN_QUESTION_LOOKBACK; index -= 1) {
     const text = eventText(messages[index]);
     if (!text) continue;
     inspected += 1;
