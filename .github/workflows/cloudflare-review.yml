@@ -55,17 +55,17 @@ jobs:
           test -f dist/truewords-ui-theme.js
           test -f dist/truewords-ui-theme.css
           test -f migrations/0001_review_sync.sql
-          grep -q 'philena-2026-pilot-v3-unseen' wrangler.jsonc
-          grep -q 'worker-review-precision.ts' wrangler.jsonc
+          grep -q 'philena-2026-pilot-v4-unseen' wrangler.jsonc
+          grep -q 'worker-source-integrity-v4.ts' wrangler.jsonc
           grep -q 'Nicht Teil dieser Situation' dist/review-precision.js
           grep -q 'sourceWasUnassigned' dist/review-cross-owner-fix.js
           grep -q 'Vollständigen Telegram-Rohchat auswählen' dist/upload.html
-          grep -q 'Testfilter und Prüfaufteilung' dist/upload.html
-          grep -q 'Weiter ohne Upload' dist/upload.html
-          grep -q 'PRESELECTION_SITUATIONS = 12' dist/upload.js
-          grep -q 'PRESELECTION_ASSIGNMENTS = 335' dist/upload.js
-          grep -q 'truewords-test-filter/v1' dist/upload.js
-          grep -q 'truewords-owner-assignment/v1' dist/upload.js
+          grep -q 'V4 auf einem neuen ungesehenen Abschnitt prüfen' dist/upload.html
+          grep -q 'Test 3 bleibt unverändert erhalten' dist/upload.html
+          grep -q 'createTest4Preselection' dist/upload.js
+          grep -q 'philena-2026-pilot-v4-unseen' dist/upload.js
+          grep -q 'pilot-v4-unseen-fullsource-owners' dist/upload.js
+          grep -q 'truewords-segmentation-v4-unseen' dist/upload.js
           grep -q 'pilot-v3-unseen-fullsource-owners' src/worker-source-integrity.ts
           grep -q 'explicit-owner-assignment' src/worker-analysis.ts
           grep -q 'data-speaker="Philipp"' dist/truewords-ui-theme.css
