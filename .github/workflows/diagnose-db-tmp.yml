@@ -1,0 +1,73 @@
+name: TEMP diagnose Philipp vs Lena rows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: review-server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install
+
+      - name: Dump review_round_submissions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT dataset_id, round, reviewer, submitted_at, length(submitted_at) AS len, typeof(submitted_at) AS ty FROM review_round_submissions ORDER BY round, reviewer" \
+            > submissions.json
+          cat submissions.json
+
+      - name: Dump review_boundary_marks
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT dataset_id, round, reviewer, seam_message_id, length(seam_message_id) AS len, typeof(seam_message_id) AS ty, mark, created_at, updated_at FROM review_boundary_marks ORDER BY round, reviewer, seam_message_id" \
+            > marks.json
+          cat marks.json
+
+      - name: Dump review_boundary_resolutions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT dataset_id, round, seam_message_id, decision, note, decided_by, decided_at, length(decided_at) AS len, typeof(decided_at) AS ty FROM review_boundary_resolutions ORDER BY round" \
+            > resolutions.json
+          cat resolutions.json
+
+      - name: Dump review_rounds
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT dataset_id, round, first_message_id, message_count, typeof(first_message_id) AS ty FROM review_rounds ORDER BY round" \
+            > rounds.json
+          cat rounds.json
+
+      - name: Dump review_users (no secrets, just structure)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT id, role, can_upload, is_active FROM review_users" \
+            > users.json
+          cat users.json
