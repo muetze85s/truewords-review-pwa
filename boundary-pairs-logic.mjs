@@ -172,3 +172,39 @@ export function combinedBoundary({ pairs, onlyA, onlyB }) {
     uncertain: [...onlyA, ...onlyB].sort((x, y) => x - y),
   };
 }
+
+/**
+ * Formt die Antwort von GET /api/rounds/:round. Nimmt bewusst BEIDE
+ * Markierungslisten und BEIDE Abgabezeiten entgegen (genau das, was der
+ * Worker aus D1 laden könnte) und muss trotzdem garantieren, dass niemals
+ * die Markierungen der jeweils anderen Person im Ergebnis landen — nur ob
+ * sie abgegeben hat. Das ist die Blindheit als Servereigenschaft.
+ */
+export function buildRoundView({ reviewer, messages, philippMarks, lenaMarks, philippSubmittedAt, lenaSubmittedAt }) {
+  const own = reviewer === 'Philipp' ? philippMarks : lenaMarks;
+  const ownSubmittedAt = reviewer === 'Philipp' ? philippSubmittedAt : lenaSubmittedAt;
+  const otherSubmittedAt = reviewer === 'Philipp' ? lenaSubmittedAt : philippSubmittedAt;
+  return {
+    ok: true,
+    reviewer,
+    messages,
+    seams: Math.max(0, messages.length - 1),
+    marks: own,
+    submitted: Boolean(ownSubmittedAt),
+    submittedAt: ownSubmittedAt || null,
+    otherSubmitted: Boolean(otherSubmittedAt),
+  };
+}
+
+/**
+ * Entscheidet, ob GET .../agreement freigegeben werden darf. Liefert null,
+ * wenn beide abgegeben haben (Vergleich darf berechnet werden), sonst das
+ * Blockade-Objekt mit waitingFor — nie Markierungsdaten.
+ */
+export function agreementGate({ reviewer, philippSubmittedAt, lenaSubmittedAt }) {
+  const missing = [];
+  if (!philippSubmittedAt) missing.push('Philipp');
+  if (!lenaSubmittedAt) missing.push('Lena');
+  if (!missing.length) return null;
+  return { waitingFor: missing.includes(reviewer) ? reviewer : missing[0] };
+}

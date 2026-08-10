@@ -8,6 +8,8 @@ import {
   resolveMarks,
   compareReviewers,
   combinedBoundary,
+  buildRoundView,
+  agreementGate,
 } from '../boundary-pairs-logic.mjs';
 
 // --- Paarung mit Toleranz -----------------------------------------------
@@ -142,5 +144,78 @@ import {
 }
 
 assert.ok(hashSeed('a') !== hashSeed('b'), 'unterschiedliche Eingaben sollten unterschiedliche Samen ergeben');
+
+// --- Blindheit: nur Philipp hat abgegeben, Lena ruft ab ---------------------
+
+{
+  const philippMarks = [{ seamMessageId: '20', mark: 'cut' }, { seamMessageId: '55', mark: 'doubt' }];
+  const lenaMarks = [{ seamMessageId: '30', mark: 'cut' }];
+
+  const view = buildRoundView({
+    reviewer: 'Lena',
+    messages: [{ id: '1' }],
+    philippMarks,
+    lenaMarks,
+    philippSubmittedAt: '2026-08-10T07:00:00Z',
+    lenaSubmittedAt: null,
+  });
+
+  assert.deepEqual(view.marks, lenaMarks, 'Lena darf nur ihre eigenen Markierungen sehen');
+  assert.equal(view.submitted, false, 'Lena selbst hat noch nicht abgegeben');
+  assert.equal(view.otherSubmitted, true, 'dass Philipp abgegeben hat, darf sichtbar sein');
+
+  const serialized = JSON.stringify(view);
+  assert.ok(!serialized.includes('"20"'), 'Philipps Zwischenraum 20 darf in Lenas Antwort nicht auftauchen');
+  assert.ok(!serialized.includes('"55"'), 'Philipps Zwischenraum 55 darf in Lenas Antwort nicht auftauchen');
+}
+
+{
+  // Rollen vertauscht: Philipp ruft ab, nur Lena hat abgegeben.
+  const philippMarks = [{ seamMessageId: '9', mark: 'cut' }];
+  const lenaMarks = [{ seamMessageId: '41', mark: 'cut' }];
+
+  const view = buildRoundView({
+    reviewer: 'Philipp',
+    messages: [],
+    philippMarks,
+    lenaMarks,
+    philippSubmittedAt: null,
+    lenaSubmittedAt: '2026-08-10T07:00:00Z',
+  });
+
+  assert.deepEqual(view.marks, philippMarks);
+  assert.ok(!JSON.stringify(view).includes('"41"'), 'Lenas Zwischenraum 41 darf in Philipps Antwort nicht auftauchen');
+}
+
+{
+  // Nach beidseitiger Abgabe bleibt /api/rounds/:round trotzdem blind —
+  // der Vergleich läuft ausschließlich über /agreement.
+  const view = buildRoundView({
+    reviewer: 'Lena',
+    messages: [],
+    philippMarks: [{ seamMessageId: '77', mark: 'cut' }],
+    lenaMarks: [{ seamMessageId: '30', mark: 'cut' }],
+    philippSubmittedAt: '2026-08-10T07:00:00Z',
+    lenaSubmittedAt: '2026-08-10T08:00:00Z',
+  });
+  assert.ok(!JSON.stringify(view).includes('"77"'));
+}
+
+// --- Blindheit: /agreement bleibt gesperrt, solange nicht beide abgegeben haben ---
+
+{
+  const gate = agreementGate({ reviewer: 'Lena', philippSubmittedAt: '2026-08-10T07:00:00Z', lenaSubmittedAt: null });
+  assert.deepEqual(gate, { waitingFor: 'Lena' }, 'wer selbst noch nicht abgegeben hat, wartet auf sich selbst');
+}
+
+{
+  const gate = agreementGate({ reviewer: 'Philipp', philippSubmittedAt: '2026-08-10T07:00:00Z', lenaSubmittedAt: null });
+  assert.deepEqual(gate, { waitingFor: 'Lena' }, 'Philipp hat abgegeben, wartet also auf Lena');
+}
+
+{
+  const gate = agreementGate({ reviewer: 'Philipp', philippSubmittedAt: '2026-08-10T07:00:00Z', lenaSubmittedAt: '2026-08-10T08:00:00Z' });
+  assert.equal(gate, null, 'beide abgegeben -> Vergleich freigegeben');
+}
 
 console.log('boundary-pairs-logic tests: PASS');

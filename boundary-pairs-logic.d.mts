@@ -48,3 +48,27 @@ export declare function combinedBoundary(pairing: SeamPairing): {
   cuts: number[];
   uncertain: number[];
 };
+
+export declare function buildRoundView(options: {
+  reviewer: 'Philipp' | 'Lena';
+  messages: unknown[];
+  philippMarks: unknown[];
+  lenaMarks: unknown[];
+  philippSubmittedAt: string | null;
+  lenaSubmittedAt: string | null;
+}): {
+  ok: true;
+  reviewer: 'Philipp' | 'Lena';
+  messages: unknown[];
+  seams: number;
+  marks: unknown[];
+  submitted: boolean;
+  submittedAt: string | null;
+  otherSubmitted: boolean;
+};
+
+export declare function agreementGate(options: {
+  reviewer: 'Philipp' | 'Lena';
+  philippSubmittedAt: string | null;
+  lenaSubmittedAt: string | null;
+}): { waitingFor: 'Philipp' | 'Lena' } | null;

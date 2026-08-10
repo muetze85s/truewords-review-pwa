@@ -7,6 +7,8 @@ import {
   compareReviewers,
   combinedBoundary,
   pickRoundStart,
+  buildRoundView,
+  agreementGate,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
@@ -349,10 +351,6 @@ async function submittedAt(env: Env, datasetId: string, round: number, reviewer:
   return row?.submitted_at ?? null;
 }
 
-function otherReviewer(reviewer: Role): Role {
-  return reviewer === 'Philipp' ? 'Lena' : 'Philipp';
-}
-
 function toPositionalMarks(rows: MarkRow[], positions: Map<string, number>): BoundaryMark[] {
   const out: BoundaryMark[] = [];
   for (const row of rows) {
@@ -376,23 +374,22 @@ function parseDoubtMode(url: URL): DoubtMode {
 
 async function getRound(env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
   const { messages } = await loadRoundWindow(env, dataset, round);
-  const [marks, ownSubmitted, otherSubmitted] = await Promise.all([
-    loadMarks(env, dataset.id, round, reviewer),
-    submittedAt(env, dataset.id, round, reviewer),
-    submittedAt(env, dataset.id, round, otherReviewer(reviewer)),
+  const [philippMarks, lenaMarks, philippSubmittedAt, lenaSubmittedAt] = await Promise.all([
+    loadMarks(env, dataset.id, round, 'Philipp'),
+    loadMarks(env, dataset.id, round, 'Lena'),
+    submittedAt(env, dataset.id, round, 'Philipp'),
+    submittedAt(env, dataset.id, round, 'Lena'),
   ]);
 
-  return json({
-    ok: true,
-    round,
+  const view = buildRoundView({
     reviewer,
     messages,
-    seams: Math.max(0, messages.length - 1),
-    marks: marks.map((row) => ({ seamMessageId: row.seam_message_id, mark: row.mark })),
-    submitted: Boolean(ownSubmitted),
-    submittedAt: ownSubmitted,
-    otherSubmitted: Boolean(otherSubmitted),
+    philippMarks: philippMarks.map((row) => ({ seamMessageId: row.seam_message_id, mark: row.mark })),
+    lenaMarks: lenaMarks.map((row) => ({ seamMessageId: row.seam_message_id, mark: row.mark })),
+    philippSubmittedAt,
+    lenaSubmittedAt,
   });
+  return json({ round, ...view });
 }
 
 async function putMarks(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
@@ -468,15 +465,12 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     submittedAt(env, dataset.id, round, 'Philipp'),
     submittedAt(env, dataset.id, round, 'Lena'),
   ]);
-  const missing: Role[] = [];
-  if (!philippSubmitted) missing.push('Philipp');
-  if (!lenaSubmitted) missing.push('Lena');
-  if (missing.length) {
-    const waitingFor = missing.includes(reviewer) ? reviewer : missing[0];
+  const gate = agreementGate({ reviewer, philippSubmittedAt: philippSubmitted, lenaSubmittedAt: lenaSubmitted });
+  if (gate) {
     return json({
       ok: false,
       error: 'Der Vergleich wird erst freigeschaltet, wenn beide Prüfer abgegeben haben.',
-      waitingFor,
+      waitingFor: gate.waitingFor,
     }, 403);
   }
 
@@ -564,11 +558,12 @@ async function resolveDispute(request: Request, env: Env, dataset: DatasetRow, r
     submittedAt(env, dataset.id, round, 'Philipp'),
     submittedAt(env, dataset.id, round, 'Lena'),
   ]);
-  if (!philippSubmitted || !lenaSubmitted) {
+  const gate = agreementGate({ reviewer, philippSubmittedAt: philippSubmitted, lenaSubmittedAt: lenaSubmitted });
+  if (gate) {
     return json({
       ok: false,
       error: 'Streitfälle können erst geklärt werden, wenn beide Prüfer abgegeben haben.',
-      waitingFor: !philippSubmitted ? 'Philipp' : 'Lena',
+      waitingFor: gate.waitingFor,
     }, 403);
   }
 
