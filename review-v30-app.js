@@ -254,6 +254,7 @@
       moon: '<path d="M20 15.5A8.5 8.5 0 118.5 4 7 7 0 0020 15.5z"/>',
       close: '<path d="M6 6l12 12M18 6L6 18"/>',
       chevron: '<path d="M8 10l4 4 4-4"/>',
+      split: '<path d="M4 12h5M15 12h5" stroke-dasharray="2 2"/><path d="M9 7l3 5-3 5M15 7l-3 5 3 5"/>',
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || ''}</svg>`;
   }
@@ -501,7 +502,7 @@
       <header class="tw-topbar">
         <div class="tw-brand"><div class="tw-logo" aria-hidden="true"></div><div class="tw-brand-copy"><strong>TrueWords</strong><span>${escapeHtml(state.dataset?.name || 'Prüfstand')}</span></div></div>
         <div class="tw-mobile-summary" data-mobile-summary></div>
-        <div class="tw-top-actions">${reviewerControl()}<button class="tw-icon-btn" type="button" data-nav="theme" aria-label="Darstellung wechseln"></button><button class="tw-profile" type="button" data-profile aria-label="Profil">${activeReviewer() === 'Lena' ? 'L' : 'P'}</button></div>
+        <div class="tw-top-actions">${reviewerControl()}<a class="tw-icon-btn" href="/doppelpruefung.html" aria-label="Doppelprüfung" title="Doppelprüfung">${icon('split')}</a><button class="tw-icon-btn" type="button" data-nav="theme" aria-label="Darstellung wechseln"></button><button class="tw-profile" type="button" data-profile aria-label="Profil">${activeReviewer() === 'Lena' ? 'L' : 'P'}</button></div>
       </header>
       <nav class="tw-slider" data-situation-slider aria-label="Situationen"><div class="tw-embla-viewport" data-embla-viewport><div class="tw-embla-container" data-situation-slider-container></div></div></nav>
       <main class="tw-main"><div class="tw-workspace">

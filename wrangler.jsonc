@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "truewords-review-sync",
-  "main": "src/worker-source-integrity-v4.ts",
+  "main": "src/worker-boundary-pairs.ts",
   "compatibility_date": "2026-08-05",
   "workers_dev": true,
   "preview_urls": false,

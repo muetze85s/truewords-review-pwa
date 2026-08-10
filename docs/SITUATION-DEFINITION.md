@@ -75,3 +75,21 @@ Test 4 setzt diese Definition erstmals direkt als Algorithmusregel um:
 - externe Sprach-KI erzeugt keine Situationsgrenzen.
 
 Test 4 verwendet einen neuen, zuvor ungeprüften Ereignisbereich nach Test 3. Seine manuelle Prüfung erzeugt den nächsten Goldstandard. Test 3 bleibt unverändert als eigener Validierungsstand erhalten.
+
+## Rückfluss aus der Doppelprüfung: geklärte Streitfälle
+
+Die Doppelprüfung (`grenzen`/`doppelpruefung.html`, `src/worker-boundary-pairs.ts`) lässt Philipp und Lena dieselben Runden blind und unabhängig voneinander einteilen. Wo sie sich uneinig sind, ist genau die Stelle, an der diese Definition unscharf ist — nicht die Person. Jede hier geklärte Grenze schärft die Definition oben, nicht nur den einzelnen Streitfall.
+
+**Ablauf:** Ein Streitfall entsteht, wenn genau eine Person an einer Stelle geschnitten hat und die andere nicht (siehe `GET /api/rounds/:round/agreement`, Feld `disputes`). Nach gemeinsamer Klärung über `POST /api/rounds/:round/resolve` gehört jeder entschiedene Fall hier als kurzer Eintrag hinein: worum es ging, wie entschieden wurde, und ob die Operative Grenzregel oben dadurch ergänzt oder präzisiert werden muss.
+
+Format je Eintrag:
+
+```
+### Runde <n>, Zwischenraum vor Nachricht <seam_message_id>
+Vorher: „…“ · Nachher: „…“ · Pause: <Dauer>
+Entscheidung: Grenze | keine Grenze — <von wem, wann>
+Warum: <ein bis zwei Sätze, was diesen Fall von der Kurzdefinition abhebt>
+Regelfolge: <falls die Grenzregel oben angepasst wurde, worauf>
+```
+
+Noch keine Einträge — die erste gemeinsame Runde steht aus. Sobald ein Streitfall über `/api/rounds/:round/resolve` entschieden wurde, gehört er als nächster Eintrag unter diese Überschrift, nicht in ein separates Dokument, damit Definition und Beleg zusammenbleiben.
