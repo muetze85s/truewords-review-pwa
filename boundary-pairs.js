@@ -127,12 +127,18 @@
     saveMarks();
   }
 
+  function scrollToTop() {
+    // Nach der Abgabe wechselt die Ansicht; ohne das bliebe man am unteren
+    // Ende der eben durchgearbeiteten Runde stehen.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function submitRound() {
     $('dp-submit').disabled = true;
     fetchJson(`rounds/${state.round}/submit`, { method: 'POST' })
       .then(({ status, payload }) => {
         if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
-        return loadRound();
+        return loadRound().then(() => scrollToTop());
       })
       .catch((caught) => {
         setStatus(`Abgabe fehlgeschlagen: ${caught.message}`, true);
@@ -212,7 +218,24 @@
     return '';
   }
 
-  /** Baut Kontext + Streitfall-Naht als eine durchgehende Kette aus Nachrichten und Naht-Markern. */
+  function decisionLabel(decision) {
+    if (decision === 'cut') return 'Grenze';
+    if (decision === 'no_cut') return 'keine Grenze';
+    return '';
+  }
+
+  /** Antippen entscheidet den Streitfall — offen → Grenze → keine Grenze → offen. */
+  function nextDecision(current) {
+    if (current === 'cut') return 'no_cut';
+    if (current === 'no_cut') return 'open';
+    return 'cut';
+  }
+
+  /**
+   * Baut Kontext + Streitfall-Naht als eine durchgehende Kette aus Nachrichten
+   * und Naht-Markern — dieselbe Darstellung wie im Prüfstand, inklusive
+   * Zeitdifferenz an jeder Naht. Die strittige Naht ist antippbar.
+   */
   function disputeContextHtml(dispute) {
     const parts = [];
     dispute.context.forEach((message, index) => {
@@ -223,13 +246,24 @@
         const tags = [];
         if (seam?.philipp) tags.push(`Philipp: ${seamMarkLabel(seam.philipp)}`);
         if (seam?.lena) tags.push(`Lena: ${seamMarkLabel(seam.lena)}`);
-        const label = tags.length ? tags.join(' · ') : pauseLabel(before, message);
+        // Zeitdifferenz immer zeigen, auch wenn jemand hier markiert hat.
+        const pause = pauseLabel(before, message);
+        const label = tags.length ? `${pause} · ${tags.join(' · ')}` : pause;
         const markedClass = seam?.philipp && seam?.lena ? ' marked-both'
           : seam?.philipp ? ' marked-philipp'
           : seam?.lena ? ' marked-lena' : '';
-        parts.push(`<div class="dp-dispute-seam${isCentral ? ' central' : ''}${markedClass}">
-          <span class="line"></span><span class="label">${escapeHtml(label)}</span>
-        </div>`);
+
+        if (isCentral) {
+          const decided = dispute.decision && dispute.decision !== 'open' ? decisionLabel(dispute.decision) : '';
+          const centralLabel = decided ? `${label} · ${decided}` : `${label} · antippen zum Entscheiden`;
+          parts.push(`<button type="button" class="dp-dispute-seam central${markedClass}" data-central-seam="${escapeHtml(dispute.seamMessageId)}" data-decision-state="${escapeHtml(dispute.decision || 'open')}">
+            <span class="line"></span><span class="label">${escapeHtml(centralLabel)}</span>
+          </button>`);
+        } else {
+          parts.push(`<div class="dp-dispute-seam${markedClass}">
+            <span class="line"></span><span class="label">${escapeHtml(label)}</span>
+          </div>`);
+        }
       }
       const isEdge = message.id !== dispute.before.id && message.id !== dispute.after.id;
       parts.push(messageHtml(message, isEdge));
@@ -252,8 +286,12 @@
       return;
     }
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
-      <div class="dp-dispute" data-seam="${escapeHtml(dispute.seamMessageId)}">
-        <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b></div>
+      <div class="dp-dispute${dispute.decision && dispute.decision !== 'open' ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
+        <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b>${
+          dispute.decision && dispute.decision !== 'open'
+            ? ` · <span class="dp-dispute-badge">geklärt: ${escapeHtml(decisionLabel(dispute.decision))}${dispute.decidedBy ? ` von ${escapeHtml(dispute.decidedBy)}` : ''}</span>`
+            : ''
+        }</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
           <button type="button" data-decision="cut" class="${dispute.decision === 'cut' ? 'active' : ''}">ist eine Grenze</button>
@@ -270,6 +308,8 @@
       const noteInput = card.querySelector('input[type="text"]');
       const statusNode = card.querySelector('.dp-dispute-status');
 
+      const centralSeam = card.querySelector('[data-central-seam]');
+
       function resolve(decision) {
         statusNode.textContent = 'Wird gespeichert …';
         fetchJson(`rounds/${state.round}/resolve`, {
@@ -281,6 +321,20 @@
           card.querySelectorAll('[data-decision]').forEach((button) => {
             button.classList.toggle('active', button.dataset.decision === decision);
           });
+          // Karte und Naht sofort mitziehen; die endgültige Sortierung nach
+          // offen/geklärt kommt beim nächsten Laden vom Server.
+          const resolved = decision !== 'open';
+          card.classList.toggle('geklaert', resolved);
+          card.classList.toggle('decision-cut', decision === 'cut');
+          card.classList.toggle('decision-no_cut', decision === 'no_cut');
+          if (centralSeam) {
+            centralSeam.dataset.decisionState = decision;
+            const label = centralSeam.querySelector('.label');
+            if (label) {
+              const base = label.textContent.split(' · ').slice(0, -1).join(' · ') || label.textContent;
+              label.textContent = `${base} · ${resolved ? decisionLabel(decision) : 'antippen zum Entscheiden'}`;
+            }
+          }
           statusNode.textContent = 'Gespeichert';
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
@@ -290,6 +344,11 @@
       card.querySelectorAll('[data-decision]').forEach((button) => {
         button.addEventListener('click', () => resolve(button.dataset.decision));
       });
+      if (centralSeam) {
+        centralSeam.addEventListener('click', () => {
+          resolve(nextDecision(centralSeam.dataset.decisionState || 'open'));
+        });
+      }
       noteInput.addEventListener('change', () => {
         const active = card.querySelector('[data-decision].active');
         resolve(active ? active.dataset.decision : 'open');
