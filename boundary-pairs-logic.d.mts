@@ -44,7 +44,17 @@ export declare function compareReviewers(
   options: { totalSeams: number; tolerance?: number; doubtMode?: DoubtMode },
 ): ReviewerComparison;
 
-export declare function combinedBoundary(pairing: SeamPairing): {
+export type BoundaryResolution = { position: number; decision: 'cut' | 'no_cut' | 'open' };
+
+export declare function toPositionalResolutions(
+  rows: Array<{ seam_message_id: string; decision: 'cut' | 'no_cut' | 'open' }>,
+  positions: Map<string, number>,
+): BoundaryResolution[];
+
+export declare function combinedBoundary(
+  pairing: SeamPairing,
+  resolutions?: BoundaryResolution[],
+): {
   cuts: number[];
   uncertain: number[];
 };

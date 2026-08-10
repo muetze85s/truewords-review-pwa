@@ -10,6 +10,7 @@ import {
   buildRoundView,
   agreementGate,
   toSegmentationInput,
+  toPositionalResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
@@ -82,7 +83,8 @@ type MarkRow = { seam_message_id: string; mark: 'cut' | 'doubt' };
 
 type ResolutionRow = {
   seam_message_id: string;
-  decision: string;
+  /** Durch CHECK in review_boundary_resolutions auf diese drei Werte begrenzt. */
+  decision: 'cut' | 'no_cut' | 'open';
   note: string | null;
   decided_by: string;
   decided_at: string;
@@ -488,7 +490,16 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   const marksLena = toPositionalMarks(lenaMarks, positions);
 
   const comparison = compareReviewers(marksPhilipp, marksLena, { totalSeams, tolerance, doubtMode });
-  const combined = combinedBoundary(comparison);
+
+  // Vor der gemeinsamen Fassung geladen: die geklärten Streitfälle gehören
+  // hinein, sonst bliebe die Klärungsarbeit ohne Wirkung auf die Kennzahlen.
+  const resolutionRows = await env.DB.prepare(`
+    SELECT seam_message_id, decision, note, decided_by, decided_at
+    FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
+  `).bind(dataset.id, round).all<ResolutionRow>();
+  const resolutionList = resolutionRows.results || [];
+  const resolutions = new Map(resolutionList.map((row) => [row.seam_message_id, row]));
+  const combined = combinedBoundary(comparison, toPositionalResolutions(resolutionList, positions));
 
   const automaticResult = segmentConversationWindow(
     toSegmentationInput(messages),
@@ -501,12 +512,6 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
   const vsPhilipp = pairSeams(automaticPositions, cutsPhilipp, tolerance);
   const vsLena = pairSeams(automaticPositions, cutsLena, tolerance);
   const vsCombined = pairSeams(automaticPositions, combined.cuts, tolerance);
-
-  const resolutionRows = await env.DB.prepare(`
-    SELECT seam_message_id, decision, note, decided_by, decided_at
-    FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
-  `).bind(dataset.id, round).all<ResolutionRow>();
-  const resolutions = new Map((resolutionRows.results || []).map((row) => [row.seam_message_id, row]));
 
   const philippByPosition = new Map(marksPhilipp.map((mark) => [mark.position, mark.mark]));
   const lenaByPosition = new Map(marksLena.map((mark) => [mark.position, mark.mark]));
@@ -679,7 +684,14 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
       toPositionalMarks(lenaMarks, positions),
       { totalSeams, tolerance, doubtMode },
     );
-    const combined = combinedBoundary(comparison);
+    // Vor der gemeinsamen Fassung geladen: die geklärten Streitfälle gehören
+    // hinein, sonst bliebe die Klärungsarbeit ohne Wirkung auf die Kennzahlen.
+    const resolutionRows = await env.DB.prepare(`
+      SELECT seam_message_id, decision FROM review_boundary_resolutions
+      WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, round).all<{ seam_message_id: string; decision: 'cut' | 'no_cut' | 'open' }>();
+    const resolutionList = resolutionRows.results || [];
+    const combined = combinedBoundary(comparison, toPositionalResolutions(resolutionList, positions));
 
     const automaticResult = segmentConversationWindow(
       toSegmentationInput(messages),
@@ -697,10 +709,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalAutoOnlyCombined += vsCombined.onlyB.length;
     totalAutomaticBoundaries += automaticResult.boundaries.length;
 
-    const resolutionRows = await env.DB.prepare(`
-      SELECT decision FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
-    `).bind(dataset.id, round).all<{ decision: string }>();
-    const resolvedCount = (resolutionRows.results || []).filter((row) => row.decision !== 'open').length;
+    const resolvedCount = resolutionList.filter((row) => row.decision !== 'open').length;
     const disputeCount = comparison.onlyA.length + comparison.onlyB.length;
     openDisputes += Math.max(0, disputeCount - resolvedCount);
     resolvedDisputes += resolvedCount;

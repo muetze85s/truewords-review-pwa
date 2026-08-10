@@ -12,6 +12,7 @@ import {
   buildRoundView,
   agreementGate,
   toSegmentationInput,
+  toPositionalResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 
@@ -94,6 +95,82 @@ import { segmentConversationWindow } from '../segmentation-v4.mjs';
   const combined = combinedBoundary(pairing);
   assert.deepEqual(combined.cuts, [11], 'Paar (10,11) rundet auf die gemeinsame Position 11');
   assert.deepEqual(combined.uncertain, [30, 50]);
+}
+
+// --- geklärte Streitfälle fließen in die gemeinsame Fassung ein -------------
+
+{
+  // Ohne Auflösungen unverändertes Verhalten.
+  const pairing = pairSeams([10, 30], [11, 50], 1);
+  assert.deepEqual(combinedBoundary(pairing).cuts, [11]);
+  assert.deepEqual(combinedBoundary(pairing).uncertain, [30, 50]);
+}
+
+{
+  // Ein als 'cut' geklärter Streitfall muss in der gemeinsamen Fassung als
+  // Grenze geführt werden — sonst bliebe die Klärungsarbeit wirkungslos.
+  const pairing = pairSeams([10, 30], [11, 50], 1);
+  const combined = combinedBoundary(pairing, [{ position: 30, decision: 'cut' }]);
+  assert.ok(combined.cuts.includes(30), 'als cut geklärter Streitfall gehört in die gemeinsame Fassung');
+  assert.ok(!combined.uncertain.includes(30), 'und ist danach nicht mehr unsicher');
+  assert.deepEqual(combined.cuts, [11, 30], 'die Grenzen bleiben sortiert');
+  assert.deepEqual(combined.uncertain, [50], 'der ungeklärte Streitfall bleibt unsicher');
+}
+
+{
+  // 'no_cut' nimmt den strittigen Zwischenraum endgültig heraus.
+  const pairing = pairSeams([10, 30], [11, 50], 1);
+  const combined = combinedBoundary(pairing, [
+    { position: 30, decision: 'no_cut' },
+    { position: 50, decision: 'no_cut' },
+  ]);
+  assert.deepEqual(combined.cuts, [11], 'als no_cut geklärte Streitfälle werden keine Grenzen');
+  assert.deepEqual(combined.uncertain, [], 'und gelten als erledigt, nicht als unsicher');
+}
+
+{
+  // 'open' ändert nichts — der Streitfall bleibt offen.
+  const pairing = pairSeams([10, 30], [11, 50], 1);
+  const combined = combinedBoundary(pairing, [{ position: 30, decision: 'open' }]);
+  assert.deepEqual(combined.cuts, [11]);
+  assert.deepEqual(combined.uncertain, [30, 50], 'offen geklärt heißt weiterhin unsicher');
+}
+
+{
+  // Die Auflösungen kommen aus D1 mit seam_message_id und müssen erst auf
+  // Positionen im Fenster übersetzt werden — wie die Markierungen auch.
+  const positions = new Map([['1030', 30], ['1050', 50]]);
+  const resolutions = toPositionalResolutions(
+    [
+      { seam_message_id: '1030', decision: 'cut' },
+      { seam_message_id: '1050', decision: 'no_cut' },
+      { seam_message_id: '9999', decision: 'cut' },
+    ],
+    positions,
+  );
+  assert.deepEqual(
+    resolutions,
+    [{ position: 30, decision: 'cut' }, { position: 50, decision: 'no_cut' }],
+    'Auflösungen außerhalb des Fensters werden verworfen',
+  );
+
+  const combined = combinedBoundary(pairSeams([10, 30], [11, 50], 1), resolutions);
+  assert.deepEqual(combined.cuts, [11, 30]);
+  assert.deepEqual(combined.uncertain, []);
+}
+
+{
+  // Die Inter-Rater-Zahl darf sich durch Auflösungen NICHT verändern: sie
+  // misst, wie einig beide OHNE Absprache waren, und ist genau deshalb die
+  // ehrliche Obergrenze. compareReviewers kennt die Auflösungen nicht.
+  const marksA = [{ position: 10, mark: 'cut' }, { position: 30, mark: 'cut' }];
+  const marksB = [{ position: 11, mark: 'cut' }];
+  const before = compareReviewers(marksA, marksB, { totalSeams: 99, tolerance: 1 });
+  const combined = combinedBoundary(before, [{ position: 30, decision: 'cut' }]);
+  const after = compareReviewers(marksA, marksB, { totalSeams: 99, tolerance: 1 });
+  assert.equal(after.agreementF1, before.agreementF1, 'die Übereinstimmung der Prüfenden bleibt unberührt');
+  assert.equal(after.kappa, before.kappa, 'auch kappa bleibt unberührt');
+  assert.ok(combined.cuts.includes(30), 'nur die gemeinsame Fassung nimmt die Klärung auf');
 }
 
 // --- Rundenerzeugung: reproduzierbar und überschneidungsfrei ---------------
