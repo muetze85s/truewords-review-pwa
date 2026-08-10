@@ -23,31 +23,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: TEMP diagnose Philipp vs Lena rows
+      - name: Install
+        run: npm install
+
+      - name: Dump rounds and chunks (not echoed — contains message text)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          echo "=== review_round_submissions ==="
           npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT dataset_id, round, reviewer, submitted_at, length(submitted_at) AS len, typeof(submitted_at) AS ty FROM review_round_submissions ORDER BY round, reviewer"
+            "SELECT round, first_message_id, message_count FROM review_rounds ORDER BY round" \
+            > /tmp/rounds.json
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT chunk_index, messages_json FROM review_chat_chunks WHERE dataset_id='philena-2026-pilot-v4-unseen' ORDER BY chunk_index" \
+            > /tmp/chunks.json
+          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
+            "SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks ORDER BY round" \
+            > /tmp/marks.json
+          echo "dumped (sizes only, no content):"
+          wc -c /tmp/rounds.json /tmp/chunks.json /tmp/marks.json
 
-          echo "=== review_boundary_marks ==="
-          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT dataset_id, round, reviewer, seam_message_id, length(seam_message_id) AS len, typeof(seam_message_id) AS ty, mark, created_at, updated_at FROM review_boundary_marks ORDER BY round, reviewer, seam_message_id"
-
-          echo "=== review_boundary_resolutions ==="
-          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT dataset_id, round, seam_message_id, decision, note, decided_by, decided_at, length(decided_at) AS len, typeof(decided_at) AS ty FROM review_boundary_resolutions ORDER BY round"
-
-          echo "=== review_rounds ==="
-          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT dataset_id, round, first_message_id, message_count, typeof(first_message_id) AS ty FROM review_rounds ORDER BY round"
-
-          echo "=== review_users ==="
-          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT id, role, can_upload, is_active FROM review_users"
-
-          echo "=== review_sessions (no token hashes, just shape) ==="
-          npx wrangler d1 execute truewords-review-sync-db --remote --json --command \
-            "SELECT user_id, expires_at, created_at, last_seen_at, length(token_hash) AS token_hash_len FROM review_sessions"
+      - name: Report raw vs mapped automatic boundary counts (numbers only)
+        run: node scripts/diagnose-automatic-boundaries.mjs
