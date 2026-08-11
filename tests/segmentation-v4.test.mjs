@@ -13,13 +13,32 @@ function msg(id, hour, from, text, extra = {}) {
 }
 
 {
+  // Dieser Fall hielt früher als eine Situation zusammen: ein laufender
+  // Austausch mit vier Stunden Antwortlatenz. Mit PAUSE_BOUNDARY_HOURS = 3
+  // zerfällt er in vier — das ist der Preis der Pausenregel und zugleich die
+  // konkrete Gestalt eines Teils ihrer Fehlalarme. Bewusst so festgehalten,
+  // damit die Auswirkung sichtbar bleibt und nicht unbemerkt kippt, falls
+  // jemand an der Schwelle dreht.
   const result = segmentConversationWindow([
     msg(1, 8, 'Lena', 'Kannst du heute beim Vermieter anrufen?'),
     msg(2, 12, 'Philipp Sellin', 'Ja, mache ich in der Mittagspause.'),
     msg(3, 16, 'Lena', 'Hat es geklappt?'),
     msg(4, 20, 'Philipp Sellin', 'Ja, Termin ist Donnerstag.'),
   ]);
-  assert.equal(result.situations.length, 1, 'Vier-Stunden-Antwortpausen dürfen eine laufende Konversation nicht schneiden.');
+  assert.equal(
+    result.situations.length,
+    4,
+    'Antwortpausen über der Schwelle schneiden jetzt auch eine laufende Konversation',
+  );
+
+  // Bei zwei Stunden Latenz bleibt derselbe Austausch zusammen.
+  const enger = segmentConversationWindow([
+    msg(1, 8, 'Lena', 'Kannst du heute beim Vermieter anrufen?'),
+    msg(2, 10, 'Philipp Sellin', 'Ja, mache ich in der Mittagspause.'),
+    msg(3, 12, 'Lena', 'Hat es geklappt?'),
+    msg(4, 14, 'Philipp Sellin', 'Ja, Termin ist Donnerstag.'),
+  ]);
+  assert.equal(enger.situations.length, 1, 'unterhalb der Schwelle bleibt der Austausch eine Situation');
 }
 
 {
@@ -30,9 +49,13 @@ function msg(id, hour, from, text, extra = {}) {
     msg(13, 10.03, 'Lena', 'Wollte kurz Zigarettenpause machen, schläfst du?'),
     msg(14, 16, 'Philipp Sellin', 'Ja, wie ein Stein.'),
   ]);
-  assert.equal(result.situations.length, 2, 'Neuer Kontaktversuch nach ausgelaufener Konversation muss eine neue Situation eröffnen.');
-  assert.equal(result.assignments['12'], 2);
-  assert.equal(result.assignments['14'], 2, 'Späte Antwort auf offene Frage bleibt in derselben Konversation.');
+  assert.equal(result.situations.length, 3, 'Neuer Kontaktversuch nach ausgelaufener Konversation muss eine neue Situation eröffnen.');
+  assert.equal(result.assignments['12'], 2, 'der Anruf eröffnet weiterhin die zweite Situation');
+  // Früher blieb diese späte Antwort in derselben Konversation, weil eine
+  // offene Frage vorausging. Knapp sechs Stunden liegen jetzt über der
+  // Pausenschwelle — die offene Frage hält das nicht mehr zusammen. Genau
+  // dieses Verhalten war der Anlass für die Regel.
+  assert.equal(result.assignments['14'], 3, 'späte Antwort über der Schwelle eröffnet eine neue Situation');
 }
 
 {
@@ -43,12 +66,62 @@ function msg(id, hour, from, text, extra = {}) {
   assert.equal(result.situations.length, 2, 'Expliziter Abschluss plus neuer Einstieg erzeugt eine Grenze.');
 }
 
+// --- Pause als eigenständige Grenze (PAUSE_BOUNDARY_HOURS) -----------------
+//
+// Bis hierher galt: "Eine lange Pause allein darf keine Grenze erzeugen."
+// Diese Definition ist bewusst aufgegeben — die Fehleranalyse hat gezeigt,
+// dass 16 der 27 übersehenen Grenzen genau solche reinen Pausen waren.
+
 {
+  // Zwölf Stunden ohne Muster, ohne Sprecherwechselsignal: schneidet jetzt.
   const result = segmentConversationWindow([
     msg(30, 8, 'Lena', 'Ich denke noch darüber nach.'),
     msg(31, 20, 'Philipp Sellin', 'Das verstehe ich.'),
   ]);
-  assert.equal(result.situations.length, 1, 'Eine lange Pause allein darf keine Grenze erzeugen.');
+  assert.equal(result.situations.length, 2, 'eine Pause über der Schwelle erzeugt eine Grenze');
+  assert.equal(result.boundaries[0].reason, 'long_pause');
+}
+
+{
+  // Unabhängig vom Muster: derselbe Abstand mit einer Fortsetzungsfloskel,
+  // die sonst linguistic_continuation auslösen würde.
+  const result = segmentConversationWindow([
+    msg(40, 8, 'Lena', 'Ich denke noch darüber nach.'),
+    msg(41, 16, 'Philipp Sellin', 'Ja, genau so sehe ich das auch.'),
+  ]);
+  assert.equal(result.boundaries.length, 1, 'ein Fortsetzungsmuster darf die Pausenregel nicht aushebeln');
+  assert.equal(result.boundaries[0].reason, 'long_pause');
+}
+
+{
+  // Unabhängig vom Sprecher: dieselbe Person nach langer Pause.
+  const result = segmentConversationWindow([
+    msg(50, 8, 'Lena', 'Ich schaue nachher noch mal nach.'),
+    msg(51, 18, 'Lena', 'Der Zug fuhr pünktlich ab.'),
+  ]);
+  assert.equal(result.boundaries.length, 1, 'auch ohne Sprecherwechsel schneidet die Pausenregel');
+  assert.equal(result.boundaries[0].reason, 'long_pause');
+}
+
+{
+  // Unabhängig vom Antwortbezug: eine direkte Antwort nach langer Pause
+  // eröffnet ebenfalls eine neue Situation.
+  const result = segmentConversationWindow([
+    msg(60, 8, 'Lena', 'Kannst du morgen beim Vermieter anrufen?'),
+    { ...msg(61, 20, 'Philipp Sellin', 'Habe ich erledigt.'), reply_to_message_id: 60 },
+  ]);
+  assert.equal(result.boundaries.length, 1, 'auch ein Antwortbezug hält die Konversation nicht über die Schwelle');
+  assert.equal(result.boundaries[0].reason, 'long_pause');
+}
+
+{
+  // Unterhalb der Schwelle bleibt alles beim Alten: zwei Stunden Pause
+  // ohne weiteres Signal schneiden weiterhin nicht.
+  const result = segmentConversationWindow([
+    msg(70, 8, 'Lena', 'Ich denke noch darüber nach.'),
+    msg(71, 10, 'Philipp Sellin', 'Das verstehe ich.'),
+  ]);
+  assert.equal(result.situations.length, 1, 'unterhalb der Schwelle erzeugt eine Pause weiterhin keine Grenze');
 }
 
 {
@@ -136,12 +209,17 @@ function msg(id, hour, from, text, extra = {}) {
 
 // --- Rückblick auf offene Fragen (OPEN_QUESTION_LOOKBACK) ------------------
 
+// Beide Fälle bleiben bewusst unter PAUSE_BOUNDARY_HOURS — oberhalb der
+// Schwelle schneidet die Pausenregel ohnehin, dann prüfte der Test sie statt
+// des Rückblicks.
+
 {
   // Eine offene Frage der Gegenseite, die unmittelbar vorausgeht, muss eine
-  // Grenze weiterhin verhindern — das ist der Zweck der Bremse.
+  // Grenze weiterhin verhindern — das ist der Zweck der Bremse. Ohne sie
+  // würde hier der ausdrückliche Abschluss eine Grenze setzen.
   const result = segmentConversationWindow([
-    msg(1, 0, 'Lena', 'Kannst du morgen beim Vermieter anrufen?'),
-    msg(2, 9, 'Philipp Sellin', 'Guten Morgen, ich melde mich später dazu.'),
+    msg(1, 0, 'Lena', 'Ich muss jetzt los, kannst du morgen beim Vermieter anrufen?'),
+    msg(2, 2, 'Philipp Sellin', 'Der Zug fuhr pünktlich ab.'),
   ]);
   assert.equal(
     result.situations.length,
@@ -151,15 +229,14 @@ function msg(id, hour, from, text, extra = {}) {
 }
 
 {
-  // Liegt die Frage dagegen mehrere eigene Nachrichten zurück, ist die
-  // Konversation praktisch beendet — hier darf die Begrüßung nach neun
-  // Stunden eine neue Situation eröffnen. Mit dem früheren Fenster von 8
-  // wurde auch dieser Fall noch unterdrückt.
+  // Liegt die Frage dagegen mehrere eigene Nachrichten zurück, greift die
+  // Bremse nicht mehr, und der ausdrückliche Abschluss setzt die Grenze.
+  // Mit dem früheren Fenster von 8 wurde auch dieser Fall noch unterdrückt.
   const result = segmentConversationWindow([
     msg(10, 0, 'Lena', 'Kannst du morgen beim Vermieter anrufen?'),
     msg(11, 0.1, 'Philipp Sellin', 'Der Zug fuhr pünktlich ab.'),
-    msg(12, 0.2, 'Philipp Sellin', 'Die Katze lag auf der Fensterbank.'),
-    msg(13, 9, 'Philipp Sellin', 'Guten Morgen, ich melde mich später dazu.'),
+    msg(12, 0.2, 'Philipp Sellin', 'Ich muss jetzt los, wir sprechen später.'),
+    msg(13, 2, 'Philipp Sellin', 'Die Katze lag auf der Fensterbank.'),
   ]);
   assert.equal(
     result.situations.length,
@@ -167,7 +244,7 @@ function msg(id, hour, from, text, extra = {}) {
     'eine mehrere Wortwechsel zurückliegende Frage darf die Grenze nicht mehr unterdrücken',
   );
   assert.equal(result.boundaries[0].beforeEventId, '13');
-  assert.equal(result.boundaries[0].reason, 'new_greeting_after_pause');
+  assert.equal(result.boundaries[0].reason, 'previous_conversation_explicitly_closed');
 }
 
 console.log('segmentation-v4 tests: PASS');

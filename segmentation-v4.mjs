@@ -77,6 +77,38 @@ function lastMeaningfulIndex(messages, fromIndex) {
  */
 const OPEN_QUESTION_LOOKBACK = 2;
 
+/**
+ * VORLÄUFIGER WERT — noch nicht auf ungesehenen Runden bestätigt.
+ *
+ * Ab dieser Pause gilt ein Kommunikationsvorgang als beendet, unabhängig von
+ * Muster und Sprecher. Das ist eine bewusste Änderung der Modelldefinition:
+ * V4 hat bis hierher ausgeschlossen, dass eine lange Pause allein schneidet.
+ * Anlass war die Fehleranalyse — 16 der 27 übersehenen Grenzen scheiterten an
+ * gar keiner Regel, sondern waren schlicht lange Pausen.
+ *
+ * Gemessen an 10 Runden gegen die geklärte gemeinsame Fassung (Toleranz 0),
+ * variiert wurde nur dieser Wert:
+ *
+ *     ohne   F1 0,5000   (20 getroffen, 13 Fehlalarme, 27 übersehen)
+ *     2,0 h  F1 0,6164   (45 getroffen, 54 Fehlalarme,  2 übersehen)
+ *     2,5 h  F1 0,7087   (45 getroffen, 35 Fehlalarme,  2 übersehen)
+ *     3,0 h  F1 0,7544   (43 getroffen, 24 Fehlalarme,  4 übersehen)
+ *     3,5 h  F1 0,7407   (40 getroffen, 21 Fehlalarme,  7 übersehen)
+ *     4,0 h  F1 0,7255   (37 getroffen, 18 Fehlalarme, 10 übersehen)
+ *
+ * Gewählt ist 3 h nicht wegen des höchsten F1: 2,5/3/3,5 h liegen bei dieser
+ * Datenmenge im Rauschen gleichauf. Ausschlaggebend ist die Mittellage im
+ * flachen Plateau — nach unten liegt bei 2,5 h eine Klippe (bei 2 h mehr
+ * Fehlalarme als Treffer), nach oben steigen ab 4 h die übersehenen Grenzen.
+ * 3 h hat nach beiden Seiten Puffer.
+ *
+ * Offen: Der Wert wurde auf denselben Runden gewählt, auf denen er gemessen
+ * wurde, die Zahlen oben sind dadurch zu optimistisch. Sobald 4–5 weitere
+ * Runden vorliegen, ist der Wert auf einer Hälfte zu wählen und auf der
+ * anderen zu messen; erst diese Zahl zählt.
+ */
+const PAUSE_BOUNDARY_HOURS = 3;
+
 function recentOpenQuestion(messages, startIndex, currentIndex) {
   const currentSpeaker = speaker(messages[currentIndex]);
   let inspected = 0;
@@ -107,6 +139,14 @@ export function boundaryDecision(messages, startIndex, currentIndex) {
 
   if (!Number.isFinite(gapMinutes) || gapMinutes < 0) {
     return { boundary: false, reason: 'invalid_gap', gapMinutes };
+  }
+
+  // Ab dieser Pause gilt der Kommunikationsvorgang als beendet — unabhängig
+  // von Muster, Sprecher und Antwortbezug. Bewusst VOR den Fortsetzungs-
+  // sperren, sonst hielte eine offene Frage die Konversation über Tage
+  // zusammen.
+  if (gapMinutes >= PAUSE_BOUNDARY_HOURS * 60) {
+    return { boundary: true, reason: 'long_pause', gapMinutes };
   }
 
   // Direkte Antwort innerhalb der aktuell offenen Konversation: keine Grenze,
