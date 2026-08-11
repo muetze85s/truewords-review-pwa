@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Review V2 Situation Cards</title>
+  <link rel="stylesheet" href="/review-v2-situation.css">
+  <style>
+    body { margin: 0; min-height: 100vh; background: #111113; color: #f5f2ec; font-family: system-ui, sans-serif; }
+    .fixture { width: min(390px, calc(100vw - 32px)); margin: 32px auto; }
+    .fixture h1 { margin: 0 0 14px; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <main class="fixture">
+    <h1>Situationen</h1>
+    <div id="cards" class="rv2-list"></div>
+  </main>
+  <script src="/review-v2-situation.js"></script>
+  <script>
+    const cards = [
+      {
+        id: 2,
+        status: 'confirmed',
+        owner: 'Philipp',
+        startDate: '01.05.',
+        startTime: '12:41',
+        endTime: '14:22',
+        messageCount: 16,
+        details: {
+          classification: 'Konfliktgespräch',
+          direction: 'Philipp → Lena',
+          patterns: ['Rechtfertigung', 'Rückzug'],
+          topics: ['Planung', 'altes Streitthema'],
+          startingConcern: 'Terminabstimmung',
+          outcome: 'offen',
+          customFutureField: { label: 'Späteres Analysefeld', value: 'wird ohne Umbau dargestellt' },
+        },
+      },
+      { id: 3, status: 'open', owner: 'Lena', startDate: '02.05.', messageCount: 7 },
+      { id: 4, status: 'corrected', owner: 'Philipp', startDate: '03.05.', messageCount: 21 },
+      { id: 5, status: 'unclear', owner: 'Lena', startDate: '04.05.', messageCount: 9 },
+    ];
+    document.getElementById('cards').innerHTML = cards.map((item, index) =>
+      window.TRUEWORDS_REVIEW_V2.renderSituationCard(item, { active: index === 0, editable: index === 0 })
+    ).join('');
+  </script>
+</body>
+</html>

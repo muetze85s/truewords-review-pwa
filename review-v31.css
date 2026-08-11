@@ -1,0 +1,286 @@
+/* TrueWords Review V33 – fixed centered situation navigation and clearer visual hierarchy */
+:root{
+  --tw-review-shell:#ECEEF1;
+  --tw-review-panel:#FFFFFF;
+  --tw-review-card:#F7F8FA;
+  --tw-review-card-active:#FFFFFF;
+  --tw-review-chat:#F4F5F7;
+  --tw-review-stream:#FFFFFF;
+  --tw-review-boundary:#EEF0F3;
+}
+html[data-theme="dark"]{
+  --tw-review-shell:#121214;
+  --tw-review-panel:#1E1E22;
+  --tw-review-card:#24262B;
+  --tw-review-card-active:#30323A;
+  --tw-review-chat:#191A1E;
+  --tw-review-stream:#202126;
+  --tw-review-boundary:#292B31;
+}
+
+/* Clear surfaces: page -> panels -> cards -> chat stream. */
+.tw-main{background:var(--tw-review-shell)}
+.tw-sidebar{background:var(--tw-review-panel)!important}
+.tw-sidebar-head{background:var(--tw-review-panel)!important}
+.tw-chat-card{background:var(--tw-review-chat)!important}
+.tw-chat-head{background:var(--tw-review-panel)!important}
+.tw-chat-scroll{background:var(--tw-review-stream)!important}
+.tw-situation{background:var(--tw-review-card)!important}
+.tw-situation.is-active{background:var(--tw-review-card-active)!important}
+.tw-details{background:color-mix(in srgb,var(--tw-review-card) 78%,var(--tw-review-panel))!important}
+
+/* Status checkbox belongs on the left. */
+.tw-situation-row{grid-template-columns:auto minmax(0,1fr)!important}
+.tw-sit-check{grid-column:1;grid-row:1;margin:14px 0 0 14px!important}
+.tw-situation-open{grid-column:2;grid-row:1;padding-left:12px!important}
+
+/* Source lists stay in the DOM as the application's state/action surface.
+   The visible V33 navigation is a fixed three-row viewport whose middle row
+   never moves. Situation changes replace card content, not its position. */
+.tw-situation-list{padding:12px!important;scroll-behavior:auto!important}
+.tw-v33-fixed-list{
+  min-height:0;
+  display:grid;
+  grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);
+  gap:9px;
+  padding:12px;
+  overflow:hidden;
+  background:var(--tw-review-panel);
+  outline:none;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.tw-sidebar>.tw-v33-fixed-list{grid-row:2;z-index:3}
+html.tw-v33-ready .tw-sidebar>[data-situation-list]{
+  grid-row:2;
+  opacity:0!important;
+  pointer-events:none!important;
+  z-index:1;
+}
+.tw-v33-list-group{
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  overflow:hidden;
+}
+.tw-v33-list-top{justify-content:flex-end}
+.tw-v33-list-bottom{justify-content:flex-start}
+.tw-v33-list-center{
+  min-height:0;
+  width:100%;
+  align-self:center;
+  overflow:hidden;
+}
+.tw-v33-fixed-list .tw-situation{
+  margin:0!important;
+  flex:0 0 auto;
+  transition:none!important;
+  transform:none!important;
+}
+.tw-v33-fixed-list .tw-situation.is-active{transform:none!important}
+.tw-v33-list-top .tw-details,
+.tw-v33-list-bottom .tw-details{display:none!important}
+.tw-v33-list-center .tw-situation{
+  max-height:min(52vh,520px);
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+
+.tw-drawer-body{
+  position:relative!important;
+  height:calc(82dvh - 84px)!important;
+  min-height:280px!important;
+  overflow:hidden!important;
+}
+.tw-drawer-body>.tw-v33-fixed-list{
+  position:absolute;
+  inset:0;
+  z-index:3;
+}
+html.tw-v33-ready .tw-drawer-body>[data-drawer-list]{
+  position:absolute!important;
+  inset:0;
+  opacity:0!important;
+  pointer-events:none!important;
+  z-index:1;
+}
+.tw-drawer .tw-details{display:none!important}
+
+/* Stronger conversation boundaries without using speaker/status colors. */
+.tw-boundary{
+  border:2px solid var(--line-strong)!important;
+  background:var(--tw-review-boundary)!important;
+  color:var(--text)!important;
+  opacity:var(--tw-flow-opacity,.82)!important;
+  min-height:50px!important;
+  padding:8px 10px!important;
+}
+.tw-boundary>span{
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:5px 9px;
+  border:1px solid var(--line-strong);
+  border-radius:10px;
+  background:var(--card);
+  font-weight:800;
+}
+.tw-boundary .tw-action{
+  background:var(--card)!important;
+  border-color:var(--line-strong)!important;
+}
+
+/* Speaker colors are exact TrueWords logo colors – never status colors. */
+.tw-message-wrap.philipp .tw-message,
+.tw-message-wrap.is-active.philipp .tw-message,
+html[data-theme="dark"] .tw-message-wrap.philipp .tw-message,
+html[data-theme="dark"] .tw-message-wrap.is-active.philipp .tw-message{
+  background:#35BEB4!important;
+  border-color:#35BEB4!important;
+  color:#FFFFFF!important;
+}
+.tw-message-wrap.lena .tw-message,
+.tw-message-wrap.is-active.lena .tw-message,
+html[data-theme="dark"] .tw-message-wrap.lena .tw-message,
+html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{
+  background:#F26C83!important;
+  border-color:#F26C83!important;
+  color:#FFFFFF!important;
+}
+.tw-message-wrap.philipp .tw-message-meta,
+.tw-message-wrap.lena .tw-message-meta{color:rgba(255,255,255,.74)!important}
+.tw-message-wrap.philipp .tw-message-meta strong,
+.tw-message-wrap.lena .tw-message-meta strong{color:#FFFFFF!important}
+.tw-message-wrap.philipp .tw-reply,
+.tw-message-wrap.lena .tw-reply{background:rgba(0,0,0,.09)!important;color:rgba(255,255,255,.82)!important;border-left-color:rgba(255,255,255,.62)!important}
+.tw-message-wrap.philipp .tw-reply strong,
+.tw-message-wrap.lena .tw-reply strong{color:#FFFFFF!important}
+
+/* Mobile active situation card. It is compact by default and expands only on tap. */
+.tw-v31-mobile-active,.tw-v33-mobile-strip{display:none}
+
+@media(max-width:840px){
+  .tw-app{grid-template-rows:68px auto 56px minmax(0,1fr)!important}
+  .tw-topbar{grid-row:1!important;min-height:68px!important;padding:calc(7px + env(safe-area-inset-top)) 12px 7px!important;background:var(--tw-review-shell)!important}
+  .tw-brand-copy span,.tw-mobile-summary{display:none!important}
+  .tw-brand{gap:7px!important}
+  .tw-logo{width:30px!important;height:30px!important;flex-basis:30px!important;border-radius:10px!important;transform:scale(.82)}
+  .tw-brand-copy strong{font-size:16px!important}
+  .tw-top-actions{gap:5px!important}
+  .tw-icon-btn,.tw-profile{width:36px!important;height:36px!important}
+
+  .tw-v31-mobile-active{
+    --status:var(--open);
+    grid-row:2;
+    display:block;
+    margin:0 10px 7px;
+    border:2px solid var(--status);
+    border-radius:18px;
+    background:var(--tw-review-card-active);
+    overflow:hidden;
+    z-index:37;
+  }
+  .tw-v31-mobile-active[data-status="confirmed"]{--status:var(--confirmed)}
+  .tw-v31-mobile-active[data-status="corrected"]{--status:var(--corrected)}
+  .tw-v31-mobile-active[data-status="unclear"]{--status:var(--unclear)}
+  .tw-v31-active-toggle{
+    width:100%;
+    min-height:54px;
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;
+    gap:9px;
+    padding:8px 12px;
+    border:0;
+    background:transparent;
+    color:var(--text);
+    text-align:left;
+    cursor:pointer;
+  }
+  .tw-v31-active-number{font-size:20px;font-weight:900;letter-spacing:-.03em}
+  .tw-v31-active-copy{min-width:0}
+  .tw-v31-active-copy strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tw-v31-active-copy span{display:block;margin-top:3px;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tw-v31-active-chevron{font-size:16px;color:var(--muted);transition:transform .16s ease}
+  .tw-v31-mobile-active.is-expanded .tw-v31-active-chevron{transform:rotate(180deg)}
+  .tw-v31-active-details{display:none;padding:0 12px 12px;border-top:1px solid var(--line)}
+  .tw-v31-mobile-active.is-expanded .tw-v31-active-details{display:block;max-height:34dvh;overflow:auto}
+  .tw-v31-active-detail{display:grid;grid-template-columns:minmax(92px,.42fr) minmax(0,1fr);gap:9px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .tw-v31-active-detail:last-child{border-bottom:0}
+  .tw-v31-active-detail dt{margin:0;color:var(--muted);font-size:10px;font-weight:850}
+  .tw-v31-active-detail dd{margin:0;font-size:11px;line-height:1.4}
+  .tw-v31-active-empty{padding:11px 0 1px;color:var(--muted);font-size:11px}
+
+  /* The real Embla surface remains as the core application's state source,
+     but V33 visually replaces it with fixed slots. The center slot never moves;
+     a swipe changes the situation whose text/status is rendered there. */
+  .tw-slider{
+    grid-row:3!important;
+    background:var(--tw-review-panel)!important;
+    border-block:1px solid var(--line)!important;
+    overflow:hidden!important;
+    z-index:1;
+  }
+  html.tw-v33-ready .tw-slider{opacity:0!important;pointer-events:none!important}
+  .tw-embla-viewport{overflow:clip!important;touch-action:pan-y pinch-zoom!important}
+  .tw-embla-container{touch-action:pan-y pinch-zoom!important;user-select:none;-webkit-user-select:none}
+  .tw-embla-slide{flex:0 0 120px!important;min-width:0!important}
+  .tw-slider-item{width:112px!important;touch-action:pan-y!important;-webkit-tap-highlight-color:transparent}
+
+  .tw-v33-mobile-strip{
+    grid-row:3;
+    display:block;
+    position:relative;
+    height:56px;
+    min-width:0;
+    overflow:hidden;
+    border-block:1px solid var(--line);
+    background:var(--tw-review-panel);
+    z-index:38;
+    touch-action:pan-y;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  .tw-v33-strip-side{
+    position:absolute;
+    top:0;
+    bottom:0;
+    width:calc(50% - 64px);
+    min-width:0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    overflow:hidden;
+  }
+  .tw-v33-strip-left{left:0;justify-content:flex-end}
+  .tw-v33-strip-right{right:0;justify-content:flex-start}
+  .tw-v33-strip-center{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:112px;
+    min-width:112px;
+    transform:translate(-50%,-50%);
+    display:grid;
+    place-items:center;
+    z-index:2;
+  }
+  .tw-v33-mobile-strip .tw-slider-item{
+    flex:0 0 112px!important;
+    width:112px!important;
+    transform:none!important;
+    transition:none!important;
+  }
+  .tw-v33-strip-center .tw-slider-item{margin:0!important}
+
+  .tw-main{grid-row:4!important}
+  .tw-chat-card{background:var(--tw-review-chat)!important}
+  .tw-chat-scroll{background:var(--tw-review-stream)!important}
+  .tw-chat-stream{padding-top:16px!important}
+
+  .tw-drawer-panel{background:var(--tw-review-panel)!important}
+  .tw-drawer-body{background:var(--tw-review-panel)!important}
+}

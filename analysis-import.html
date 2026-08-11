@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · KI-Vorschläge importieren</title>
+  <link rel="stylesheet" href="./admin-upload.css">
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <div class="eyebrow">Analyseversion</div>
+      <h1>KI-Vorschläge einspielen</h1>
+      <p class="intro">Die 29 Pilotvorschläge werden als getrennte Version gespeichert und anschließend als aktueller Prüfstand aktiviert. Der bereinigte Rohchat bleibt unverändert.</p>
+
+      <form id="analysis-form">
+        <label>
+          <span>Admin-Zugangscode</span>
+          <input id="admin-token" type="password" autocomplete="off" required>
+        </label>
+
+        <label>
+          <span>Vorschlagsdatei</span>
+          <input id="analysis-file" type="file" accept=".json,application/json" required>
+          <small>TrueWords-Pilotdatei mit Situationen und Nachrichtenzuordnungen.</small>
+        </label>
+
+        <div class="grid">
+          <label>
+            <span>Datensatz-ID</span>
+            <input id="dataset-id" value="philena-2026" pattern="[A-Za-z0-9._-]{3,80}" required>
+          </label>
+          <label>
+            <span>Versions-ID</span>
+            <input id="version-id" value="pilot-v1" pattern="[A-Za-z0-9._-]{3,80}" required>
+          </label>
+        </div>
+
+        <label>
+          <span>Anzeigename</span>
+          <input id="version-label" value="KI-Vorschläge · Pilot v1 · 2026" required>
+        </label>
+
+        <button id="submit" type="submit">Vorschläge speichern und aktivieren</button>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite">Noch nichts übertragen.</div>
+      <p class="privacy">Die Vorschläge sind nur eine Ausgangshypothese. Jede Situationsgrenze muss von Philipp oder Lena bestätigt, verschoben, geteilt oder zusammengeführt werden.</p>
+    </section>
+  </main>
+  <script src="./analysis-import.js"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f3f4f6">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Anmeldung</title>
+  <link rel="stylesheet" href="./truewords-ui-theme.css?v=3">
+  <link rel="stylesheet" href="./portal.css?v=15">
+  <script src="./truewords-user-theme.js?v=1"></script>
+  <script src="./truewords-ui-theme.js?v=3"></script>
+</head>
+<body>
+  <main class="page">
+    <div class="portal-frame login-bento">
+      <section class="card login-hero">
+        <div class="portal-topline">
+          <div class="portal-brand">
+            <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+            <span><strong>TrueWords</strong><small>Review-PWA</small></span>
+          </div>
+          <div class="account-nav"></div>
+        </div>
+        <div class="hero-copy">
+          <div class="eyebrow">Manuelle Segmentierungsprüfung</div>
+          <h1>Konversationen sauber voneinander trennen.</h1>
+          <p class="intro">Die Review-PWA erzeugt den Goldstandard für TrueWords. Situationen werden als zusammenhängende Konversationen geprüft – nicht als Themenblöcke und nicht nach starren Zeitabständen.</p>
+        </div>
+        <div class="hero-rule">
+          <div class="mini-card"><b>Situation = Konversation</b><p>Ein zusammenhängender konkreter Kommunikationsabschnitt.</p></div>
+          <div class="mini-card"><b>Zeit ist nur Indiz</b><p>Vier Stunden Antwortpause können weiterhin dieselbe Situation sein.</p></div>
+          <div class="mini-card"><b>Gespräch ≠ Situation</b><p>Ein übergeordnetes Gespräch kann über mehrere Konversationen verlaufen.</p></div>
+        </div>
+      </section>
+
+      <section class="card login-panel">
+        <div class="eyebrow">Private Prüfung</div>
+        <h2>Anmelden</h2>
+        <p class="intro">Mit dem bestehenden TrueWords-Prüfkonto fortfahren.</p>
+        <form id="login-form">
+          <label>
+            <span>E-Mail-Adresse</span>
+            <input id="email" type="email" autocomplete="username" inputmode="email" required>
+          </label>
+          <label>
+            <span>Passwort</span>
+            <input id="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button id="submit" class="primary" type="submit">Anmelden</button>
+        </form>
+        <div id="status" class="status" role="status" aria-live="polite">Noch nicht angemeldet.</div>
+        <div id="setup-note" class="notice" hidden>
+          Die beiden Konten sind noch nicht eingerichtet. <a class="link" href="./account-setup.html">Einmalige Einrichtung öffnen</a>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="./login.js?v=2"></script>
+</body>
+</html>

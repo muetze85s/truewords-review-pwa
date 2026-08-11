@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Doppelprüfung · TrueWords</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./truewords-theme.css">
+<link rel="stylesheet" href="./truewords-ui-theme.css">
+<link rel="stylesheet" href="./boundary-pairs.css">
+<script src="./truewords-user-theme.js" defer></script>
+</head>
+<body class="dp">
+
+<header class="dp-top">
+  <div class="dp-top-inner">
+    <div class="dp-brand"><strong>Doppelprüfung</strong><span id="dp-sub">Wird geladen …</span></div>
+    <nav class="dp-tabs" id="dp-tabs">
+      <button type="button" class="dp-tab active" data-tab="round">Runde</button>
+      <button type="button" class="dp-tab" data-tab="overview">Übersicht</button>
+    </nav>
+    <a class="dp-back" href="/review.html">Zum Prüfstand</a>
+  </div>
+</header>
+
+<main class="dp-wrap">
+
+  <section id="dp-round-picker" class="dp-card">
+    <label for="dp-round-input">Runde</label>
+    <div class="dp-round-row">
+      <button type="button" id="dp-round-prev" aria-label="Vorherige Runde">←</button>
+      <input type="number" id="dp-round-input" min="1" step="1" value="1">
+      <button type="button" id="dp-round-next" aria-label="Nächste Runde">→</button>
+      <button type="button" id="dp-round-go" class="primary">Öffnen</button>
+    </div>
+  </section>
+
+  <section id="dp-round-view">
+    <p class="dp-status" id="dp-status"></p>
+
+    <div id="dp-state-mark" class="dp-state">
+      <div class="dp-progress-row">
+        <span id="dp-progress-text"></span>
+        <span class="dp-save-status" id="dp-save-status"></span>
+      </div>
+      <div id="dp-stream" class="dp-stream"></div>
+      <div class="dp-submit-row">
+        <p class="dp-hint">Nach der Abgabe lässt sich diese Runde nicht mehr ändern.</p>
+        <button type="button" id="dp-submit" class="primary">Runde abgeben</button>
+      </div>
+    </div>
+
+    <div id="dp-state-waiting" class="dp-state dp-weg">
+      <div class="dp-card dp-waiting-card">
+        <h2>Abgegeben — wartet auf die andere Person</h2>
+        <p>Deine Markierungen für diese Runde sind gespeichert und gesperrt. Der Vergleich erscheint hier, sobald
+          <strong id="dp-waiting-for">die andere Person</strong> ebenfalls abgegeben hat.</p>
+      </div>
+      <div id="dp-waiting-stream" class="dp-stream dp-readonly"></div>
+    </div>
+
+    <div id="dp-state-compare" class="dp-state dp-weg">
+      <div class="dp-card dp-agreement-card">
+        <div class="dp-agreement-number" id="dp-agreement-number">–</div>
+        <div class="dp-agreement-meta">
+          <span id="dp-agreement-label">Übereinstimmung</span>
+          <span id="dp-kappa-label"></span>
+        </div>
+        <div class="dp-controls-row">
+          <label>Toleranz
+            <select id="dp-tolerance">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+            </select>
+          </label>
+          <label>Unsicher zählt als
+            <select id="dp-doubt-mode">
+              <option value="skip" selected>ausgenommen</option>
+              <option value="cut">Grenze</option>
+              <option value="none">keine Grenze</option>
+            </select>
+          </label>
+        </div>
+        <div class="dp-automatic-row" id="dp-automatic-row"></div>
+      </div>
+
+      <h2 class="dp-disputes-heading">Streitfälle</h2>
+      <div id="dp-disputes"></div>
+    </div>
+  </section>
+
+  <section id="dp-overview-view" class="dp-weg">
+    <div id="dp-overview-body"></div>
+  </section>
+
+</main>
+
+<script src="./boundary-pairs.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="de" data-theme="dark" data-theme-preference="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TrueWords Visual Fixture</title>
+  <link rel="stylesheet" href="/review.css">
+  <link rel="stylesheet" href="/truewords-theme.css">
+  <link rel="stylesheet" href="/review-boundaries.css">
+  <link rel="stylesheet" href="/review-precision.css">
+  <link rel="stylesheet" href="/review-status-colors.css">
+  <link rel="stylesheet" href="/truewords-ui-theme.css">
+  <style>
+    html, body { width: 100%; min-height: 100%; }
+    body { overflow: hidden; }
+    .fixture-only { pointer-events: none; }
+    .fixture-status-stack { display: grid; gap: 0; }
+    .fixture-status-stack .situation-row { min-height: 126px; }
+    .fixture-status-stack .situation-button { align-content: center; }
+    .fixture-chat-scroll { overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div class="app-shell fixture-only">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">TW</div>
+        <div>
+          <div class="eyebrow">TrueWords · Gemeinsame Prüfung</div>
+          <h1>Situationen prüfen</h1>
+        </div>
+      </div>
+      <nav class="account-nav">
+        <div class="reviewer-switch" role="group" aria-label="Aktiver Prüfer">
+          <span>Prüft als</span>
+          <button class="active" type="button" data-reviewer-mode="Philipp" data-owner="Philipp">Philipp</button>
+          <button type="button" data-reviewer-mode="Lena" data-owner="Lena">Lena</button>
+        </div>
+        <span class="account-email">philipp.sellin@example.test</span>
+        <button type="button">Uploads</button>
+        <button type="button">Abmelden</button>
+      </nav>
+    </header>
+
+    <section class="summarybar">
+      <strong>Philipp &amp; Lena · Test 3 · ungesehene V3-Validierung · 8 offen / 12 gesamt</strong>
+      <span class="timezone-note">Zeitangaben: Thailand · Asia/Bangkok</span>
+      <span>Philipp: 2/6 erledigt · Lena: 2/6</span>
+      <span class="sync-status" data-state="ok">Synchronisiert · Revision 7</span>
+    </section>
+
+    <main class="review-grid">
+      <section class="panel situation-panel">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">Situationen</div>
+            <h2>Prüfstatus</h2>
+          </div>
+          <span class="count-pill">8</span>
+        </div>
+        <div class="list-controls">
+          <span>Häkchen links = bestätigen</span>
+          <button type="button" class="small">Erledigte anzeigen (4)</button>
+        </div>
+        <div class="list-legend">
+          <span class="legend-item"><i class="legend-dot open"></i> offen</span>
+          <span class="legend-item"><i class="legend-dot confirmed"></i> bestätigt</span>
+          <span class="legend-item"><i class="legend-dot corrected"></i> korrigiert</span>
+          <span class="legend-item"><i class="legend-dot unclear"></i> unklar</span>
+        </div>
+        <div class="situation-list fixture-status-stack">
+          <div class="situation-row status-open active" data-owner="Philipp">
+            <button type="button" class="situation-check" aria-label="Situation bestätigen"></button>
+            <button type="button" class="situation-button">
+              <span class="situation-title">2 · V3 Test 3 · 02 · 01.05.</span>
+              <span class="situation-meta">3 Nachrichten · Offen</span>
+              <span class="situation-range">01.05.26, 12:41 – 01.05.26, 14:22</span>
+              <span class="owner-badge mine" data-owner="Philipp">Philipp</span>
+            </button>
+          </div>
+          <div class="situation-row status-confirmed" data-owner="Philipp">
+            <button type="button" class="situation-check done">✓</button>
+            <button type="button" class="situation-button">
+              <span class="situation-title">3 · V3 Test 3 · 03 · 01.05.</span>
+              <span class="situation-meta">16 Nachrichten · Bestätigt</span>
+              <span class="situation-range">01.05.26, 21:13 – 02.05.26, 02:56</span>
+              <span class="owner-badge mine" data-owner="Philipp">Philipp</span>
+            </button>
+          </div>
+          <div class="situation-row status-corrected" data-owner="Lena">
+            <button type="button" class="situation-check done changed">✓</button>
+            <button type="button" class="situation-button">
+              <span class="situation-title">7 · V3 Test 3 · 07 · 04.05.</span>
+              <span class="situation-meta">9 Nachrichten · Korrigiert</span>
+              <span class="situation-range">04.05.26, 09:06 – 04.05.26, 11:44</span>
+              <span class="owner-badge" data-owner="Lena">Lena</span>
+            </button>
+          </div>
+          <div class="situation-row status-unclear" data-owner="Lena">
+            <button type="button" class="situation-check"></button>
+            <button type="button" class="situation-button">
+              <span class="situation-title">8 · V3 Test 3 · 08 · 04.05.</span>
+              <span class="situation-meta">6 Nachrichten · Unklar</span>
+              <span class="situation-range">04.05.26, 13:10 – 04.05.26, 15:38</span>
+              <span class="owner-badge" data-owner="Lena">Lena</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel chat-panel">
+        <header class="chat-head">
+          <div>
+            <div class="eyebrow">Situation 2</div>
+            <h2>V3 Test 3 · 02 · 01.05.</h2>
+            <p>Dezenter Sprecherbezug, klarer Status und lesbarer Kontext.</p>
+          </div>
+          <div class="head-badges">
+            <span class="owner-badge mine" data-owner="Philipp">Philipp</span>
+            <span class="status-badge">Offen</span>
+          </div>
+        </header>
+
+        <div class="boundary-box">
+          <div class="boundary-row"><strong>Anfang</strong><span class="boundary-value">01.05.26, 12:41</span><button type="button">← früher</button><button type="button">später →</button></div>
+          <div class="boundary-row"><strong>Ende</strong><span class="boundary-value">01.05.26, 14:22</span><button type="button">← früher</button><button type="button">später →</button></div>
+        </div>
+
+        <div class="message-list fixture-chat-scroll">
+          <section class="context-zone">
+            <div class="context-label">Nur Kontext · Nachricht davor</div>
+            <article class="message context mine" data-speaker="Philipp">
+              <div class="message-meta"><strong>Philipp Sellin</strong><span>01.05.26, 09:11</span><span>ID 95926</span><span class="context-badge">Nur Kontext</span></div>
+              <div class="message-text">Guten Morgen. Ja, wie ein Stein.</div>
+            </article>
+          </section>
+
+          <section class="situation-zone">
+            <div class="situation-boundary"><span>Situation 2 beginnt</span><strong>3 Nachrichten gehören zu dieser Situation</strong></div>
+            <div class="situation-messages">
+              <article class="message assigned" data-speaker="Lena">
+                <div class="message-meta"><strong>Lena</strong><span>01.05.26, 12:41</span><span>ID 95927</span><span class="membership-badge">Teil der Situation · 1/3</span></div>
+                <div class="message-text">Guten Morgen ☀️</div>
+              </article>
+
+              <article class="message assigned mine" data-speaker="Philipp">
+                <div class="message-meta"><strong>Philipp Sellin</strong><span>01.05.26, 13:12</span><span>ID 95930</span><span class="membership-badge">Teil der Situation · 2/3</span></div>
+                <div class="reply-preview" data-speaker="Lena">
+                  <div class="reply-title">Antwort auf ursprüngliche Nachricht</div>
+                  <div class="reply-meta">Lena · 01.05.26, 12:41 · ID 95927</div>
+                  <div class="reply-text">Guten Morgen ☀️</div>
+                </div>
+                <div class="message-text">Wie geht es dir heute?</div>
+              </article>
+
+              <article class="message assigned" data-speaker="Lena">
+                <div class="message-meta"><strong>Lena</strong><span>01.05.26, 14:22</span><span>ID 95931</span><span class="membership-badge">Teil der Situation · 3/3</span></div>
+                <div class="message-text">Etwas besser. Ich brauche heute nur Ruhe.</div>
+              </article>
+            </div>
+            <div class="situation-boundary end"><span>Situation 2 endet</span><strong>Grenze geprüft</strong></div>
+          </section>
+
+          <section class="context-zone after">
+            <div class="context-label">Nur Kontext · Nachricht danach</div>
+            <article class="message context" data-speaker="Lena">
+              <div class="message-meta"><strong>Lena</strong><span>01.05.26, 18:03</span><span>ID 95932</span><span class="context-badge">Nur Kontext</span></div>
+              <div class="message-text">Später telefonieren wir.</div>
+            </article>
+          </section>
+        </div>
+
+        <footer class="review-actions">
+          <span class="review-note">Bestätigen über das Häkchen oder hier.</span>
+          <button type="button" class="confirm">Situation bestätigen</button>
+        </footer>
+      </section>
+    </main>
+  </div>
+  <script>
+    const theme = new URLSearchParams(location.search).get('theme') || 'dark';
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.themePreference = theme;
+  </script>
+</body>
+</html>

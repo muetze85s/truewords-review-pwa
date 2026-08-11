@@ -1,0 +1,217 @@
+:root{
+  --tw-speaker-philipp:#35BEB4;
+  --tw-speaker-lena:#F26C83;
+}
+
+/* Statusfarben bleiben eine eigene Semantik und umrahmen die gesamte Karte. */
+.tw-situation{
+  --tw-status-color:var(--open);
+  border:2px solid var(--tw-status-color)!important;
+  border-left-width:2px!important;
+  transform:none!important;
+  transition:opacity .2s ease,transform .2s ease,background .2s ease,border-color .2s ease!important;
+  opacity:var(--tw-list-opacity,.66);
+}
+.tw-situation[data-status="confirmed"]{--tw-status-color:var(--confirmed)}
+.tw-situation[data-status="corrected"]{--tw-status-color:var(--corrected)}
+.tw-situation[data-status="unclear"]{--tw-status-color:var(--unclear)}
+.tw-situation.is-active{
+  background:var(--card)!important;
+  transform:scale(1.018)!important;
+  opacity:1!important;
+}
+html[data-theme="dark"] .tw-situation.is-active{background:#303038!important}
+
+/* Sprecherfarben sind ausschließlich Philipp/Lena vorbehalten. */
+.tw-message-wrap.philipp .tw-message{
+  background:rgba(53,190,180,.24)!important;
+  border-color:rgba(53,190,180,.24)!important;
+}
+.tw-message-wrap.lena .tw-message{
+  background:rgba(242,108,131,.22)!important;
+  border-color:rgba(242,108,131,.22)!important;
+}
+.tw-message-wrap.is-active.philipp .tw-message{
+  background:rgba(53,190,180,.34)!important;
+  border-color:rgba(53,190,180,.48)!important;
+}
+.tw-message-wrap.is-active.lena .tw-message{
+  background:rgba(242,108,131,.32)!important;
+  border-color:rgba(242,108,131,.46)!important;
+}
+html[data-theme="dark"] .tw-message-wrap.philipp .tw-message{
+  background:rgba(53,190,180,.34)!important;
+  border-color:rgba(53,190,180,.42)!important;
+}
+html[data-theme="dark"] .tw-message-wrap.lena .tw-message{
+  background:rgba(242,108,131,.32)!important;
+  border-color:rgba(242,108,131,.40)!important;
+}
+html[data-theme="dark"] .tw-message-wrap.is-active.philipp .tw-message{
+  background:rgba(53,190,180,.44)!important;
+  border-color:rgba(53,190,180,.62)!important;
+}
+html[data-theme="dark"] .tw-message-wrap.is-active.lena .tw-message{
+  background:rgba(242,108,131,.42)!important;
+  border-color:rgba(242,108,131,.60)!important;
+}
+
+/* Eigene Nachrichten stehen immer rechts, Gegenüber links. */
+html[data-reviewer="philipp"] .tw-message-wrap.philipp,
+html[data-reviewer="lena"] .tw-message-wrap.lena{align-items:flex-end!important}
+html[data-reviewer="philipp"] .tw-message-wrap.lena,
+html[data-reviewer="lena"] .tw-message-wrap.philipp{align-items:flex-start!important}
+
+/* Scroll-Fades sind rein visuell: niemals display/height/margin verändern. */
+.tw-message-wrap,
+.tw-group-label,
+.tw-boundary,
+.tw-day{
+  opacity:var(--tw-flow-opacity,.55)!important;
+  transition:opacity .22s linear,filter .22s linear!important;
+  filter:saturate(calc(.78 + var(--tw-flow-opacity,.55) * .22));
+}
+.tw-message-wrap.is-selected{opacity:1!important;filter:none!important}
+
+/* Anfang/Ende behalten feste Geometrie; der Abschlussblock entfällt vollständig. */
+.tw-boundary{
+  display:flex!important;
+  min-height:44px!important;
+  margin:7px 4px!important;
+  padding:7px 10px!important;
+  pointer-events:none;
+  border-color:var(--line)!important;
+}
+.tw-boundary.is-active{pointer-events:auto}
+.tw-boundary .tw-boundary-actions{visibility:hidden!important;display:flex!important;align-items:center;gap:6px}
+.tw-boundary.is-active .tw-boundary-actions{visibility:visible!important}
+.tw-end-card{display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;overflow:hidden!important}
+.tw-boundary-confirm{
+  min-height:32px!important;
+  height:32px;
+  padding:0 11px!important;
+  border-radius:10px!important;
+  white-space:nowrap;
+}
+.tw-boundary-confirm.done{
+  background:var(--unclear)!important;
+  color:#fff!important;
+  border:1px solid var(--unclear)!important;
+}
+.tw-boundary-owner{
+  font-size:11px;
+  font-weight:750;
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+/* Slider nutzt dieselben bestehenden Statusfarben, nie Sprecherfarben. */
+.tw-slider-item{--tw-slider-status:var(--open);border:2px solid var(--tw-slider-status)!important;opacity:var(--tw-slider-opacity,.64);transition:opacity .2s ease,transform .2s ease,background .2s ease,border-color .2s ease!important}
+.tw-slider-item[data-status="confirmed"]{--tw-slider-status:var(--confirmed)}
+.tw-slider-item[data-status="corrected"]{--tw-slider-status:var(--corrected)}
+.tw-slider-item[data-status="unclear"]{--tw-slider-status:var(--unclear)}
+.tw-slider-item.is-active{border-color:var(--tw-slider-status)!important;background:var(--card)!important;opacity:1!important;transform:scale(1.045)}
+
+.tw-mobile-list-fab{display:none}
+
+@media(max-width:840px){
+  /* Kopfzeile bleibt immer stehen; Slider liegt direkt darunter. */
+  .tw-topbar,
+  .tw-app.is-header-hidden .tw-topbar{
+    position:fixed!important;
+    inset:0 0 auto 0!important;
+    min-height:96px!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+    transform:none!important;
+    border-bottom:1px solid var(--line)!important;
+    background:var(--bg)!important;
+  }
+  .tw-slider,
+  .tw-app.is-header-hidden .tw-slider{
+    position:fixed!important;
+    z-index:66!important;
+    top:calc(96px + env(safe-area-inset-top))!important;
+    bottom:auto!important;
+    left:0!important;
+    right:0!important;
+    display:flex!important;
+    height:54px!important;
+    padding:7px calc(50vw - 44px)!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+    transform:none!important;
+    background:var(--bg)!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+  .tw-chat-scroll,
+  .tw-app.is-header-hidden .tw-chat-scroll{
+    padding-top:calc(152px + env(safe-area-inset-top))!important;
+    transition:none!important;
+  }
+  .tw-chat-stream{padding-bottom:max(170px,24vh)!important}
+
+  /* Der alte Vierer-Balken verschwindet komplett. */
+  .tw-bottom-nav{display:none!important}
+  .tw-mobile-list-fab{
+    position:fixed;
+    z-index:78;
+    left:14px;
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    width:48px;
+    height:48px;
+    display:grid;
+    place-items:center;
+    border:1px solid rgba(127,127,127,.28);
+    border-radius:17px;
+    background:color-mix(in srgb,var(--card) 76%,transparent);
+    color:var(--text);
+    box-shadow:0 8px 28px rgba(0,0,0,.14);
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    cursor:pointer;
+    opacity:.82;
+  }
+  .tw-mobile-list-fab:active{transform:scale(.96)}
+  .tw-mobile-list-fab svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+
+  /* Mobile Liste als Bottom-Sheet von unten. */
+  .tw-drawer{display:block!important;visibility:hidden;pointer-events:none}
+  .tw-drawer.is-open{visibility:visible;pointer-events:auto}
+  .tw-drawer .tw-scrim{opacity:0;transition:opacity .22s ease}
+  .tw-drawer.is-open .tw-scrim{opacity:1}
+  .tw-drawer-panel{
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    max-height:82dvh!important;
+    border-radius:28px 28px 0 0!important;
+    transform:translateY(104%);
+    transition:transform .26s cubic-bezier(.2,.75,.2,1)!important;
+    will-change:transform;
+  }
+  .tw-drawer.is-open .tw-drawer-panel{transform:translateY(0)}
+  .tw-drawer-panel:before{
+    content:"";
+    display:block;
+    width:42px;
+    height:5px;
+    border-radius:999px;
+    background:var(--line-strong);
+    margin:9px auto 0;
+  }
+  .tw-drawer-body{padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
+  [data-drawer-list] .tw-situation{opacity:var(--tw-list-opacity,.62)!important}
+
+  .tw-boundary{margin-inline:0!important}
+  .tw-boundary-actions{gap:4px!important}
+  .tw-boundary .tw-action,.tw-boundary-confirm{font-size:10px!important;padding-inline:8px!important}
+}
+
+@media(min-width:841px){
+  .tw-situation-list{scroll-behavior:auto!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .tw-message-wrap,.tw-group-label,.tw-boundary,.tw-day,.tw-situation,.tw-slider-item,.tw-drawer-panel,.tw-drawer .tw-scrim{transition:none!important}
+}

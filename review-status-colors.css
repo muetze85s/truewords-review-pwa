@@ -1,0 +1,60 @@
+/* Statusfarben bleiben auch bei Einträgen aus dem jeweils anderen Prüfbereich deutlich sichtbar. */
+.situation-row.other-owner {
+  opacity: 1;
+}
+
+.situation-row.other-owner .owner-badge {
+  opacity: .66;
+}
+
+.situation-row.status-confirmed {
+  border-left-color: var(--good);
+  box-shadow: inset 5px 0 0 var(--good);
+}
+
+.situation-row.status-confirmed .situation-check.done {
+  border-color: var(--good);
+  background: var(--good);
+  color: #fff;
+}
+
+.situation-row.status-confirmed .situation-meta {
+  color: var(--good);
+  font-weight: 900;
+}
+
+.situation-row.status-corrected {
+  border-left-color: var(--corrected);
+  background: rgba(118, 102, 154, .09);
+  box-shadow: inset 5px 0 0 var(--corrected);
+}
+
+.situation-row.status-corrected:hover {
+  background: rgba(118, 102, 154, .14);
+}
+
+.situation-row.status-corrected.active {
+  background: rgba(118, 102, 154, .18);
+  box-shadow: inset 5px 0 0 var(--corrected), inset 0 0 0 1px rgba(118, 102, 154, .4);
+}
+
+.situation-row.status-corrected .situation-check.done {
+  border-color: var(--corrected);
+  background: var(--corrected);
+  color: #fff;
+}
+
+.situation-row.status-corrected .situation-meta {
+  color: var(--corrected);
+  font-weight: 900;
+}
+
+.situation-row.status-unclear {
+  border-left-color: var(--bad);
+  box-shadow: inset 5px 0 0 var(--bad);
+}
+
+.situation-row.status-unclear .situation-meta {
+  color: var(--bad);
+  font-weight: 900;
+}
