@@ -368,19 +368,23 @@ assert.ok(hashSeed('a') !== hashSeed('b'), 'unterschiedliche Eingaben sollten un
 }
 
 {
-  // Beide Aufrufstellen (getAgreement UND getSummary) müssen über
-  // toSegmentationInput gehen. Genau hier ist der Fehler entstanden: die
-  // Abbildung stand zweimal wörtlich im Code, und eine der beiden Stellen
-  // wurde beim Beheben übersehen — die Übersicht blieb bei 0,00, während der
-  // Rundenvergleich schon richtig rechnete. Ein Unit-Test über die reine
-  // Logik kann das nicht sehen, deshalb wird hier die Quelle geprüft.
+  // Jede Aufrufstelle (getAgreement, getSummary, getFilterMigrationCheck für
+  // alt- und neu-gefiltert) muss über toSegmentationInput gehen. Genau hier
+  // ist der Fehler entstanden: die Abbildung stand zweimal wörtlich im Code,
+  // und eine der beiden Stellen wurde beim Beheben übersehen — die Übersicht
+  // blieb bei 0,00, während der Rundenvergleich schon richtig rechnete. Ein
+  // Unit-Test über die reine Logik kann das nicht sehen, deshalb wird hier
+  // die Quelle geprüft. Die Prüfung ist bewusst variablennamen-unabhängig,
+  // damit neue Aufrufstellen (mit eigenen Variablennamen) nicht am
+  // wörtlichen Namen "messages" scheitern — sie müssen aber alle
+  // segmentConversationWindow(toSegmentationInput(...)) direkt verschachteln.
   const worker = readFileSync(new URL('../src/worker-boundary-pairs.ts', import.meta.url), 'utf8');
   const calls = worker.match(/segmentConversationWindow\(/gu) || [];
-  assert.equal(calls.length, 2, 'erwartet werden genau zwei Aufrufe der Segmentierung');
+  assert.equal(calls.length, 4, 'erwartet werden genau vier Aufrufe der Segmentierung');
   assert.equal(
-    (worker.match(/toSegmentationInput\(messages\)/gu) || []).length,
-    2,
-    'beide Aufrufstellen müssen toSegmentationInput benutzen',
+    (worker.match(/segmentConversationWindow\(\s*toSegmentationInput\(/gu) || []).length,
+    4,
+    'alle Aufrufstellen müssen toSegmentationInput direkt an segmentConversationWindow übergeben',
   );
   assert.ok(
     !/date_unixtime:\s*message\.t/u.test(worker),

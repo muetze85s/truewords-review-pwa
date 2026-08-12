@@ -219,6 +219,32 @@ function isReviewable(message: RawMessage): boolean {
     && !isService(message);
 }
 
+/** Reines Rauschen ganz ohne Zeitsignal: Sticker oder Umfrage ohne jeden Text. */
+function isNoiseWithoutSignal(message: RawMessage): boolean {
+  if (flattenText(message.text).trim()) return false;
+  if (message.poll) return true;
+  return isSticker(message);
+}
+
+/**
+ * Weiter Filter für die Filter-Migrationsmessung (`/api/admin/filter-check`):
+ * verwirft nur reines Rauschen ohne Zeitsignal und echte Verwaltungs-Ereignisse
+ * (Beitritt, Pin, Namensänderung) — Anrufe, Medien und Weiterleitungen bleiben
+ * drin. Ob sie an unseren Daten tatsächlich Grenzsignale sind, soll die Messung
+ * zeigen, nicht eine Annahme aus der Hauptapp (die Anrufe z. B. verwirft).
+ */
+function isReviewableBroad(message: RawMessage): boolean {
+  if (isNoiseWithoutSignal(message)) return false;
+  const type = String(message.type || 'message');
+  if (type !== 'message') {
+    const action = String(
+      message.action || message.action_type || message.service_type || message.message_type || '',
+    );
+    return isCallAction(action);
+  }
+  return true;
+}
+
 function toView(message: RawMessage): ViewMessage {
   const action = String(message.action || message.service_type || '').toLowerCase();
   const kind: ViewMessage['kind'] = isCallAction(action)
@@ -237,7 +263,11 @@ function toView(message: RawMessage): ViewMessage {
   };
 }
 
-async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
+async function filteredSequenceUsing(
+  env: Env,
+  datasetId: string,
+  predicate: (message: RawMessage) => boolean,
+): Promise<RawMessage[]> {
   const rows = await env.DB.prepare(`
     SELECT messages_json FROM review_chat_chunks WHERE dataset_id = ?1 ORDER BY chunk_index
   `).bind(datasetId).all<{ messages_json: string }>();
@@ -252,12 +282,16 @@ async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage
     }
     if (!Array.isArray(parsed)) continue;
     for (const message of parsed) {
-      if (message && typeof message === 'object' && isReviewable(message as RawMessage)) {
+      if (message && typeof message === 'object' && predicate(message as RawMessage)) {
         out.push(message as RawMessage);
       }
     }
   }
   return out;
+}
+
+async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
+  return filteredSequenceUsing(env, datasetId, isReviewable);
 }
 
 async function activeDataset(env: Env): Promise<DatasetRow | null> {
@@ -755,11 +789,188 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
   });
 }
 
+/**
+ * Nur-Lese-Kennzahlen zur Filter-Migration (`isReviewable` → `isReviewableBroad`):
+ * ausschließlich Zählungen. Kein Nachrichtentext, kein Name — auch nicht, um ihn
+ * intern zu lesen und wegzulassen; die Runden-Fenster werden nur über IDs und
+ * Positionen verglichen.
+ */
+async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+
+  const [oldSequence, newSequence] = await Promise.all([
+    filteredSequenceUsing(env, dataset.id, isReviewable),
+    filteredSequenceUsing(env, dataset.id, isReviewableBroad),
+  ]);
+  const oldIds = new Set(oldSequence.map(rawId));
+  const newIds = new Set(newSequence.map(rawId));
+  let addedByNew = 0;
+  let removedByNew = 0;
+  for (const id of newIds) if (!oldIds.has(id)) addedByNew += 1;
+  for (const id of oldIds) if (!newIds.has(id)) removedByNew += 1;
+
+  const oldIndex = new Map(oldSequence.map((message, index) => [rawId(message), index]));
+  const newIndex = new Map(newSequence.map((message, index) => [rawId(message), index]));
+
+  const roundRows = await env.DB.prepare(`
+    SELECT dataset_id, round, first_message_id, message_count FROM review_rounds
+    WHERE dataset_id = ?1 ORDER BY round
+  `).bind(dataset.id).all<RoundRow>();
+  const rounds = roundRows.results || [];
+
+  const submissionRows = await env.DB.prepare(`
+    SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1
+  `).bind(dataset.id).all<{ round: number; reviewer: Role }>();
+  const readyByRound = new Map<number, Set<Role>>();
+  for (const row of submissionRows.results || []) {
+    if (!readyByRound.has(row.round)) readyByRound.set(row.round, new Set());
+    readyByRound.get(row.round)?.add(row.reviewer);
+  }
+
+  const failedRounds: number[] = [];
+  let disputesTotal = 0;
+  let disputesStillMatched = 0;
+  let callTotal = 0;
+  let callBeforeCut = 0;
+  let mediaTotal = 0;
+  let mediaBeforeCut = 0;
+  let totalSeamsMeasured = 0;
+  let totalCutsMeasured = 0;
+  let oldPairs = 0, oldOnlyAuto = 0, oldOnlyHuman = 0, oldBoundaryTotal = 0;
+  let newPairs = 0, newOnlyAuto = 0, newOnlyHuman = 0, newBoundaryTotal = 0;
+  let roundsCompared = 0;
+
+  for (const roundRow of rounds) {
+    const oldStart = oldIndex.get(roundRow.first_message_id);
+    const newStart = newIndex.get(roundRow.first_message_id);
+    if (newStart === undefined) failedRounds.push(roundRow.round);
+    if (oldStart === undefined) continue;
+
+    const ready = readyByRound.get(roundRow.round);
+    if (!ready || !ready.has('Philipp') || !ready.has('Lena')) continue;
+
+    const oldMessages = oldSequence.slice(oldStart, oldStart + roundRow.message_count).map(toView);
+    const oldPositions = seamPositions(oldMessages);
+
+    const [philippMarks, lenaMarks, resolutionRows] = await Promise.all([
+      loadMarks(env, dataset.id, roundRow.round, 'Philipp'),
+      loadMarks(env, dataset.id, roundRow.round, 'Lena'),
+      env.DB.prepare(`
+        SELECT seam_message_id, decision FROM review_boundary_resolutions
+        WHERE dataset_id = ?1 AND round = ?2
+      `).bind(dataset.id, roundRow.round).all<{ seam_message_id: string; decision: 'cut' | 'no_cut' | 'open' }>(),
+    ]);
+    const resolutionList = resolutionRows.results || [];
+    const oldComparison = compareReviewers(
+      toPositionalMarks(philippMarks, oldPositions),
+      toPositionalMarks(lenaMarks, oldPositions),
+      { totalSeams: Math.max(0, oldMessages.length - 1), tolerance, doubtMode },
+    );
+    const oldCombined = combinedBoundary(oldComparison, toPositionalResolutions(resolutionList, oldPositions));
+
+    disputesTotal += oldComparison.onlyA.length + oldComparison.onlyB.length;
+    if (newStart !== undefined) {
+      const newPositionsForDisputes = seamPositions(newSequence.slice(newStart, newStart + roundRow.message_count).map(toView));
+      const oldPositionToId = new Map<number, string>();
+      for (const [id, position] of oldPositions) oldPositionToId.set(position, id);
+      for (const position of [...oldComparison.onlyA, ...oldComparison.onlyB]) {
+        const seamId = oldPositionToId.get(position);
+        if (seamId && newPositionsForDisputes.has(seamId)) disputesStillMatched += 1;
+      }
+    }
+
+    totalSeamsMeasured += Math.max(0, oldMessages.length - 1);
+    totalCutsMeasured += oldCombined.cuts.length;
+    const cutSeamSet = new Set(oldCombined.cuts);
+    for (let index = 0; index < oldMessages.length; index += 1) {
+      const kind = oldMessages[index].kind;
+      if (kind === 'anruf') {
+        callTotal += 1;
+        if (cutSeamSet.has(index + 1)) callBeforeCut += 1;
+      } else if (kind === 'medien') {
+        mediaTotal += 1;
+        if (cutSeamSet.has(index + 1)) mediaBeforeCut += 1;
+      }
+    }
+
+    const oldAuto = segmentConversationWindow(toSegmentationInput(oldMessages));
+    const oldAutoPositions = oldAuto.boundaries
+      .map((boundary) => oldPositions.get(boundary.beforeEventId))
+      .filter((position): position is number => position !== undefined);
+    const oldVsCombined = pairSeams(oldAutoPositions, oldCombined.cuts, tolerance);
+    oldPairs += oldVsCombined.pairs.length;
+    oldOnlyAuto += oldVsCombined.onlyA.length;
+    oldOnlyHuman += oldVsCombined.onlyB.length;
+    oldBoundaryTotal += oldAuto.boundaries.length;
+
+    if (newStart === undefined) continue;
+    roundsCompared += 1;
+    const newMessages = newSequence.slice(newStart, newStart + roundRow.message_count).map(toView);
+    const newPositions = seamPositions(newMessages);
+    const newComparison = compareReviewers(
+      toPositionalMarks(philippMarks, newPositions),
+      toPositionalMarks(lenaMarks, newPositions),
+      { totalSeams: Math.max(0, newMessages.length - 1), tolerance, doubtMode },
+    );
+    const newCombined = combinedBoundary(newComparison, toPositionalResolutions(resolutionList, newPositions));
+    const newAuto = segmentConversationWindow(toSegmentationInput(newMessages));
+    const newAutoPositions = newAuto.boundaries
+      .map((boundary) => newPositions.get(boundary.beforeEventId))
+      .filter((position): position is number => position !== undefined);
+    const newVsCombined = pairSeams(newAutoPositions, newCombined.cuts, tolerance);
+    newPairs += newVsCombined.pairs.length;
+    newOnlyAuto += newVsCombined.onlyA.length;
+    newOnlyHuman += newVsCombined.onlyB.length;
+    newBoundaryTotal += newAuto.boundaries.length;
+  }
+
+  const f1 = (pairs: number, onlyA: number, onlyB: number): number | null => {
+    const denominator = 2 * pairs + onlyA + onlyB;
+    return denominator ? (2 * pairs) / denominator : null;
+  };
+
+  return json({
+    ok: true,
+    tolerance,
+    doubtMode,
+    messageCounts: {
+      old: oldSequence.length,
+      new: newSequence.length,
+      addedByNew,
+      removedByNew,
+    },
+    rounds: {
+      total: rounds.length,
+      loadOk: rounds.length - failedRounds.length,
+      failedRounds,
+      readyRoundsCompared: roundsCompared,
+    },
+    disputes: {
+      total: disputesTotal,
+      stillMatched: disputesStillMatched,
+    },
+    automatic: {
+      old: { agreementF1: f1(oldPairs, oldOnlyAuto, oldOnlyHuman), boundariesTotal: oldBoundaryTotal },
+      new: { agreementF1: f1(newPairs, newOnlyAuto, newOnlyHuman), boundariesTotal: newBoundaryTotal },
+    },
+    boundarySignal: {
+      calls: { total: callTotal, beforeHumanCut: callBeforeCut, rate: callTotal ? callBeforeCut / callTotal : null },
+      media: { total: mediaTotal, beforeHumanCut: mediaBeforeCut, rate: mediaTotal ? mediaBeforeCut / mediaTotal : null },
+      baselineCutRate: totalSeamsMeasured ? totalCutsMeasured / totalSeamsMeasured : null,
+    },
+  });
+}
+
 // ----------------------------------------------------------- Verdrahtung
 
 async function boundaryPairsApi(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/api/rounds/') && url.pathname !== '/api/agreement/summary') return null;
+  if (
+    !url.pathname.startsWith('/api/rounds/')
+    && url.pathname !== '/api/agreement/summary'
+    && url.pathname !== '/api/admin/filter-check'
+  ) return null;
 
   const user = await sessionUser(request, env);
   if (!user) return error('Nicht angemeldet.', 401);
@@ -770,6 +981,10 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   try {
     if (url.pathname === '/api/agreement/summary' && request.method === 'GET') {
       return await getSummary(env, dataset, user.role, url);
+    }
+
+    if (url.pathname === '/api/admin/filter-check' && request.method === 'GET') {
+      return await getFilterMigrationCheck(env, dataset, url);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
