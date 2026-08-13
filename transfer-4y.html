@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f2ec">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Grenzen übertragen</title>
+  <link rel="stylesheet" href="./portal.css?v=10">
+</head>
+<body>
+  <main class="page">
+    <section class="login-shell card">
+      <div class="portal-brand">
+        <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+        <span><strong>TrueWords</strong><small>Gemeinsame Prüfung</small></span>
+      </div>
+      <div class="eyebrow">Additive Übertragung</div>
+      <h1>Grenzen → philena-4y</h1>
+
+      <div class="status" data-state="ok" style="margin:8px 0 16px">
+        Kopiert Runden, Markierungen, Abgaben und Streitfälle der Basis
+        <code>philena-2026-pilot-v4-unseen</code> additiv nach <strong>philena-4y</strong>.<br>
+        <span style="font-size:12px">Reine INSERTs unter <code>philena-4y</code> — die Basis wird nur gelesen. Der Server prüft vorher: Ziel leer und Anchor-Check grün.</span>
+      </div>
+
+      <form id="transfer-form">
+        <label>
+          <span>Admin-Zugangscode</span>
+          <input id="admin-token" type="password" autocomplete="off" required>
+        </label>
+        <button id="submit" class="primary" type="submit">Jetzt nach philena-4y übertragen</button>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite" style="margin-top:12px">Zugangscode eingeben und übertragen.</div>
+      <pre id="result" style="margin-top:12px;font-size:12px;white-space:pre-wrap;word-break:break-word"></pre>
+    </section>
+  </main>
+  <script src="./transfer-4y.js"></script>
+</body>
+</html>
