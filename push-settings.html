@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f2ec">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Benachrichtigungen</title>
+  <link rel="stylesheet" href="./portal.css?v=10">
+  <link rel="stylesheet" href="./boundary-pairs.css?v=2">
+  <script src="./truewords-user-theme.js" defer></script>
+</head>
+<body>
+  <main class="page">
+    <section class="login-shell card">
+      <div class="portal-brand">
+        <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+        <span><strong>TrueWords</strong><small>Gemeinsame Prüfung</small></span>
+      </div>
+      <div class="eyebrow">Nur für Philipp</div>
+      <h1>Benachrichtigungen</h1>
+      <p class="intro">Zentrale Steuerung. Zeiten gelten in der Ortszeit der jeweiligen Person (Sommerzeit automatisch).</p>
+
+      <form id="push-form">
+        <fieldset class="tw-set">
+          <legend>Erinnerung an Lena · Europe/Berlin</legend>
+          <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> aktiv</label>
+          <div class="grid">
+            <label><span>Zeit 1</span><input type="time" id="lena_time_1" required></label>
+            <label><span>Zeit 2</span><input type="time" id="lena_time_2" required></label>
+          </div>
+          <p class="tw-device" id="lena-device">Lenas Gerät: …</p>
+        </fieldset>
+
+        <fieldset class="tw-set">
+          <legend>Erinnerung an Philipp · Asia/Bangkok</legend>
+          <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> aktiv</label>
+          <div class="grid">
+            <label><span>Zeit 1</span><input type="time" id="philipp_time_1" required></label>
+            <label><span>Zeit 2</span><input type="time" id="philipp_time_2" required></label>
+          </div>
+          <p class="tw-device" id="philipp-device">Dein Gerät: …</p>
+        </fieldset>
+
+        <fieldset class="tw-set">
+          <legend>Hinweise</legend>
+          <label class="tw-switch"><input type="checkbox" id="notify_philipp_on_lena_submit"> Jede Runde, die Lena abgibt → sofort an Philipp</label>
+          <label class="tw-switch"><input type="checkbox" id="dispute_alert_enabled"> Offene Streitfälle ab Schwelle → täglich an beide</label>
+          <label><span>Schwelle X (offene Streitfälle)</span><input type="number" id="dispute_threshold" min="1" max="999" step="1"></label>
+        </fieldset>
+
+        <button id="save" class="primary" type="submit">Speichern</button>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite" style="margin-top:12px">Wird geladen …</div>
+      <p class="muted" style="margin-top:12px;font-size:12px"><a href="/doppelpruefung.html">← zurück zur Doppelprüfung</a></p>
+    </section>
+  </main>
+  <script src="./push-settings.js" defer></script>
+</body>
+</html>

@@ -1,8 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "truewords-review-sync",
-  "main": "src/worker-boundary-pairs.ts",
+  "main": "src/worker-push.ts",
   "compatibility_date": "2026-08-05",
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
   "workers_dev": true,
   "preview_urls": false,
   "assets": {

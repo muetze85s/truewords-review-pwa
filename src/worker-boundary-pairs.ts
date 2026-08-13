@@ -1317,6 +1317,70 @@ async function boundaryPairsPageGate(request: Request, env: Env): Promise<Respon
   return asset(request, env, '/doppelpruefung.html');
 }
 
+// ---- Geteilt mit der Push-Schicht (worker-push.ts) ------------------------
+
+/** Aktiver Prüfdatenbestand (id/year) — an ACTIVE_DATASET_ID gebunden. */
+export async function activeDatasetRow(env: Env): Promise<DatasetRow | null> {
+  return activeDataset(env);
+}
+
+/** Abgabezeitpunkte (submitted_at) einer Person — für „heute schon abgegeben?". */
+export async function reviewerSubmissionTimes(env: Env, datasetId: string, reviewer: Role): Promise<string[]> {
+  const rows = await env.DB.prepare(`
+    SELECT submitted_at FROM review_round_submissions WHERE dataset_id = ?1 AND reviewer = ?2
+  `).bind(datasetId, reviewer).all<{ submitted_at: string }>();
+  return (rows.results || []).map((row) => row.submitted_at);
+}
+
+/**
+ * Offene Streitfälle über alle abgabereifen Runden — exakt die Zählung aus
+ * getSummary (Auftrag-2-Regel: geklärt nur bei beidseitiger Übereinstimmung).
+ * Genutzt für die Push-Schwellenwert-Warnung, damit UI und Benachrichtigung
+ * dieselbe Zahl sehen.
+ */
+export async function openDisputeTotal(
+  env: Env,
+  dataset: DatasetRow,
+  tolerance: number,
+  doubtMode: DoubtMode,
+): Promise<number> {
+  const submissionRows = await env.DB.prepare(`
+    SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1
+  `).bind(dataset.id).all<{ round: number; reviewer: Role }>();
+  const byRound = new Map<number, Set<Role>>();
+  for (const row of submissionRows.results || []) {
+    if (!byRound.has(row.round)) byRound.set(row.round, new Set());
+    byRound.get(row.round)?.add(row.reviewer);
+  }
+  const readyRounds = [...byRound.entries()]
+    .filter(([, reviewers]) => reviewers.has('Philipp') && reviewers.has('Lena'))
+    .map(([round]) => round);
+
+  let open = 0;
+  for (const round of readyRounds) {
+    const { messages } = await loadRoundWindow(env, dataset, round);
+    const positions = seamPositions(messages);
+    const totalSeams = Math.max(0, messages.length - 1);
+    const [philippMarks, lenaMarks, resolutionRows] = await Promise.all([
+      loadMarks(env, dataset.id, round, 'Philipp'),
+      loadMarks(env, dataset.id, round, 'Lena'),
+      env.DB.prepare(`
+        SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
+        WHERE dataset_id = ?1 AND round = ?2
+      `).bind(dataset.id, round).all<{ seam_message_id: string; decided_by: string; decision: string }>(),
+    ]);
+    const comparison = compareReviewers(
+      toPositionalMarks(philippMarks, positions),
+      toPositionalMarks(lenaMarks, positions),
+      { totalSeams, tolerance, doubtMode },
+    );
+    const resolvedCount = agreeResolutions(resolutionRows.results || []).filter((entry) => entry.resolved).length;
+    const disputeCount = comparison.onlyA.length + comparison.onlyB.length;
+    open += Math.max(0, disputeCount - resolvedCount);
+  }
+  return open;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {

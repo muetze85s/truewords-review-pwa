@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v33';
+const CACHE = 'truewords-review-pwa-server-v34';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
@@ -78,6 +78,43 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       });
+    }),
+  );
+});
+
+// --- Web-Push -------------------------------------------------------------
+// Cache-Logik oben bleibt unverändert; nur push- und notificationclick-Handler.
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'TrueWords', body: 'Neue Benachrichtigung.', url: '/doppelpruefung.html' };
+  try {
+    if (event.data) data = Object.assign(data, event.data.json());
+  } catch (_) {
+    if (event.data) data.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'TrueWords', {
+      body: data.body || '',
+      icon: './icon.svg',
+      badge: './icon.svg',
+      tag: data.tag || 'truewords',
+      data: { url: data.url || '/doppelpruefung.html' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/doppelpruefung.html';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate(target);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
     }),
   );
 });

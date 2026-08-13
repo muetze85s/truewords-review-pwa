@@ -282,3 +282,25 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .dp-vote-badge.einig { background: var(--tw-status-agree-surface, #e6f4ea); border-color: var(--tw-status-agree, #3c9d5b); color: var(--tw-status-agree, #2f7d48); }
 .dp-vote-badge.uneinig { background: var(--tw-status-open-surface); border-color: var(--tw-status-open); }
 .dp-vote-badge.offen { background: var(--tw-surface-raised); color: var(--tw-text-muted); }
+
+/* Web-Push: „erlauben"-Leiste (push-enable.js) und Einstellungsseite */
+.tw-push-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 8px 12px; margin-bottom: 10px;
+  background: var(--tw-surface-raised); border: 1px solid var(--tw-border);
+  border-radius: 10px; font-size: 13px;
+}
+.tw-push-btn {
+  padding: 7px 12px; border: 0; border-radius: 8px; font-weight: 700; cursor: pointer;
+  background: var(--tw-accent, #2f7d48); color: #fff;
+}
+.tw-push-btn:disabled { opacity: .6; cursor: default; }
+.tw-push-link { font-weight: 700; text-decoration: underline; }
+.tw-push-ok { color: var(--tw-status-agree, #2f7d48); font-weight: 700; }
+.tw-push-err { color: var(--tw-status-open, #b5560f); }
+
+.tw-set { border: 1px solid var(--tw-border); border-radius: 10px; padding: 10px 12px; margin: 0 0 14px; }
+.tw-set legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
+.tw-switch { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
+.tw-device { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }

@@ -122,10 +122,17 @@ jobs:
           PHILIPP_REVIEW_TOKEN: ${{ secrets.PHILIPP_REVIEW_TOKEN }}
           LENA_REVIEW_TOKEN: ${{ secrets.LENA_REVIEW_TOKEN }}
           ADMIN_REVIEW_TOKEN: ${{ secrets.ADMIN_REVIEW_TOKEN }}
+          VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
         run: |
           printf '%s' "$PHILIPP_REVIEW_TOKEN" | npx wrangler secret put PHILIPP_REVIEW_TOKEN
           printf '%s' "$LENA_REVIEW_TOKEN" | npx wrangler secret put LENA_REVIEW_TOKEN
           printf '%s' "$ADMIN_REVIEW_TOKEN" | npx wrangler secret put ADMIN_REVIEW_TOKEN
+          # VAPID nur setzen, wenn hinterlegt — sonst bleibt Web-Push schlicht ruhend.
+          if [ -n "$VAPID_PUBLIC" ];  then printf '%s' "$VAPID_PUBLIC"  | npx wrangler secret put VAPID_PUBLIC;  else echo "VAPID_PUBLIC nicht gesetzt — Push ruht."; fi
+          if [ -n "$VAPID_PRIVATE" ]; then printf '%s' "$VAPID_PRIVATE" | npx wrangler secret put VAPID_PRIVATE; else echo "VAPID_PRIVATE nicht gesetzt — Push ruht."; fi
+          if [ -n "$VAPID_SUBJECT" ]; then printf '%s' "$VAPID_SUBJECT" | npx wrangler secret put VAPID_SUBJECT; else echo "VAPID_SUBJECT nicht gesetzt — Push ruht."; fi
 
       - name: Enable Worker on workers.dev
         env:
