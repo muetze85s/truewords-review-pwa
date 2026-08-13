@@ -51,6 +51,21 @@ export declare function toPositionalResolutions(
   positions: Map<string, number>,
 ): BoundaryResolution[];
 
+export type Decision = 'cut' | 'no_cut' | 'open';
+
+export type AgreedResolution = {
+  seam_message_id: string;
+  decision: Decision;
+  resolved: boolean;
+  philipp: Decision | null;
+  lena: Decision | null;
+  notes: { Philipp: string; Lena: string };
+};
+
+export declare function agreeResolutions(
+  rows: Array<{ seam_message_id: string; decided_by: string; decision: string; note?: string | null }>,
+): AgreedResolution[];
+
 export declare function combinedBoundary(
   pairing: SeamPairing,
   resolutions?: BoundaryResolution[],

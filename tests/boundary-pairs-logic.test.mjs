@@ -13,6 +13,7 @@ import {
   agreementGate,
   toSegmentationInput,
   toPositionalResolutions,
+  agreeResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 
@@ -390,6 +391,65 @@ assert.ok(hashSeed('a') !== hashSeed('b'), 'unterschiedliche Eingaben sollten un
     !/date_unixtime:\s*message\.t/u.test(worker),
     'keine Aufrufstelle darf die Nachrichten noch selbst auf id und Zeitstempel zusammenstreichen',
   );
+}
+
+// --- Auftrag 2: Streitfall geklärt nur bei Übereinstimmung beider ----------
+
+{
+  // Nur eine Entscheidung → bleibt offen.
+  const only = agreeResolutions([
+    { seam_message_id: 'm1', decided_by: 'Philipp', decision: 'cut' },
+  ]);
+  assert.equal(only.length, 1);
+  assert.equal(only[0].resolved, false, 'nur eine Entscheidung bleibt offen');
+  assert.equal(only[0].decision, 'open');
+  assert.equal(only[0].philipp, 'cut');
+  assert.equal(only[0].lena, null);
+
+  // Zwei gleiche (cut) → geklärt.
+  const agreeCut = agreeResolutions([
+    { seam_message_id: 'm1', decided_by: 'Philipp', decision: 'cut' },
+    { seam_message_id: 'm1', decided_by: 'Lena', decision: 'cut' },
+  ]);
+  assert.equal(agreeCut[0].resolved, true, 'zwei gleiche werden geklärt');
+  assert.equal(agreeCut[0].decision, 'cut');
+
+  // Zwei gleiche (no_cut) → geklärt.
+  const agreeNoCut = agreeResolutions([
+    { seam_message_id: 'm2', decided_by: 'Philipp', decision: 'no_cut' },
+    { seam_message_id: 'm2', decided_by: 'Lena', decision: 'no_cut' },
+  ]);
+  assert.equal(agreeNoCut[0].resolved, true);
+  assert.equal(agreeNoCut[0].decision, 'no_cut');
+
+  // Zwei verschiedene → bleibt offen.
+  const disagree = agreeResolutions([
+    { seam_message_id: 'm3', decided_by: 'Philipp', decision: 'cut' },
+    { seam_message_id: 'm3', decided_by: 'Lena', decision: 'no_cut' },
+  ]);
+  assert.equal(disagree[0].resolved, false, 'zwei verschiedene bleiben offen');
+  assert.equal(disagree[0].decision, 'open');
+  assert.equal(disagree[0].philipp, 'cut');
+  assert.equal(disagree[0].lena, 'no_cut');
+
+  // Altfall-Verdopplung: eine bestehende Zeile → zwei gleiche Stimmen → geklärt.
+  // (genau das macht Migration 0008 mit den 30 gemeinsam besprochenen Fällen)
+  const legacy = { seam_message_id: 'm4', decision: 'cut', note: 'gemeinsam geklärt', decided_at: 't0' };
+  const migrated = agreeResolutions([
+    { ...legacy, decided_by: 'Philipp' },
+    { ...legacy, decided_by: 'Lena' },
+  ]);
+  assert.equal(migrated[0].resolved, true, 'verdoppelter Altfall gilt als geklärt');
+  assert.equal(migrated[0].decision, 'cut');
+  assert.equal(migrated[0].notes.Philipp, 'gemeinsam geklärt');
+  assert.equal(migrated[0].notes.Lena, 'gemeinsam geklärt');
+
+  // Beide 'open' → nicht geklärt.
+  const bothOpen = agreeResolutions([
+    { seam_message_id: 'm5', decided_by: 'Philipp', decision: 'open' },
+    { seam_message_id: 'm5', decided_by: 'Lena', decision: 'open' },
+  ]);
+  assert.equal(bothOpen[0].resolved, false, 'beide offen bleibt offen');
 }
 
 console.log('boundary-pairs-logic tests: PASS');

@@ -11,6 +11,7 @@ import {
   agreementGate,
   toSegmentationInput,
   toPositionalResolutions,
+  agreeResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
@@ -546,9 +547,10 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     SELECT seam_message_id, decision, note, decided_by, decided_at
     FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
   `).bind(dataset.id, round).all<ResolutionRow>();
-  const resolutionList = resolutionRows.results || [];
-  const resolutions = new Map(resolutionList.map((row) => [row.seam_message_id, row]));
-  const combined = combinedBoundary(comparison, toPositionalResolutions(resolutionList, positions));
+  // Auftrag 2: zwei Prüfer-Stimmen je Naht → eine gemeinsame Entscheidung.
+  const agreed = agreeResolutions(resolutionRows.results || []);
+  const resolutions = new Map(agreed.map((entry) => [entry.seam_message_id, entry]));
+  const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
 
   const automaticResult = segmentConversationWindow(
     toSegmentationInput(messages),
@@ -603,9 +605,13 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
       seams,
       pauseSeconds: Math.max(0, after.t - before.t),
       decision: resolution?.decision || 'open',
-      note: resolution?.note || '',
-      decidedBy: resolution?.decided_by || null,
-      decidedAt: resolution?.decided_at || null,
+      resolved: resolution?.resolved || false,
+      // Auftrag 2, Punkt 4: Einzelstimmen für „wer hat schon entschieden".
+      votes: {
+        philipp: resolution?.philipp ?? null,
+        lena: resolution?.lena ?? null,
+      },
+      note: resolution ? (resolution.notes[reviewer] || '') : '',
     };
   }
 
@@ -677,14 +683,17 @@ async function resolveDispute(request: Request, env: Env, dataset: DatasetRow, r
 
   const note = typeof body.note === 'string' ? body.note.trim().slice(0, 2000) : '';
   const now = new Date().toISOString();
+  // Auftrag 2: jeder Prüfer schreibt seine EIGENE Stimme. decided_by ist Teil
+  // des Primärschlüssels, ON CONFLICT trifft nur die eigene Zeile — die Stimme
+  // der anderen Person bleibt unangetastet. Geklärt gilt erst, wenn beide
+  // dieselbe Nicht-open-Entscheidung gesetzt haben (siehe agreeResolutions).
   await env.DB.prepare(`
     INSERT INTO review_boundary_resolutions
       (dataset_id, round, seam_message_id, decision, note, decided_by, decided_at)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-    ON CONFLICT(dataset_id, round, seam_message_id) DO UPDATE SET
+    ON CONFLICT(dataset_id, round, seam_message_id, decided_by) DO UPDATE SET
       decision = excluded.decision,
       note = excluded.note,
-      decided_by = excluded.decided_by,
       decided_at = excluded.decided_at
   `).bind(dataset.id, round, seamMessageId, decision, note, reviewer, now).run();
 
@@ -744,11 +753,11 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     // Vor der gemeinsamen Fassung geladen: die geklärten Streitfälle gehören
     // hinein, sonst bliebe die Klärungsarbeit ohne Wirkung auf die Kennzahlen.
     const resolutionRows = await env.DB.prepare(`
-      SELECT seam_message_id, decision FROM review_boundary_resolutions
+      SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
       WHERE dataset_id = ?1 AND round = ?2
-    `).bind(dataset.id, round).all<{ seam_message_id: string; decision: 'cut' | 'no_cut' | 'open' }>();
-    const resolutionList = resolutionRows.results || [];
-    const combined = combinedBoundary(comparison, toPositionalResolutions(resolutionList, positions));
+    `).bind(dataset.id, round).all<{ seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>();
+    const agreed = agreeResolutions(resolutionRows.results || []);
+    const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
 
     const automaticResult = segmentConversationWindow(
       toSegmentationInput(messages),
@@ -766,7 +775,8 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalAutoOnlyCombined += vsCombined.onlyB.length;
     totalAutomaticBoundaries += automaticResult.boundaries.length;
 
-    const resolvedCount = resolutionList.filter((row) => row.decision !== 'open').length;
+    // Auftrag 2: geklärt = beide einig (resolved), nicht mehr „eine Entscheidung".
+    const resolvedCount = agreed.filter((entry) => entry.resolved).length;
     const disputeCount = comparison.onlyA.length + comparison.onlyB.length;
     openDisputes += Math.max(0, disputeCount - resolvedCount);
     resolvedDisputes += resolvedCount;
@@ -881,11 +891,11 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
       loadMarks(env, dataset.id, roundRow.round, 'Philipp'),
       loadMarks(env, dataset.id, roundRow.round, 'Lena'),
       env.DB.prepare(`
-        SELECT seam_message_id, decision FROM review_boundary_resolutions
+        SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
         WHERE dataset_id = ?1 AND round = ?2
-      `).bind(dataset.id, roundRow.round).all<{ seam_message_id: string; decision: 'cut' | 'no_cut' | 'open' }>(),
+      `).bind(dataset.id, roundRow.round).all<{ seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>(),
     ]);
-    const resolutionList = resolutionRows.results || [];
+    const resolutionList = agreeResolutions(resolutionRows.results || []);
     const oldComparison = compareReviewers(
       toPositionalMarks(philippMarks, oldPositions),
       toPositionalMarks(lenaMarks, oldPositions),
@@ -1071,8 +1081,8 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
       SELECT round, seam_message_id FROM review_boundary_marks WHERE dataset_id = ?1
     `).bind(baseId).all<{ round: number; seam_message_id: string }>(),
     env.DB.prepare(`
-      SELECT round, seam_message_id, decision FROM review_boundary_resolutions WHERE dataset_id = ?1
-    `).bind(baseId).all<{ round: number; seam_message_id: string; decision: string }>(),
+      SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1
+    `).bind(baseId).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
   const rounds = roundRows.results || [];
 
@@ -1081,12 +1091,21 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
     if (!marksByRound.has(row.round)) marksByRound.set(row.round, []);
     marksByRound.get(row.round)?.push(row.seam_message_id);
   }
-  const resolutionsByRound = new Map<number, string[]>();
-  let resolutionsDecided = 0;
+  // Nach Auftrag 2 gibt es bis zu zwei Zeilen je Naht — für die Anker-Prüfung
+  // interessiert nur die Naht-ID (eindeutig), fürs „geklärt" die Übereinstimmung.
+  const resolutionRowsByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  let rawResolutionRows = 0;
   for (const row of resolutionRows.results || []) {
-    if (!resolutionsByRound.has(row.round)) resolutionsByRound.set(row.round, []);
-    resolutionsByRound.get(row.round)?.push(row.seam_message_id);
-    if (row.decision !== 'open') resolutionsDecided += 1;
+    rawResolutionRows += 1;
+    if (!resolutionRowsByRound.has(row.round)) resolutionRowsByRound.set(row.round, []);
+    resolutionRowsByRound.get(row.round)?.push(row);
+  }
+  const resolutionsByRound = new Map<number, string[]>();
+  let resolutionsResolved = 0;
+  for (const [round, rows] of resolutionRowsByRound) {
+    const agreed = agreeResolutions(rows);
+    resolutionsByRound.set(round, agreed.map((entry) => entry.seam_message_id));
+    resolutionsResolved += agreed.filter((entry) => entry.resolved).length;
   }
 
   const failedRounds: number[] = [];
@@ -1131,7 +1150,12 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
     },
     rounds: { total: rounds.length, loadable: roundsLoadable, failed: failedRounds },
     marks: { total: marksTotal, matched: marksMatched },
-    resolutions: { total: resolutionsTotal, matched: resolutionsMatched, decided: resolutionsDecided },
+    resolutions: {
+      total: resolutionsTotal,
+      matched: resolutionsMatched,
+      resolved: resolutionsResolved,
+      rawRows: rawResolutionRows,
+    },
   };
 }
 

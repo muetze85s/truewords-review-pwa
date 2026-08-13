@@ -176,6 +176,46 @@ export function toPositionalResolutions(rows, positions) {
 }
 
 /**
+ * Beide-müssen-zustimmen: reduziert bis zu zwei Prüfer-Stimmen je Naht auf EINE
+ * gemeinsame Entscheidung. Geklärt (cut/no_cut) gilt nur, wenn BEIDE denselben
+ * Nicht-open-Wert gesetzt haben. Offen bleibt: keiner, nur einer, oder uneinig.
+ *
+ * Erwartet Zeilen mit { seam_message_id, decided_by, decision } (note optional).
+ * Liefert je Naht { seam_message_id, decision, resolved, philipp, lena, notes }.
+ * decision/resolved sind so, dass combinedBoundary/toPositionalResolutions und
+ * die resolved-Zählung unverändert damit rechnen; philipp/lena/notes tragen die
+ * Einzelstimmen für die Anzeige „wer hat schon entschieden".
+ */
+export function agreeResolutions(rows) {
+  const bySeam = new Map();
+  for (const row of rows) {
+    if (row.decided_by !== 'Philipp' && row.decided_by !== 'Lena') continue;
+    if (!bySeam.has(row.seam_message_id)) bySeam.set(row.seam_message_id, {});
+    bySeam.get(row.seam_message_id)[row.decided_by] = {
+      decision: row.decision,
+      note: typeof row.note === 'string' ? row.note : '',
+    };
+  }
+  const out = [];
+  for (const [seam, votes] of bySeam) {
+    const philipp = votes.Philipp || null;
+    const lena = votes.Lena || null;
+    const agreed = philipp && lena && philipp.decision === lena.decision && philipp.decision !== 'open'
+      ? philipp.decision
+      : 'open';
+    out.push({
+      seam_message_id: seam,
+      decision: agreed,
+      resolved: agreed !== 'open',
+      philipp: philipp ? philipp.decision : null,
+      lena: lena ? lena.decision : null,
+      notes: { Philipp: philipp ? philipp.note : '', Lena: lena ? lena.note : '' },
+    });
+  }
+  return out;
+}
+
+/**
  * Gemeinsame Fassung: von beiden gesetzte Grenzen (Paare) gelten als Grenze,
  * nur einseitig gesetzte als unsicher. Maßstab für den Automatik-Vergleich.
  *
