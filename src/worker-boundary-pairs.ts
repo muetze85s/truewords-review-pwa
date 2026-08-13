@@ -831,12 +831,21 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
   const failedRounds: number[] = [];
   let disputesTotal = 0;
   let disputesStillMatched = 0;
-  let callTotal = 0;
-  let callBeforeCut = 0;
-  let mediaTotal = 0;
-  let mediaBeforeCut = 0;
-  let totalSeamsMeasured = 0;
-  let totalCutsMeasured = 0;
+  // Grenzsignal-Zähler je Ereignisart. `all` ist die Vergleichsbasis: dieselbe
+  // Messung über ALLE Nachrichten, damit „häufiger als eine beliebige
+  // Nachricht" für jede Richtung und Toleranz sauber definiert ist.
+  //  - endsSituation: Grenze unmittelbar NACH dem Ereignis (Ereignis schließt ab)
+  //  - startsSituation: Grenze unmittelbar DAVOR (Ereignis eröffnet)
+  // tol0 = exakte Naht, tol1 = ±1-Naht-Fenster.
+  type SignalBucket = {
+    total: number;
+    endsTol0: number; endsTol1: number;
+    startsTol0: number; startsTol1: number;
+  };
+  const emptyBucket = (): SignalBucket => ({
+    total: 0, endsTol0: 0, endsTol1: 0, startsTol0: 0, startsTol1: 0,
+  });
+  const signal = { call: emptyBucket(), media: emptyBucket(), all: emptyBucket() };
   let oldPairs = 0, oldOnlyAuto = 0, oldOnlyHuman = 0, oldBoundaryTotal = 0;
   let newPairs = 0, newOnlyAuto = 0, newOnlyHuman = 0, newBoundaryTotal = 0;
   let roundsCompared = 0;
@@ -880,18 +889,28 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
       }
     }
 
-    totalSeamsMeasured += Math.max(0, oldMessages.length - 1);
-    totalCutsMeasured += oldCombined.cuts.length;
-    const cutSeamSet = new Set(oldCombined.cuts);
+    // Nahtposition p = Lücke zwischen Nachricht[p-1] und Nachricht[p]; eine
+    // kombinierte Grenze bei p heißt: Nachricht[p] beginnt eine neue Situation.
+    // Für Nachricht[index]: Naht danach = index+1, Naht davor = index.
+    const cuts = oldCombined.cuts;
+    const cutWithin = (lo: number, hi: number): boolean => {
+      for (const cut of cuts) if (cut >= lo && cut <= hi) return true;
+      return false;
+    };
     for (let index = 0; index < oldMessages.length; index += 1) {
+      const endSeam = index + 1;
+      const startSeam = index;
+      const bump = (bucket: SignalBucket): void => {
+        bucket.total += 1;
+        if (cutWithin(endSeam, endSeam)) bucket.endsTol0 += 1;
+        if (cutWithin(endSeam - 1, endSeam + 1)) bucket.endsTol1 += 1;
+        if (cutWithin(startSeam, startSeam)) bucket.startsTol0 += 1;
+        if (cutWithin(startSeam - 1, startSeam + 1)) bucket.startsTol1 += 1;
+      };
+      bump(signal.all);
       const kind = oldMessages[index].kind;
-      if (kind === 'anruf') {
-        callTotal += 1;
-        if (cutSeamSet.has(index + 1)) callBeforeCut += 1;
-      } else if (kind === 'medien') {
-        mediaTotal += 1;
-        if (cutSeamSet.has(index + 1)) mediaBeforeCut += 1;
-      }
+      if (kind === 'anruf') bump(signal.call);
+      else if (kind === 'medien') bump(signal.media);
     }
 
     const oldAuto = segmentConversationWindow(toSegmentationInput(oldMessages));
@@ -930,6 +949,19 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
     return denominator ? (2 * pairs) / denominator : null;
   };
 
+  const rate = (matched: number, total: number): number | null => (total ? matched / total : null);
+  const signalReport = (bucket: SignalBucket) => ({
+    total: bucket.total,
+    endsSituation: {
+      tol0: { count: bucket.endsTol0, rate: rate(bucket.endsTol0, bucket.total) },
+      tol1: { count: bucket.endsTol1, rate: rate(bucket.endsTol1, bucket.total) },
+    },
+    startsSituation: {
+      tol0: { count: bucket.startsTol0, rate: rate(bucket.startsTol0, bucket.total) },
+      tol1: { count: bucket.startsTol1, rate: rate(bucket.startsTol1, bucket.total) },
+    },
+  });
+
   return json({
     ok: true,
     tolerance,
@@ -955,9 +987,19 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
       new: { agreementF1: f1(newPairs, newOnlyAuto, newOnlyHuman), boundariesTotal: newBoundaryTotal },
     },
     boundarySignal: {
-      calls: { total: callTotal, beforeHumanCut: callBeforeCut, rate: callTotal ? callBeforeCut / callTotal : null },
-      media: { total: mediaTotal, beforeHumanCut: mediaBeforeCut, rate: mediaTotal ? mediaBeforeCut / mediaTotal : null },
-      baselineCutRate: totalSeamsMeasured ? totalCutsMeasured / totalSeamsMeasured : null,
+      note: 'endsSituation = Grenze direkt nach dem Ereignis, startsSituation = Grenze direkt davor; tol0 exakt, tol1 ±1 Naht. rate mit baseline derselben Richtung/Toleranz vergleichen.',
+      calls: signalReport(signal.call),
+      media: signalReport(signal.media),
+      baseline: {
+        endsSituation: {
+          tol0: rate(signal.all.endsTol0, signal.all.total),
+          tol1: rate(signal.all.endsTol1, signal.all.total),
+        },
+        startsSituation: {
+          tol0: rate(signal.all.startsTol0, signal.all.total),
+          tol1: rate(signal.all.startsTol1, signal.all.total),
+        },
+      },
     },
   });
 }
