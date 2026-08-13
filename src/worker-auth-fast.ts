@@ -160,6 +160,42 @@ async function setupAccounts(request: Request, env: Env): Promise<Response> {
   return json({ ok: true, configured: true });
 }
 
+/**
+ * Setzt genau ein Passwort neu, ohne die Datenzeile der anderen Person
+ * anzufassen — anders als setupAccounts(), das immer beide Konten löscht
+ * und neu anlegt. `role` ist eindeutig indiziert (idx_review_users_role),
+ * WHERE role = ?1 trifft also niemals das andere Konto.
+ */
+async function resetPassword(request: Request, env: Env): Promise<Response> {
+  if (!(await secretEquals(bearerToken(request), env.ADMIN_REVIEW_TOKEN))) {
+    return error('Admin-Zugangscode ist ungültig.', 403);
+  }
+  if (!env.ADMIN_REVIEW_TOKEN) return error('Servergeheimnis fehlt.', 503);
+
+  const body = await request.json<{ role?: unknown; newPassword?: unknown }>();
+  const role: Role | null = body.role === 'Philipp' || body.role === 'Lena' ? body.role : null;
+  if (!role) return error('Rolle muss Philipp oder Lena sein.');
+  if (!validPassword(body.newPassword)) return error('Das neue Passwort muss mindestens 12 Zeichen lang sein.');
+
+  const salt = randomHex(24);
+  const key = await passwordKey(env.ADMIN_REVIEW_TOKEN);
+  const hash = await passwordVerifier(key, body.newPassword, salt);
+  const now = new Date().toISOString();
+
+  const updated = await env.DB.prepare(`
+    UPDATE review_users
+    SET password_salt = ?1, password_hash = ?2, password_iterations = ?3, updated_at = ?4
+    WHERE role = ?5 AND is_active = 1
+  `).bind(salt, hash, FAST_HMAC_MARKER, now, role).run();
+  if (!updated.meta.changes) return error(`Konto für ${role} wurde nicht gefunden.`, 404);
+
+  await env.DB.prepare(`
+    DELETE FROM review_sessions WHERE user_id IN (SELECT id FROM review_users WHERE role = ?1)
+  `).bind(role).run();
+
+  return json({ ok: true, role });
+}
+
 async function login(request: Request, env: Env): Promise<Response> {
   if (!env.ADMIN_REVIEW_TOKEN) return error('Servergeheimnis fehlt.', 503);
   const body = await request.json<{ email?: unknown; password?: unknown }>();
@@ -214,6 +250,9 @@ export default {
     try {
       if (url.pathname === '/api/auth/setup' && request.method === 'POST') {
         return setupAccounts(request, env);
+      }
+      if (url.pathname === '/api/auth/reset-password' && request.method === 'POST') {
+        return resetPassword(request, env);
       }
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
         return login(request, env);
