@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f2ec">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · 4-Jahres-Import</title>
+  <link rel="stylesheet" href="./portal.css?v=10">
+</head>
+<body>
+  <main class="page">
+    <section class="login-shell card">
+      <div class="portal-brand">
+        <span class="truewords-logo" aria-hidden="true"><i></i><b></b></span>
+        <span><strong>TrueWords</strong><small>Gemeinsame Prüfung</small></span>
+      </div>
+      <div class="eyebrow">Getrennter Datensatz</div>
+      <h1>4-Jahres-Import</h1>
+
+      <div class="status" data-state="ok" style="margin:8px 0 16px">
+        Ziel-Datensatz: <strong id="target-id">philena-4y</strong><br>
+        <span style="font-size:12px">Die bestehende Basis <code>philena-2026-pilot-v4-unseen</code> mit den 14&nbsp;Runden und 30&nbsp;Streitfällen wird dabei <strong>nicht</strong> angefasst — es entsteht ein eigener Datensatz daneben.</span>
+      </div>
+
+      <form id="upload-form">
+        <label>
+          <span>Admin-Zugangscode</span>
+          <input id="admin-token" type="password" autocomplete="off" required>
+        </label>
+        <label>
+          <span>Telegram-Export (4 Jahre, .json)</span>
+          <input id="raw-file" type="file" accept="application/json,.json" required>
+        </label>
+        <button id="submit" class="primary" type="submit" disabled>Nach philena-4y hochladen</button>
+      </form>
+
+      <div id="detected" class="status" role="status" aria-live="polite" style="margin-top:12px"></div>
+
+      <progress id="progress" value="0" max="100" hidden style="width:100%;margin-top:12px"></progress>
+      <div id="progress-label" class="muted" style="font-size:12px"></div>
+
+      <div id="status" class="status" role="status" aria-live="polite" style="margin-top:12px">Datei wählen und Zugangscode eingeben.</div>
+      <p class="muted" style="margin-top:12px;font-size:12px">Additiv: schreibt ausschließlich unter <code>philena-4y</code>. Deine Marks/Runden/Streitfälle bleiben unter der Basis-id liegen.</p>
+    </section>
+  </main>
+  <script src="./upload-4y.js"></script>
+</body>
+</html>

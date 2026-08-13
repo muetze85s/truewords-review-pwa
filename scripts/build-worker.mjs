@@ -52,6 +52,8 @@ const files = [
   'account-setup.js',
   'reset-password.html',
   'reset-password.js',
+  'upload-4y.html',
+  'upload-4y.js',
   'upload.html',
   'pilot-v2.js',
   'upload.js',

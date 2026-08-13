@@ -1004,6 +1004,113 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
   });
 }
 
+/**
+ * Nur-Lese-Prüfung, ob sich die Grenzen der Basis (ACTIVE_DATASET_ID) additiv
+ * nach einem zweiten Datensatz übertragen ließen — pro Runde wird geprüft, ob
+ * deren Anker (first_message_id) und alle zugehörigen Mark-/Streitfall-IDs im
+ * gleich großen Fenster der Zielsequenz wieder auftauchen. Geprüft wird gegen
+ * isReviewable, weil genau dieser Filter im Live-Lader (loadRoundWindow) läuft.
+ * Ausschließlich Zählungen, kein Nachrichtentext, kein Name.
+ */
+async function getAnchorCheck(env: Env): Promise<Response> {
+  const baseId = env.ACTIVE_DATASET_ID;
+  const targetId = 'philena-4y';
+
+  const targetRow = await env.DB.prepare('SELECT id FROM review_datasets WHERE id = ?1 LIMIT 1')
+    .bind(targetId).first<{ id: string }>();
+  if (!targetRow) {
+    return json({
+      ok: false,
+      targetDatasetId: targetId,
+      present: false,
+      error: `Datensatz ${targetId} ist noch nicht importiert.`,
+    }, 404);
+  }
+
+  const [targetStrict, targetBroad] = await Promise.all([
+    filteredSequenceUsing(env, targetId, isReviewable),
+    filteredSequenceUsing(env, targetId, isReviewableBroad),
+  ]);
+  const idToIndex = new Map<string, number>();
+  targetStrict.forEach((message, index) => {
+    const id = rawId(message);
+    if (id && !idToIndex.has(id)) idToIndex.set(id, index);
+  });
+
+  const [roundRows, markRows, resolutionRows] = await Promise.all([
+    env.DB.prepare(`
+      SELECT dataset_id, round, first_message_id, message_count FROM review_rounds
+      WHERE dataset_id = ?1 ORDER BY round
+    `).bind(baseId).all<RoundRow>(),
+    env.DB.prepare(`
+      SELECT round, seam_message_id FROM review_boundary_marks WHERE dataset_id = ?1
+    `).bind(baseId).all<{ round: number; seam_message_id: string }>(),
+    env.DB.prepare(`
+      SELECT round, seam_message_id, decision FROM review_boundary_resolutions WHERE dataset_id = ?1
+    `).bind(baseId).all<{ round: number; seam_message_id: string; decision: string }>(),
+  ]);
+  const rounds = roundRows.results || [];
+
+  const marksByRound = new Map<number, string[]>();
+  for (const row of markRows.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, []);
+    marksByRound.get(row.round)?.push(row.seam_message_id);
+  }
+  const resolutionsByRound = new Map<number, string[]>();
+  let resolutionsDecided = 0;
+  for (const row of resolutionRows.results || []) {
+    if (!resolutionsByRound.has(row.round)) resolutionsByRound.set(row.round, []);
+    resolutionsByRound.get(row.round)?.push(row.seam_message_id);
+    if (row.decision !== 'open') resolutionsDecided += 1;
+  }
+
+  const failedRounds: number[] = [];
+  let roundsLoadable = 0;
+  let marksTotal = 0, marksMatched = 0;
+  let resolutionsTotal = 0, resolutionsMatched = 0;
+
+  for (const roundRow of rounds) {
+    const startIndex = idToIndex.get(roundRow.first_message_id);
+    let windowIds: Set<string> | null = null;
+    if (startIndex === undefined) {
+      failedRounds.push(roundRow.round);
+    } else {
+      roundsLoadable += 1;
+      windowIds = new Set(
+        targetStrict.slice(startIndex, startIndex + roundRow.message_count).map(rawId),
+      );
+    }
+    for (const seam of marksByRound.get(roundRow.round) || []) {
+      marksTotal += 1;
+      if (windowIds?.has(seam)) marksMatched += 1;
+    }
+    for (const seam of resolutionsByRound.get(roundRow.round) || []) {
+      resolutionsTotal += 1;
+      if (windowIds?.has(seam)) resolutionsMatched += 1;
+    }
+  }
+
+  const allGreen = failedRounds.length === 0
+    && marksMatched === marksTotal
+    && resolutionsMatched === resolutionsTotal;
+
+  return json({
+    ok: true,
+    baseDatasetId: baseId,
+    targetDatasetId: targetId,
+    present: true,
+    checkedFilter: 'isReviewable (Live-Lader)',
+    messageCounts: {
+      targetIsReviewable: targetStrict.length,
+      targetIsReviewableBroad: targetBroad.length,
+    },
+    rounds: { total: rounds.length, loadable: roundsLoadable, failed: failedRounds },
+    marks: { total: marksTotal, matched: marksMatched },
+    resolutions: { total: resolutionsTotal, matched: resolutionsMatched, decided: resolutionsDecided },
+    allGreen,
+  });
+}
+
 // ----------------------------------------------------------- Verdrahtung
 
 async function boundaryPairsApi(request: Request, env: Env): Promise<Response | null> {
@@ -1012,6 +1119,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     !url.pathname.startsWith('/api/rounds/')
     && url.pathname !== '/api/agreement/summary'
     && url.pathname !== '/api/admin/filter-check'
+    && url.pathname !== '/api/admin/anchor-check'
   ) return null;
 
   const user = await sessionUser(request, env);
@@ -1027,6 +1135,10 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
 
     if (url.pathname === '/api/admin/filter-check' && request.method === 'GET') {
       return await getFilterMigrationCheck(env, dataset, url);
+    }
+
+    if (url.pathname === '/api/admin/anchor-check' && request.method === 'GET') {
+      return await getAnchorCheck(env);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
