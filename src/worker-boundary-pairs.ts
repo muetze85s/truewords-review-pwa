@@ -130,6 +130,21 @@ async function sha256Hex(value: string): Promise<string> {
     .join('');
 }
 
+/** Admin-Gate über den ADMIN_REVIEW_TOKEN (Bearer) — konstantzeitiger Vergleich. */
+async function adminAuthorized(request: Request, env: Env): Promise<boolean> {
+  const provided = (request.headers.get('authorization') || '')
+    .match(/^Bearer\s+(.+)$/iu)?.[1]?.trim() || '';
+  const expected = env.ADMIN_REVIEW_TOKEN;
+  if (!provided || !expected) return false;
+  const [left, right] = await Promise.all([sha256Hex(provided), sha256Hex(expected)]);
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
 async function sessionUser(request: Request, env: Env): Promise<SessionUser | null> {
   const token = cookieValue(request, SESSION_COOKIE);
   if (!/^[a-f0-9]{64}$/iu.test(token)) return null;
@@ -1012,19 +1027,29 @@ async function getFilterMigrationCheck(env: Env, dataset: DatasetRow, url: URL):
  * isReviewable, weil genau dieser Filter im Live-Lader (loadRoundWindow) läuft.
  * Ausschließlich Zählungen, kein Nachrichtentext, kein Name.
  */
-async function getAnchorCheck(env: Env): Promise<Response> {
+type AnchorReport = {
+  present: boolean;
+  allGreen: boolean;
+  baseDatasetId: string;
+  targetDatasetId: string;
+  error?: string;
+  [key: string]: unknown;
+};
+
+async function computeAnchorReport(env: Env): Promise<AnchorReport> {
   const baseId = env.ACTIVE_DATASET_ID;
   const targetId = 'philena-4y';
 
   const targetRow = await env.DB.prepare('SELECT id FROM review_datasets WHERE id = ?1 LIMIT 1')
     .bind(targetId).first<{ id: string }>();
   if (!targetRow) {
-    return json({
-      ok: false,
-      targetDatasetId: targetId,
+    return {
       present: false,
+      allGreen: false,
+      baseDatasetId: baseId,
+      targetDatasetId: targetId,
       error: `Datensatz ${targetId} ist noch nicht importiert.`,
-    }, 404);
+    };
   }
 
   const [targetStrict, targetBroad] = await Promise.all([
@@ -1094,11 +1119,11 @@ async function getAnchorCheck(env: Env): Promise<Response> {
     && marksMatched === marksTotal
     && resolutionsMatched === resolutionsTotal;
 
-  return json({
-    ok: true,
+  return {
+    present: true,
+    allGreen,
     baseDatasetId: baseId,
     targetDatasetId: targetId,
-    present: true,
     checkedFilter: 'isReviewable (Live-Lader)',
     messageCounts: {
       targetIsReviewable: targetStrict.length,
@@ -1107,7 +1132,102 @@ async function getAnchorCheck(env: Env): Promise<Response> {
     rounds: { total: rounds.length, loadable: roundsLoadable, failed: failedRounds },
     marks: { total: marksTotal, matched: marksMatched },
     resolutions: { total: resolutionsTotal, matched: resolutionsMatched, decided: resolutionsDecided },
-    allGreen,
+  };
+}
+
+async function getAnchorCheck(env: Env): Promise<Response> {
+  const report = await computeAnchorReport(env);
+  return json({ ok: report.present, ...report }, report.present ? 200 : 404);
+}
+
+/**
+ * Additive Übertragung der Grenzdaten der Basis nach philena-4y. Reine
+ * INSERT … SELECT: die Basis-id steht ausschließlich in der FROM-Zeile
+ * (nur Lesen), geschrieben wird ausnahmslos mit 'philena-4y'. Vier Sicherungen:
+ * Admin-Token, Bestätigungsflag, Frische-Prüfung (Ziel muss leer sein) und
+ * eine interne Re-Verifikation des Anchor-Checks (schreibt nur bei allGreen).
+ */
+async function transferBoundaries(request: Request, env: Env): Promise<Response> {
+  if (!(await adminAuthorized(request, env))) {
+    return error('Nur der Admin darf die Übertragung auslösen.', 403);
+  }
+
+  let body: { confirm?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return error('Ungültige Anfrage.');
+  }
+  if (body.confirm !== 'philena-4y') {
+    return error("Bestätigung fehlt: confirm muss 'philena-4y' sein.", 400);
+  }
+
+  const baseId = env.ACTIVE_DATASET_ID;
+  const targetId = 'philena-4y';
+
+  const report = await computeAnchorReport(env);
+  if (!report.present) return error('philena-4y ist nicht importiert.', 404);
+  if (!report.allGreen) {
+    return json({ ok: false, error: 'Anchor-Check nicht grün — keine Übertragung.', anchor: report }, 409);
+  }
+
+  const before = await env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM review_rounds WHERE dataset_id = ?1) AS rounds,
+      (SELECT COUNT(*) FROM review_boundary_marks WHERE dataset_id = ?1) AS marks,
+      (SELECT COUNT(*) FROM review_round_submissions WHERE dataset_id = ?1) AS submissions,
+      (SELECT COUNT(*) FROM review_boundary_resolutions WHERE dataset_id = ?1) AS resolutions
+  `).bind(targetId).first<{ rounds: number; marks: number; submissions: number; resolutions: number }>();
+  const existingTotal = Number(before?.rounds || 0) + Number(before?.marks || 0)
+    + Number(before?.submissions || 0) + Number(before?.resolutions || 0);
+  if (existingTotal > 0) {
+    return json({
+      ok: false,
+      error: 'philena-4y enthält bereits Grenzdaten — Übertragung abgebrochen.',
+      existing: before,
+    }, 409);
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(`
+      INSERT INTO review_rounds (dataset_id, round, first_message_id, message_count, created_at)
+      SELECT ?1, round, first_message_id, message_count, created_at
+      FROM review_rounds WHERE dataset_id = ?2
+    `).bind(targetId, baseId),
+    env.DB.prepare(`
+      INSERT INTO review_boundary_marks (dataset_id, round, reviewer, seam_message_id, mark, created_at, updated_at)
+      SELECT ?1, round, reviewer, seam_message_id, mark, created_at, updated_at
+      FROM review_boundary_marks WHERE dataset_id = ?2
+    `).bind(targetId, baseId),
+    env.DB.prepare(`
+      INSERT INTO review_round_submissions (dataset_id, round, reviewer, submitted_at)
+      SELECT ?1, round, reviewer, submitted_at
+      FROM review_round_submissions WHERE dataset_id = ?2
+    `).bind(targetId, baseId),
+    env.DB.prepare(`
+      INSERT INTO review_boundary_resolutions (dataset_id, round, seam_message_id, decision, note, decided_by, decided_at)
+      SELECT ?1, round, seam_message_id, decision, note, decided_by, decided_at
+      FROM review_boundary_resolutions WHERE dataset_id = ?2
+    `).bind(targetId, baseId),
+  ]);
+
+  const after = await env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM review_rounds WHERE dataset_id = ?1) AS rounds,
+      (SELECT COUNT(*) FROM review_boundary_marks WHERE dataset_id = ?1) AS marks,
+      (SELECT COUNT(*) FROM review_round_submissions WHERE dataset_id = ?1) AS submissions,
+      (SELECT COUNT(*) FROM review_boundary_resolutions WHERE dataset_id = ?1) AS resolutions
+  `).bind(targetId).first<{ rounds: number; marks: number; submissions: number; resolutions: number }>();
+
+  return json({
+    ok: true,
+    targetDatasetId: targetId,
+    inserted: {
+      rounds: Number(after?.rounds || 0),
+      marks: Number(after?.marks || 0),
+      submissions: Number(after?.submissions || 0),
+      resolutions: Number(after?.resolutions || 0),
+    },
   });
 }
 
@@ -1120,7 +1240,13 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/agreement/summary'
     && url.pathname !== '/api/admin/filter-check'
     && url.pathname !== '/api/admin/anchor-check'
+    && url.pathname !== '/api/admin/transfer-boundaries'
   ) return null;
+
+  // Admin-getokte Übertragung: eigener Gate, nicht die Prüfer-Session.
+  if (url.pathname === '/api/admin/transfer-boundaries' && request.method === 'POST') {
+    return await transferBoundaries(request, env);
+  }
 
   const user = await sessionUser(request, env);
   if (!user) return error('Nicht angemeldet.', 401);
