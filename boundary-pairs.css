@@ -252,3 +252,33 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 @media (max-width: 620px) {
   .dp-agreement-number { font-size: 40px; }
 }
+
+/* Punkt 5: Zitat-Vorschau einer Antwort (reply_to_message_id) */
+.dp-reply-quote {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 2px 0 4px;
+  padding: 3px 8px;
+  border-left: 3px solid var(--tw-border);
+  background: var(--tw-surface-raised);
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  color: var(--tw-text-muted);
+}
+.dp-reply-quote.outside { font-style: italic; }
+.dp-reply-from { font-weight: 700; white-space: nowrap; }
+.dp-reply-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Punkt 4: sichtbarer Stimmenstand je Streitfall */
+.dp-vote-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--tw-border);
+}
+.dp-vote-badge.einig { background: var(--tw-status-agree-surface, #e6f4ea); border-color: var(--tw-status-agree, #3c9d5b); color: var(--tw-status-agree, #2f7d48); }
+.dp-vote-badge.uneinig { background: var(--tw-status-open-surface); border-color: var(--tw-status-open); }
+.dp-vote-badge.offen { background: var(--tw-surface-raised); color: var(--tw-text-muted); }

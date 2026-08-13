@@ -37,6 +37,27 @@
     return { text: message.text, placeholder: false };
   }
 
+  // Punkt 5: Nachschlagewerk id → Nachricht der aktuell gezeigten Menge, damit
+  // eine Antwort die zitierte Nachricht anzeigen kann. Wird vor jeder
+  // Darstellung (Runde wie Streitfall) aus der jeweiligen Nachrichtenliste
+  // gefüllt. Liegt die zitierte Nachricht außerhalb (nicht im Fenster), gibt es
+  // keinen Treffer → wir zeigen „Antwort auf frühere Nachricht" (Weg A).
+  let messageIndex = new Map();
+  function setMessageIndex(messages) {
+    messageIndex = new Map((messages || []).map((message) => [String(message.id), message]));
+  }
+
+  function replyPreviewHtml(message) {
+    if (message.replyToId === undefined || message.replyToId === null) return '';
+    const quoted = messageIndex.get(String(message.replyToId));
+    if (!quoted) {
+      return '<div class="dp-reply-quote outside">↩ Antwort auf frühere Nachricht</div>';
+    }
+    const { text } = messageText(quoted);
+    const start = text.length > 90 ? `${text.slice(0, 90)}…` : text;
+    return `<div class="dp-reply-quote"><span class="dp-reply-from">↩ ${escapeHtml(quoted.from)}</span> <span class="dp-reply-text">${escapeHtml(start)}</span></div>`;
+  }
+
   function messageHtml(message, dim) {
     const { text, placeholder } = messageText(message);
     const time = message.t ? new Date(message.t * 1000).toLocaleString('de-DE', {
@@ -44,6 +65,7 @@
     }) : '';
     return `<div class="dp-message${dim ? ' dim' : ''}" data-speaker="${escapeHtml(message.from)}">
       <div class="dp-message-meta"><b>${escapeHtml(message.from)}</b> · ${escapeHtml(time)}</div>
+      ${replyPreviewHtml(message)}
       <div class="dp-message-text${placeholder ? ' placeholder' : ''}">${escapeHtml(text)}</div>
     </div>`;
   }
@@ -72,6 +94,7 @@
 
   function renderStream(readOnly) {
     const container = readOnly ? $('dp-waiting-stream') : $('dp-stream');
+    setMessageIndex(state.messages);
     const parts = [];
     state.messages.forEach((message, index) => {
       if (index > 0) {
@@ -224,6 +247,34 @@
     return '';
   }
 
+  /** Einzelstimme als Text — null/ohne Entscheidung und explizit 'open' zeigen beide „noch offen". */
+  function voteLabel(vote) {
+    if (vote === 'cut') return 'Grenze';
+    if (vote === 'no_cut') return 'keine Grenze';
+    return 'noch offen';
+  }
+
+  /**
+   * Punkt 4: sichtbarer Stand je Streitfall aus Sicht der eingeloggten Person.
+   * - beide einig  → „Beide einig: … — geklärt"
+   * - beide entschieden, uneinig → „Du: … · <andere>: … — uneinig, nochmal reden"
+   * - sonst → „Du: … · <andere>: noch offen"
+   */
+  function votesMetaHtml(dispute) {
+    const votes = dispute.votes || { philipp: null, lena: null };
+    const other = state.reviewer === 'Philipp' ? 'Lena' : 'Philipp';
+    const mine = state.reviewer === 'Philipp' ? votes.philipp : votes.lena;
+    const theirs = state.reviewer === 'Philipp' ? votes.lena : votes.philipp;
+
+    if (dispute.resolved) {
+      return `<span class="dp-vote-badge einig">Beide einig: ${escapeHtml(decisionLabel(dispute.decision))} — geklärt</span>`;
+    }
+    const bothDecided = mine && mine !== 'open' && theirs && theirs !== 'open';
+    const suffix = bothDecided ? ' — uneinig, nochmal reden' : '';
+    const cls = bothDecided ? 'uneinig' : 'offen';
+    return `<span class="dp-vote-badge ${cls}">Du: ${escapeHtml(voteLabel(mine))} · ${escapeHtml(other)}: ${escapeHtml(voteLabel(theirs))}${suffix}</span>`;
+  }
+
   /** Antippen entscheidet den Streitfall — offen → Grenze → keine Grenze → offen. */
   function nextDecision(current) {
     if (current === 'cut') return 'no_cut';
@@ -280,18 +331,18 @@
       · gegen gemeinsame Fassung: <b>${data.automatic.vsCombined.agreementF1.toFixed(2)}</b>
       <br><span class="dp-hint">Automatik hat roh ${data.automaticRaw.boundaryCount} von ${data.automaticRaw.totalSeams} Zwischenräumen als Grenze erkannt.</span>`;
 
+    // Punkt 5: Zitat-Nachschlag für die Streitfall-Ansicht aus dem vollen
+    // Rundenfenster (data.messages), damit Antworten die zitierte Nachricht zeigen.
+    setMessageIndex(data.messages);
+
     const disputesContainer = $('dp-disputes');
     if (!data.disputes.length) {
       disputesContainer.innerHTML = '<p class="dp-hint">Keine Streitfälle in dieser Runde — ihr wart euch bei jeder Grenze einig.</p>';
       return;
     }
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
-      <div class="dp-dispute${dispute.decision && dispute.decision !== 'open' ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
-        <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b>${
-          dispute.decision && dispute.decision !== 'open'
-            ? ` · <span class="dp-dispute-badge">geklärt: ${escapeHtml(decisionLabel(dispute.decision))}${dispute.decidedBy ? ` von ${escapeHtml(dispute.decidedBy)}` : ''}</span>`
-            : ''
-        }</div>
+      <div class="dp-dispute${dispute.resolved ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
+        <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b> · ${votesMetaHtml(dispute)}</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
           <button type="button" data-decision="cut" class="${dispute.decision === 'cut' ? 'active' : ''}">ist eine Grenze</button>
@@ -318,24 +369,15 @@
           body: JSON.stringify({ seamMessageId, decision, note: noteInput.value }),
         }).then(({ status, payload }) => {
           if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
+          // Eigene Stimme sofort sichtbar markieren.
           card.querySelectorAll('[data-decision]').forEach((button) => {
             button.classList.toggle('active', button.dataset.decision === decision);
           });
-          // Karte und Naht sofort mitziehen; die endgültige Sortierung nach
-          // offen/geklärt kommt beim nächsten Laden vom Server.
-          const resolved = decision !== 'open';
-          card.classList.toggle('geklaert', resolved);
-          card.classList.toggle('decision-cut', decision === 'cut');
-          card.classList.toggle('decision-no_cut', decision === 'no_cut');
-          if (centralSeam) {
-            centralSeam.dataset.decisionState = decision;
-            const label = centralSeam.querySelector('.label');
-            if (label) {
-              const base = label.textContent.split(' · ').slice(0, -1).join(' · ') || label.textContent;
-              label.textContent = `${base} · ${resolved ? decisionLabel(decision) : 'antippen zum Entscheiden'}`;
-            }
-          }
-          statusNode.textContent = 'Gespeichert';
+          statusNode.textContent = 'Gespeichert — lädt gemeinsamen Stand …';
+          // Auftrag 2: „geklärt" hängt jetzt an BEIDEN Stimmen. Den wahren
+          // gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig, Sortierung)
+          // liefert nur der Server — deshalb neu laden statt lokal raten.
+          loadAgreement();
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
         });
