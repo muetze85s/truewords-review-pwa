@@ -1,0 +1,78 @@
+/*
+ * Persistente, funktionale Navigation für die Review-PWA.
+ * Bewusst schlicht (kein neues Design) und mobil-tauglich (iPad): der Balken
+ * bleibt oben kleben, die Linkleiste scrollt bei Bedarf horizontal statt
+ * umzubrechen. Reihenfolge/Sichtbarkeit steuert nav.js (Rolle: Philipp/Lena).
+ */
+.tw-nav {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #1f2933;
+  color: #f6f2ec;
+  font: 500 14px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tw-nav-brand {
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.tw-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tw-nav-links::-webkit-scrollbar { display: none; }
+.tw-nav-links a {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #d7dee5;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tw-nav-links a:hover { background: rgba(255, 255, 255, 0.10); color: #fff; }
+.tw-nav-links a.active { background: #f6f2ec; color: #1f2933; font-weight: 700; }
+.tw-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.tw-nav-ds {
+  background: rgba(255, 255, 255, 0.10);
+  color: #f6f2ec;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  max-width: 44vw;
+}
+.tw-nav-ds option { color: #1f2933; }
+.tw-nav-logout {
+  background: transparent;
+  color: #d7dee5;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tw-nav-logout:hover { background: rgba(255, 255, 255, 0.10); color: #fff; }
+
+@media (max-width: 640px) {
+  .tw-nav { gap: 8px; padding: 8px; }
+  .tw-nav-brand { display: none; }
+}

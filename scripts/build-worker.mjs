@@ -65,6 +65,8 @@ const files = [
   'doppelpruefung.html',
   'boundary-pairs.css',
   'boundary-pairs.js',
+  'nav.css',
+  'nav.js',
   'segmentation-v4.mjs',
   'portal.css',
   'manifest.webmanifest',

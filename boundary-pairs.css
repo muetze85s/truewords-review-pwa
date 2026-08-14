@@ -304,3 +304,18 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .tw-set legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
 .tw-switch { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
 .tw-device { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+
+/* Aufgabe 4: Live-F1-Leiste im Kopf der Doppelprüfung */
+.dp-live-f1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 6px 16px 8px;
+  font-size: 13px;
+  background: var(--tw-surface-raised);
+  border-top: 1px solid var(--tw-border);
+}
+.dp-live-item { white-space: nowrap; }
+.dp-live-item b { font-variant-numeric: tabular-nums; }
+.dp-live-item.muted { color: var(--tw-text-muted); }

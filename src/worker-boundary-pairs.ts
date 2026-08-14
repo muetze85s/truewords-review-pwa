@@ -310,7 +310,28 @@ async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage
   return filteredSequenceUsing(env, datasetId, isReviewable);
 }
 
-async function activeDataset(env: Env): Promise<DatasetRow | null> {
+// Datensätze, in denen keine NEUEN Runden mehr angelegt werden dürfen.
+// Bestehende Runden bleiben voll lesbar; nur das Nachziehen weiterer Runden
+// ist gesperrt. Einfrieren = „Grenzarbeit hier abgeschlossen".
+const FROZEN_DATASETS = new Set<string>(['philena-2026-pilot-v4-unseen']);
+
+// Erlaubte Datensatz-IDs für den ?dataset=-Schalter (defensiv, gegen SQL-/Pfad-Spielereien).
+const DATASET_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{2,79}$/iu;
+
+/**
+ * Liefert den aktiven Datensatz. Ohne `requestedId` gilt env.ACTIVE_DATASET_ID.
+ * Mit gültiger, existierender `requestedId` wird auf diesen Datensatz umgeschaltet –
+ * so lässt sich per ?dataset= zwischen philena-2026 und philena-4y wechseln,
+ * ganz ohne Redeploy. Ungültige/unbekannte IDs fallen still auf den Standard zurück.
+ */
+async function activeDataset(env: Env, requestedId?: string | null): Promise<DatasetRow | null> {
+  const wanted = requestedId && DATASET_ID_PATTERN.test(requestedId) ? requestedId : null;
+  if (wanted && wanted !== env.ACTIVE_DATASET_ID) {
+    const row = await env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1')
+      .bind(wanted)
+      .first<DatasetRow>();
+    if (row) return row;
+  }
   return env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1')
     .bind(env.ACTIVE_DATASET_ID)
     .first<DatasetRow>();
@@ -338,6 +359,9 @@ async function loadRoundWindow(
   `).bind(dataset.id, round).first<RoundRow>();
 
   if (!row) {
+    if (FROZEN_DATASETS.has(dataset.id)) {
+      throw new Error(`Datensatz „${dataset.id}" ist eingefroren – es werden keine neuen Runden mehr angelegt.`);
+    }
     const otherRounds = await env.DB.prepare(`
       SELECT first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1
     `).bind(dataset.id).all<{ first_message_id: string; message_count: number }>();
@@ -1275,7 +1299,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   const user = await sessionUser(request, env);
   if (!user) return error('Nicht angemeldet.', 401);
 
-  const dataset = await activeDataset(env);
+  const dataset = await activeDataset(env, url.searchParams.get('dataset'));
   if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
 
   try {

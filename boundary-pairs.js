@@ -2,6 +2,17 @@
   'use strict';
 
   const API = '/api/';
+  // ?dataset=-Schalter: welcher Prüfdatenbestand geladen wird. Merkt sich die
+  // Wahl im Gerät (localStorage) und hängt sie an jeden API-Aufruf an, sodass
+  // zwischen philena-2026 und philena-4y ohne Redeploy gewechselt werden kann.
+  // Leer = Server-Standard (env.ACTIVE_DATASET_ID).
+  function readDataset() {
+    try {
+      const fromUrl = new URLSearchParams(location.search).get('dataset');
+      if (fromUrl) { localStorage.setItem('tw_dataset', fromUrl); return fromUrl; }
+      return localStorage.getItem('tw_dataset') || '';
+    } catch (_) { return ''; }
+  }
   const state = {
     round: 1,
     reviewer: '',
@@ -12,6 +23,7 @@
     tolerance: 1,
     doubtMode: 'skip',
     tab: 'round',
+    dataset: readDataset(),
   };
 
   function $(id) { return document.getElementById(id); }
@@ -22,8 +34,13 @@
     ));
   }
 
+  function withDataset(path) {
+    if (!state.dataset) return path;
+    return path + (path.includes('?') ? '&' : '?') + 'dataset=' + encodeURIComponent(state.dataset);
+  }
+
   function fetchJson(path, options) {
-    return fetch(API + path, Object.assign({ credentials: 'same-origin' }, options || {}))
+    return fetch(API + withDataset(path), Object.assign({ credentials: 'same-origin' }, options || {}))
       .then((response) => {
         if (response.status === 401) { location.href = '/login.html'; throw new Error('abgemeldet'); }
         return response.json().then((payload) => ({ status: response.status, payload }));
@@ -135,6 +152,7 @@
     }).then(({ status, payload }) => {
       if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
       $('dp-save-status').textContent = 'Gespeichert';
+      refreshLiveF1();
     }).catch((caught) => {
       $('dp-save-status').textContent = `Nicht gespeichert — ${caught.message}`;
       $('dp-save-status').classList.add('error');
@@ -161,6 +179,7 @@
     fetchJson(`rounds/${state.round}/submit`, { method: 'POST' })
       .then(({ status, payload }) => {
         if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
+        refreshLiveF1();
         return loadRound().then(() => scrollToTop());
       })
       .catch((caught) => {
@@ -378,6 +397,7 @@
           // gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig, Sortierung)
           // liefert nur der Server — deshalb neu laden statt lokal raten.
           loadAgreement();
+          refreshLiveF1();
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
         });
@@ -396,6 +416,31 @@
         resolve(active ? active.dataset.decision : 'open');
       });
     });
+  }
+
+  // ----------------------------------------------------- Live-F1 (Aufgabe 4)
+  // Nach jeder Annotation (Markierung gespeichert, Runde abgegeben, Streitfall
+  // entschieden) wird der aktuelle F1 neu vom Server geholt und oben angezeigt.
+  // Rein informativ — es wird KEIN Parameter automatisch geändert; Toleranz &
+  // Umgang mit „unsicher" entscheidet weiterhin die Person von Hand.
+  let liveF1Timer = null;
+  function refreshLiveF1() {
+    const node = $('dp-live-f1');
+    if (!node) return;
+    // Kurzes Entprellen: mehrere schnelle Klicks lösen nur einen Abruf aus.
+    clearTimeout(liveF1Timer);
+    liveF1Timer = setTimeout(() => {
+      fetchJson(`agreement/summary${agreementQuery()}`).then(({ status, payload }) => {
+        if (status !== 200 || !payload.ok) return;
+        const human = payload.agreementF1 === null ? '–' : payload.agreementF1.toFixed(2);
+        const auto = payload.automaticVsCombined && payload.automaticVsCombined.agreementF1 !== null
+          ? payload.automaticVsCombined.agreementF1.toFixed(2) : '–';
+        node.innerHTML = `<span class="dp-live-item">Übereinstimmung <b>${escapeHtml(human)}</b></span>`
+          + `<span class="dp-live-item">Automatik vs. gemeinsam <b>${escapeHtml(auto)}</b></span>`
+          + `<span class="dp-live-item muted">n=${payload.roundsReady ?? 0} Runden · tol=${state.tolerance}</span>`;
+        node.dataset.state = 'ready';
+      }).catch(() => { /* stiller Fehlschlag — der Balken bleibt einfach stehen */ });
+    }, 250);
   }
 
   // ------------------------------------------------------------- Übersicht
@@ -489,9 +534,11 @@
     $('dp-doubt-mode').addEventListener('change', (event) => {
       state.doubtMode = event.target.value;
       loadAgreement();
+      refreshLiveF1();
     });
 
     loadRound();
+    refreshLiveF1();
   }
 
   boot();

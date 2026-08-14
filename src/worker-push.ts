@@ -284,7 +284,8 @@ async function maybeNotifyOnSubmit(env: Env, round: number, request: Request, re
   try {
     const reviewer = await sessionReviewer(request, env);
     if (reviewer !== 'Lena') return;
-    const data = await response.clone().json().catch(() => null) as { ok?: boolean; submitted?: boolean } | null;
+    // `response` ist bereits ein dedizierter Klon (siehe fetch) — direkt lesen.
+    const data = await response.json().catch(() => null) as { ok?: boolean; submitted?: boolean } | null;
     if (!data?.ok || !data?.submitted) return;
     const settings = await loadSettings(env);
     if (!settings.notify_philipp_on_lena_submit) return;
@@ -392,7 +393,10 @@ export default {
       const submitMatch = url.pathname.match(/^\/api\/rounds\/(\d+)\/submit$/u);
       if (submitMatch && request.method === 'POST') {
         const response = await baseWorker.fetch(request, env);
-        ctx.waitUntil(maybeNotifyOnSubmit(env, Number(submitMatch[1]), request, response));
+        // Klon SYNCHRON ziehen, bevor der Originalkörper an den Client streamt —
+        // sonst ist er im waitUntil schon verbraucht/gesperrt.
+        const forNotify = response.clone();
+        ctx.waitUntil(maybeNotifyOnSubmit(env, Number(submitMatch[1]), request, forNotify));
         return response;
       }
 
