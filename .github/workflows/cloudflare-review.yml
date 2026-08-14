@@ -55,7 +55,8 @@ jobs:
           test -f dist/truewords-ui-theme.js
           test -f dist/truewords-ui-theme.css
           test -f migrations/0001_review_sync.sql
-          grep -q 'philena-2026-pilot-v4-unseen' wrangler.jsonc
+          # Aktiver Datensatz nach dem Umstieg: philena-4y (philena-2026 eingefroren).
+          grep -q 'philena-4y' wrangler.jsonc
           main_entry=$(sed -n 's/.*"main"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' wrangler.jsonc)
           test -n "$main_entry"
           test -f "$main_entry"
