@@ -20,6 +20,7 @@
     .toolbar,.bulk,.pager{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}.search{display:flex;gap:8px;flex:1}.search input{width:100%;min-width:180px;background:#0c1524;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px}.field{display:grid;gap:5px;color:var(--muted);font-size:12px}.field input,.field select,.field textarea,select.assign{background:#0c1524;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}.messages{padding:8px;max-height:calc(100vh - 290px);overflow:auto}.day{text-align:center;color:var(--muted);margin:10px 0;font-size:12px}.message{display:grid;grid-template-columns:1fr 190px;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px;margin:8px 0;background:#0d1727}.message.excluded{opacity:.48}.message.range{outline:2px solid #397bd0}.message.selected{border-color:var(--accent)}.meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:12px}.meta strong{color:var(--text)}.text{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:7px;line-height:1.42}.reply{margin-top:6px;padding:7px 9px;border-left:3px solid #55739f;background:#132038;color:#b9c8de;font-size:13px}.flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}.flag{font-size:11px;background:#1b2941;color:#b9c8de;border-radius:999px;padding:3px 7px}.assignbox{display:grid;gap:7px;align-content:start}.assignbox select{width:100%}.assignbuttons{display:flex;gap:6px}.boundary{padding:5px 10px;margin:5px 0;border-radius:8px;font-size:12px}.boundary.start{background:#123b32;color:#8ff1d2}.boundary.end{background:#3f2730;color:#ffb8c0}
     .editorgrid{display:grid;gap:10px}.feature{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}.muted{color:var(--muted)}.notice{padding:10px;border:1px solid #685b35;background:#2a2517;border-radius:10px;color:#f4d887;line-height:1.4}.privacy{font-size:12px;color:var(--muted);line-height:1.45;margin-top:12px}.empty{max-width:760px;margin:8vh auto;padding:20px}.empty .panelbody{display:grid;gap:16px;padding:24px}.chips{display:flex;flex-wrap:wrap;gap:7px}.chips span{background:#1b2941;padding:6px 9px;border-radius:999px;color:#c4d3e9;font-size:12px}
     @media(max-width:1150px){.workspace{grid-template-columns:240px 1fr}.editor{grid-column:1/-1}.editor .panelbody{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.metrics{grid-template-columns:repeat(3,1fr)}}
+    .scope select{background:#0c1524;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:5px 7px}.tw-scope-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.tw-frozen{color:var(--warn);font-weight:600}.tw-f1badge{background:#12233b;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--good);white-space:nowrap}.tw-f1badge strong{color:var(--good);font-size:15px}.tw-f1badge small{color:var(--muted);margin-left:5px}
     @media(max-width:760px){header{position:static;align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}.metrics{grid-template-columns:repeat(2,1fr)}.workspace{grid-template-columns:1fr;padding:0 8px 20px}.list,.messages{max-height:none}.message{grid-template-columns:1fr}.editor{grid-column:auto}.editor .panelbody{display:block}.scope{font-size:12px}.panel{border-radius:10px}}
   </style>
 </head>
@@ -28,8 +29,19 @@
 <script>
 (() => {
   'use strict';
-  const YEAR=2026,PAGE_SIZE=120,STORE='truewords-review-2026/';
-  const state={dataset:null,messages:[],situations:[],assign:new Map(),events:[],page:0,query:'',showExcluded:false,start:null,end:null,selected:null,reviewer:localStorage.getItem(STORE+'reviewer')||'Philipp'};
+  const PAGE_SIZE=120,STORE='truewords-review-2026/';
+  // Datensatz-Profile. Zusätzlich (additiv) zum eingefrorenen Basisjahr 2026:
+  // philena-4y erweitert das Zeitfenster, ohne die 2026-Daten anzutasten. Der
+  // Wechsel erfolgt über ?dataset= ohne Redeploy. Markierungen jedes Profils
+  // liegen in einem eigenen Speicher-Namespace, damit sich die Runden nicht mischen.
+  const DATASETS={
+    'philena-2026':{id:'philena-2026',label:'philena-2026',years:[2026],frozen:true,note:'eingefroren · keine neuen Runden'},
+    'philena-4y':{id:'philena-4y',label:'philena-4y',years:[2023,2024,2025,2026],frozen:false,note:'aktiver Datensatz'}
+  };
+  const DEFAULT_DATASET='philena-4y';
+  function resolveDatasetId(){const u=new URLSearchParams(location.search).get('dataset');const s=u||localStorage.getItem(STORE+'dataset')||DEFAULT_DATASET;return DATASETS[s]?s:DEFAULT_DATASET}
+  let DATASET=DATASETS[resolveDatasetId()];
+  const state={raw:null,dataset:null,messages:[],situations:[],assign:new Map(),events:[],page:0,query:'',showExcluded:false,start:null,end:null,selected:null,reviewer:localStorage.getItem(STORE+'reviewer')||'Philipp'};
   const app=document.getElementById('app');
   if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 
@@ -43,7 +55,7 @@
         <label class="file">Markierungen laden<input id="ann" type="file" accept=".json,application/json"></label>
         <button id="exp">Markierungen exportieren</button><button id="train">Algorithmus-Daten</button>
       </div></header>
-      <div class="scope"><span><strong>${esc(state.dataset.label)}</strong> · nur lokal im Browser</span><span>Prüfer: <select id="reviewer"><option ${state.reviewer==='Philipp'?'selected':''}>Philipp</option><option ${state.reviewer==='Lena'?'selected':''}>Lena</option></select> · Zeitraum 01.01.–31.12.2026</span></div>
+      <div class="scope"><span><strong>${esc(state.dataset.label)}</strong> · nur lokal im Browser${DATASET.frozen?' · <span class="tw-frozen">🔒 '+esc(DATASET.note)+'</span>':''}</span><span class="tw-scope-right">Datensatz: <select id="dataset">${Object.values(DATASETS).map(d=>`<option value="${d.id}" ${DATASET.id===d.id?'selected':''}>${esc(d.label)}</option>`).join('')}</select> · Prüfer: <select id="reviewer"><option ${state.reviewer==='Philipp'?'selected':''}>Philipp</option><option ${state.reviewer==='Lena'?'selected':''}>Lena</option></select> · <span class="tw-f1badge" title="F1 der automatischen Segmentierung gegen deine Markierungen">${f1Badge()}</span></span></div>
       <section class="metrics">${metric('Sichtbare Nachrichten',stats.included,'nach lokaler Bereinigung')}${metric('Situationen',state.situations.length,'fortlaufend nummeriert')}${metric('Zugeordnet',stats.assigned,stats.coverage+' % Abdeckung')}${metric('Offen',stats.unassigned,'noch nicht zugeordnet')}${metric('Training',stats.training,'Regelableitung')}${metric('Kontrolle',stats.control,'zur späteren Prüfung')}</section>
       <main class="workspace">
         <aside class="panel"><div class="panelhead"><div><div class="eyebrow">Referenz</div><h2>Situationen</h2></div><span class="count">${state.situations.length}</span></div><div class="panelbody"><button id="emptySit" class="primary" style="width:100%">Neue leere Situation</button></div><div class="list">${state.situations.length?state.situations.map(sitItem).join(''):'<div class="panelbody muted">Noch keine Situation angelegt.</div>'}</div></aside>
@@ -69,25 +81,30 @@
   function bindGlobal(){document.getElementById('chat')?.addEventListener('change',loadChat);document.getElementById('ann')?.addEventListener('change',loadAnnotations);document.getElementById('exp')?.addEventListener('click',exportAnnotations);document.getElementById('train')?.addEventListener('click',exportTraining)}
   function bindWork(){
     document.getElementById('reviewer').onchange=e=>{state.reviewer=e.target.value;localStorage.setItem(STORE+'reviewer',state.reviewer)};
+    const ds=document.getElementById('dataset');if(ds)ds.onchange=e=>applyDataset(e.target.value);
     document.getElementById('emptySit').onclick=()=>createSituation([]);document.getElementById('search').oninput=e=>{state.query=e.target.value;state.page=0;render()};document.getElementById('clear').onclick=()=>{state.query='';render()};document.getElementById('excluded').onchange=e=>{state.showExcluded=e.target.checked;state.page=0;render()};document.getElementById('prev').onclick=()=>{state.page--;render()};document.getElementById('next').onclick=()=>{state.page++;render()};document.getElementById('reset').onclick=()=>{state.start=state.end=null;render()};document.getElementById('make').onclick=createRange;
     document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{state.selected=Number(b.dataset.sit);render()});document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{state.start=b.dataset.start;if(state.end&&idx(state.end)<idx(state.start))state.end=null;render()});document.querySelectorAll('[data-end]').forEach(b=>b.onclick=()=>{state.end=b.dataset.end;if(state.start&&idx(state.end)<idx(state.start))state.start=null;render()});document.querySelectorAll('[data-assign]').forEach(s=>s.onchange=()=>assignOne(s.dataset.assign,s.value?Number(s.value):null));
     if(getSelected()){document.getElementById('saveMeta').onclick=saveMeta;document.getElementById('jump').onclick=jump;document.getElementById('selectRange').onclick=()=>{const s=getSelected();state.start=firstId(s.id);state.end=lastId(s.id);render()};document.getElementById('clearSit').onclick=clearSit;document.getElementById('deleteSit').onclick=deleteSit}
   }
 
-  async function loadChat(e){const f=e.target.files?.[0];if(!f)return;try{const raw=await f.text(),hash=await sha(raw),p=JSON.parse(raw);if(!Array.isArray(p.messages))throw Error('Keine Telegram-Nachrichtenliste gefunden.');const normalized=p.messages.map(normalize).filter(m=>yearOf(m.date)===YEAR).sort((a,b)=>a.unix-b.unix);state.dataset={hash,label:(p.name||f.name)+' · 2026',total:p.messages.length,selected:normalized.length};state.messages=normalized;state.situations=[];state.assign=new Map();state.events=[];state.page=0;state.query='';state.start=state.end=state.selected=null;restore();render()}catch(err){alert('Chat konnte nicht geladen werden: '+(err.message||err))}finally{e.target.value=''}}
+  async function loadChat(e){const f=e.target.files?.[0];if(!f)return;try{const raw=await f.text(),hash=await sha(raw),p=JSON.parse(raw);if(!Array.isArray(p.messages))throw Error('Keine Telegram-Nachrichtenliste gefunden.');state.raw={name:p.name||f.name,hash,messages:p.messages};processDataset();render()}catch(err){alert('Chat konnte nicht geladen werden: '+(err.message||err))}finally{e.target.value=''}}
+  function processDataset(){if(!state.raw)return;const{name,hash,messages}=state.raw;const normalized=messages.map(normalize).filter(m=>DATASET.years.includes(yearOf(m.date))).sort((a,b)=>a.unix-b.unix);state.dataset={hash,label:(name||'Chat')+' · '+DATASET.label,total:messages.length,selected:normalized.length};state.messages=normalized;state.situations=[];state.assign=new Map();state.events=[];state.page=0;state.query='';state.start=state.end=state.selected=null;restore()}
+  function applyDataset(id){if(!DATASETS[id]||id===DATASET.id)return;DATASET=DATASETS[id];localStorage.setItem(STORE+'dataset',id);const url=new URL(location.href);url.searchParams.set('dataset',id);history.replaceState(null,'',url);if(state.raw){processDataset();render()}else render()}
   function normalize(m,i){const text=flat(m?.text);const media=m?.media_type||(m?.photo?'photo':m?.file?'file':null);const forwarded=!!(m?.forwarded_from||m?.forwarded_from_id);let included=true,filter='keep';if(!m||m.type!=='message'){included=false;filter='service_event'}else if(forwarded){included=false;filter='forwarded'}else if(media==='sticker'){included=false;filter='sticker'}else if(!text.trim()&&media){included=false;filter='media_without_text'}else if(!text.trim()){included=false;filter='empty'}else if(/^\s*(?:https?:\/\/|www\.)\S+\s*$/iu.test(text)){included=false;filter='pure_link'}const date=String(m?.date||m?.date_unixtime||'');return{id:String(m?.id??'m-'+i),sourceId:String(m?.id??'m-'+i),date,unix:timeNum(m?.date_unixtime||m?.date,i),speaker:String(m?.from||m?.actor||'System'),speakerId:String(m?.from_id||m?.actor_id||'unknown'),text,reply:m?.reply_to_message_id==null?null:String(m.reply_to_message_id),media:media?String(media):null,included,filter}}
   function flat(v){if(typeof v==='string')return v;if(!Array.isArray(v))return'';return v.map(x=>typeof x==='string'?x:(x&&typeof x.text==='string'?x.text:'')).join('')}
-  function createRange(){if(!canRange())return;const ids=state.messages.slice(idx(state.start),idx(state.end)+1).filter(m=>m.included).map(m=>m.id);createSituation(ids);state.start=state.end=null}
-  function createSituation(ids){const id=state.situations.reduce((m,s)=>Math.max(m,s.id),0)+1;state.situations.push({id,label:'',note:'',kind:id%5===0?'control':'training',status:'open',createdAt:new Date().toISOString()});ids.forEach(x=>state.assign.set(x,id));state.selected=id;event('Situation '+id+' erstellt');persist();render()}
-  function assignOne(id,sid){if(sid==null)state.assign.delete(id);else state.assign.set(id,sid);event('Nachricht '+id+' neu zugeordnet');persist();render()}
-  function saveMeta(){const s=getSelected();s.label=document.getElementById('label').value.trim();s.kind=document.getElementById('kind').value;s.status=document.getElementById('status').value;s.note=document.getElementById('note').value.trim();event('Situation '+s.id+' gespeichert');persist();render()}
-  function clearSit(){const s=getSelected();if(!confirm('Alle Zuweisungen aus Situation '+s.id+' entfernen?'))return;for(const[k,v]of state.assign)if(v===s.id)state.assign.delete(k);event('Situation '+s.id+' geleert');persist();render()}
-  function deleteSit(){const s=getSelected();if(!confirm('Situation '+s.id+' löschen?'))return;for(const[k,v]of state.assign)if(v===s.id)state.assign.delete(k);state.situations=state.situations.filter(x=>x.id!==s.id);event('Situation '+s.id+' gelöscht');state.selected=null;persist();render()}
+  function frozenBlock(){if(DATASET.frozen){alert('Datensatz „'+DATASET.label+'“ ist eingefroren. Für neue Runden auf philena-4y wechseln.');return true}return false}
+  function createRange(){if(frozenBlock()||!canRange())return;const ids=state.messages.slice(idx(state.start),idx(state.end)+1).filter(m=>m.included).map(m=>m.id);createSituation(ids);state.start=state.end=null}
+  function createSituation(ids){if(frozenBlock())return;const id=state.situations.reduce((m,s)=>Math.max(m,s.id),0)+1;state.situations.push({id,label:'',note:'',kind:id%5===0?'control':'training',status:'open',createdAt:new Date().toISOString()});ids.forEach(x=>state.assign.set(x,id));state.selected=id;event('Situation '+id+' erstellt');persist();render()}
+  function assignOne(id,sid){if(frozenBlock())return;if(sid==null)state.assign.delete(id);else state.assign.set(id,sid);event('Nachricht '+id+' neu zugeordnet');persist();render()}
+  function saveMeta(){if(frozenBlock())return;const s=getSelected();s.label=document.getElementById('label').value.trim();s.kind=document.getElementById('kind').value;s.status=document.getElementById('status').value;s.note=document.getElementById('note').value.trim();event('Situation '+s.id+' gespeichert');persist();render()}
+  function clearSit(){if(frozenBlock())return;const s=getSelected();if(!confirm('Alle Zuweisungen aus Situation '+s.id+' entfernen?'))return;for(const[k,v]of state.assign)if(v===s.id)state.assign.delete(k);event('Situation '+s.id+' geleert');persist();render()}
+  function deleteSit(){if(frozenBlock())return;const s=getSelected();if(!confirm('Situation '+s.id+' löschen?'))return;for(const[k,v]of state.assign)if(v===s.id)state.assign.delete(k);state.situations=state.situations.filter(x=>x.id!==s.id);event('Situation '+s.id+' gelöscht');state.selected=null;persist();render()}
   function jump(){const s=getSelected(),id=firstId(s.id);if(!id)return;state.query='';state.showExcluded=false;const v=getVisible(),n=v.findIndex(m=>m.id===id);state.page=Math.max(0,Math.floor(n/PAGE_SIZE));render();setTimeout(()=>document.querySelector('[data-assign="'+CSS.escape(id)+'"]')?.closest('.message')?.scrollIntoView({behavior:'smooth',block:'center'}),50)}
 
-  function persist(){if(!state.dataset)return;localStorage.setItem(STORE+state.dataset.hash,JSON.stringify(payload(false)))}
-  function restore(){try{const x=localStorage.getItem(STORE+state.dataset.hash);if(x)apply(JSON.parse(x),false)}catch{}}
-  async function loadAnnotations(e){const f=e.target.files?.[0];if(!f||!state.dataset)return;try{apply(JSON.parse(await f.text()),true);persist();render()}catch(err){alert('Markierungen konnten nicht geladen werden: '+(err.message||err))}finally{e.target.value=''}}
+  function storeKey(){return STORE+DATASET.id+'/'+state.dataset.hash}
+  function persist(){if(!state.dataset)return;localStorage.setItem(storeKey(),JSON.stringify(payload(false)))}
+  function restore(){try{const x=localStorage.getItem(storeKey());if(x)apply(JSON.parse(x),false)}catch{}}
+  async function loadAnnotations(e){const f=e.target.files?.[0];if(!f||!state.dataset)return;if(frozenBlock()){e.target.value='';return}try{apply(JSON.parse(await f.text()),true);persist();render()}catch(err){alert('Markierungen konnten nicht geladen werden: '+(err.message||err))}finally{e.target.value=''}}
   function apply(p,match){if(p?.schemaVersion!=='truewords-manual-segmentation/v2')throw Error('Unbekanntes Markierungsformat.');if(match&&p.datasetHash!==state.dataset.hash)throw Error('Die Markierungen gehören zu einer anderen Chatdatei.');const ids=new Set(state.messages.map(m=>m.id));state.situations=(p.situations||[]).map(s=>({id:Number(s.id),label:String(s.label||''),note:String(s.note||''),kind:['training','control','unclear'].includes(s.kind)?s.kind:'training',status:['open','confirmed','corrected','unclear'].includes(s.status)?s.status:'open',createdAt:String(s.createdAt||new Date().toISOString())})).filter(s=>s.id>0);const valid=new Set(state.situations.map(s=>s.id));state.assign=new Map(Object.entries(p.assignments||{}).filter(([id,s])=>ids.has(id)&&valid.has(Number(s))).map(([id,s])=>[id,Number(s)]));state.events=Array.isArray(p.events)?p.events.slice(-2000):[]}
   function payload(exported){return{schemaVersion:'truewords-manual-segmentation/v2',datasetHash:state.dataset.hash,datasetLabel:state.dataset.label,reviewer:state.reviewer,exportedAt:exported?new Date().toISOString():undefined,situations:state.situations,assignments:Object.fromEntries(state.assign),events:state.events}}
   function exportAnnotations(){download(safe(state.dataset.label)+'-'+state.reviewer+'-markierungen.json',payload(true))}
@@ -103,6 +120,68 @@
   function yearOf(v){const d=new Date(/^\d{9,13}$/.test(String(v))?(String(v).length>10?Number(v):Number(v)*1000):v);return Number.isNaN(d.getTime())?null:d.getUTCFullYear()}function timeNum(v,f){if(/^\d{9,13}$/.test(String(v)))return String(v).length>10?Math.floor(Number(v)/1000):Number(v);const n=new Date(v).getTime();return Number.isFinite(n)?Math.floor(n/1000):f}
   async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
   function fmt(v){const d=new Date(v);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short'}).format(d)}function dayKey(v){const d=new Date(v);return Number.isNaN(d.getTime())?String(v):d.toISOString().slice(0,10)}function dayLabel(v){const d=new Date(v);return Number.isNaN(d.getTime())?String(v):new Intl.DateTimeFormat('de-DE',{dateStyle:'full'}).format(d)}function kindLabel(v){return v==='control'?'Kontrollfall':v==='unclear'?'Nicht eindeutig':'Training'}function statusLabel(v){return v==='confirmed'?'bestätigt':v==='corrected'?'korrigiert':v==='unclear'?'unklar':'offen'}function short(s,n){return s.length>n?s.slice(0,n-1)+'…':s}function safe(s){return String(s).replace(/[^a-z0-9._-]+/giu,'-').replace(/^-+|-+$/g,'')||'truewords'}function esc(s){return String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}function attr(s){return esc(s).replaceAll('`','&#096;')}
+
+  /* ===== Live-F1: automatische Segmentierung (V5, aus dem Prüfwerkzeug übernommen)
+     vs. die manuellen Situationsgrenzen. Rein anzeigend – es werden keine
+     Schwellenwerte automatisch verändert. Neuberechnung bei jedem render(),
+     also nach jeder Annotation. ===== */
+  const SEG={gateMinutes:60,boundaryMinutes:180,closingLengthMax:21};
+  const SEG_PATTERNS={
+    greeting:/^\s*(?:guten morgen|guten tag|guten abend|gute[nr]? morgen|moin|hallo|hey|hi|servus)\b/iu,
+    explicitClosure:/(?:^|\b)(?:gute nacht|schlaf gut|bis später|bis morgen|melde mich später|meld mich später|muss los|muss jetzt los|ich geh schlafen|ich gehe schlafen|ich muss schlafen|wir sprechen später|reden wir später)(?:\b|[.!…😘❤️])/iu,
+    independentOpener:/^\s*(?:übrigens|kurze frage|andere frage|anderes thema|apropos|ich wollte dir noch|ich wollte mal|sag mal|weißt du|weisst du|bist du|hast du|kannst du|könntest du|wie geht(?:'s| es)|wo bist du|wann bist du|was machst du)\b/iu,
+    continuation:/^\s*(?:ja|jep|jo|nein|nee|genau|stimmt|okay|ok|ach so|achso|klar|richtig|deshalb|darum|weil|also deswegen|hab ich|habe ich|bin ich|war ich|ist er|ist sie|sind wir)\b/iu,
+    acknowledgement:/^\s*(?:ok(?:ay)?|ja|nein|danke|alles klar|gut zu wissen|ah ok|ach so|achso|❤️|👍|😘|☺️|😊)\b/iu,
+    question:/\?/u,
+    questionWords:/\b(?:bist|hast|willst|magst|kannst|könntest|wann|wo|wie|was|warum|soll|möchtest|kommst|gehts|geht es)\b.*[?.!…]?\s*$/iu
+  };
+  const SEG_THRESH={openQuestionLookback:8,newContactCallGapMinutes:60,explicitClosureGapMinutes:15,greetingGapMinutes:240,independentOpenerGapMinutes:240,mediaContactGapMinutes:720};
+  function segKind(m){const t=(m.media||'').toLocaleLowerCase('de-DE');if(t.includes('call')||t.includes('anruf'))return 'call';return m.media?'media':'text'}
+  function segHasQuestion(t){return SEG_PATTERNS.question.test(t)||SEG_PATTERNS.questionWords.test(t)}
+  function segRecentOpenQuestion(ms,start,cur){const who=ms[cur].speakerId;let seen=0;for(let i=cur-1;i>=start&&seen<SEG_THRESH.openQuestionLookback;i--){const t=(ms[i].text||'').trim();if(!t)continue;seen++;if(ms[i].speakerId===who)continue;return segHasQuestion(t)}return false}
+  function segBoundary(ms,start,cur){
+    if(cur<=start)return false;
+    const c=ms[cur],p=ms[cur-1];
+    const gap=(c.unix-p.unix)/60;if(!Number.isFinite(gap)||gap<0)return false;
+    const cText=(c.text||'').trim(),pText=(p.text||'').trim(),cKind=segKind(c),pKind=segKind(p);
+    // Fortsetzungs-Regeln (halten zusammen)
+    if(c.reply){for(let i=start;i<cur;i++){if(String(ms[i].sourceId)===String(c.reply))return false}}
+    if(segRecentOpenQuestion(ms,start,cur))return false;
+    if(SEG_PATTERNS.acknowledgement.test(cText)||SEG_PATTERNS.continuation.test(cText))return false;
+    // Neuanfang-Regeln (trennen)
+    if(gap>=SEG_THRESH.newContactCallGapMinutes&&cKind==='call'&&pKind!=='call')return true;
+    if(gap>=SEG_THRESH.explicitClosureGapMinutes&&SEG_PATTERNS.explicitClosure.test(pText))return true;
+    if(gap>=SEG_THRESH.greetingGapMinutes&&SEG_PATTERNS.greeting.test(cText))return true;
+    if(gap>=SEG_THRESH.independentOpenerGapMinutes&&SEG_PATTERNS.independentOpener.test(cText))return true;
+    if(gap>=SEG_THRESH.mediaContactGapMinutes&&cKind==='media')return true;
+    // V5-Pausenlogik
+    if(gap<SEG.gateMinutes)return false;
+    if(gap<SEG.boundaryMinutes)return false;
+    if(SEG_PATTERNS.greeting.test(cText)||cKind==='call')return true;
+    if(SEG_PATTERNS.question.test(pText))return false;
+    if(pText.length>=SEG.closingLengthMax)return false;
+    return true;
+  }
+  function computeF1(){
+    const ms=state.messages.filter(m=>m.included);
+    if(ms.length<2)return null;
+    // Menschliche Grenzen: eine Grenze beginnt dort, wo eine (neue) Situation startet.
+    const gold=new Set();let firstA=-1,lastA=-1;
+    for(let i=0;i<ms.length;i++){const s=state.assign.get(ms[i].id);if(s!=null){if(firstA<0)firstA=i;lastA=i}}
+    if(firstA<0||lastA<=firstA)return null;
+    for(let i=1;i<ms.length;i++){const a=state.assign.get(ms[i].id),b=state.assign.get(ms[i-1].id);if(a!=null&&a!==b)gold.add(i)}
+    // Vorhersage
+    const pred=new Set();let start=0;for(let i=1;i<ms.length;i++){if(segBoundary(ms,start,i)){pred.add(i);start=i}}
+    // Bewertung nur im annotierten Bereich (firstA, lastA]
+    const inRangeB=i=>i>firstA&&i<=lastA;
+    let tp=0,fp=0,fn=0;
+    for(const i of pred){if(!inRangeB(i))continue;if(gold.has(i))tp++;else fp++}
+    for(const i of gold){if(!inRangeB(i))continue;if(!pred.has(i))fn++}
+    const prec=tp+fp===0?1:tp/(tp+fp),rec=tp+fn===0?1:tp/(tp+fn),f1=prec+rec===0?0:2*prec*rec/(prec+rec);
+    return{tp,fp,fn,prec,rec,f1,goldCount:[...gold].filter(inRangeB).length,predCount:[...pred].filter(inRangeB).length}
+  }
+  function f1Badge(){const r=computeF1();if(!r)return 'F1 <strong>–</strong> <small>markieren, um zu messen</small>';return `F1 <strong>${r.f1.toFixed(2)}</strong> <small>P${r.prec.toFixed(2)} · R${r.rec.toFixed(2)} · Grenzen ${r.goldCount}/${r.predCount}</small>`}
+
   render();
 })();
 </script>
