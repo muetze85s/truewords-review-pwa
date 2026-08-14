@@ -21,31 +21,61 @@
     <h1 style="margin:4px 0 6px">Benachrichtigungen</h1>
     <p class="dp-status">Zentrale Steuerung. Zeiten gelten in der Ortszeit der jeweiligen Person (Sommerzeit automatisch).</p>
 
+    <!-- Dieses Gerät: Push-Erlaubnis direkt hier anfordern (ein Klick). -->
+    <div class="tw-set" id="device-box">
+      <legend style="font-weight:700;font-size:13px">Dieses Gerät</legend>
+      <p class="tw-device" id="this-device">Wird geprüft …</p>
+      <button type="button" id="allow-here" class="primary" hidden>Benachrichtigungen auf diesem Gerät erlauben</button>
+      <p class="tw-device" id="allow-error" style="color:var(--tw-status-unclear)"></p>
+    </div>
+
     <form id="push-form">
       <fieldset class="tw-set">
         <legend>Erinnerung an Lena · Europe/Berlin</legend>
-        <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> aktiv</label>
+        <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> Erinnerungen für Lena aktiv</label>
         <div class="grid">
-          <label><span>Zeit 1</span><input type="time" id="lena_time_1" required></label>
-          <label><span>Zeit 2</span><input type="time" id="lena_time_2" required></label>
+          <label class="tw-timefield">
+            <span><input type="checkbox" class="tw-time-on" data-for="lena_time_1"> Zeit 1</span>
+            <input type="time" id="lena_time_1">
+          </label>
+          <label class="tw-timefield">
+            <span><input type="checkbox" class="tw-time-on" data-for="lena_time_2"> Zeit 2</span>
+            <input type="time" id="lena_time_2">
+          </label>
         </div>
         <p class="tw-device" id="lena-device">Lenas Gerät: …</p>
       </fieldset>
 
       <fieldset class="tw-set">
         <legend>Erinnerung an Philipp · Asia/Bangkok</legend>
-        <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> aktiv</label>
+        <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> Erinnerungen für Philipp aktiv</label>
         <div class="grid">
-          <label><span>Zeit 1</span><input type="time" id="philipp_time_1" required></label>
-          <label><span>Zeit 2</span><input type="time" id="philipp_time_2" required></label>
+          <label class="tw-timefield">
+            <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_1"> Zeit 1</span>
+            <input type="time" id="philipp_time_1">
+          </label>
+          <label class="tw-timefield">
+            <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_2"> Zeit 2</span>
+            <input type="time" id="philipp_time_2">
+          </label>
         </div>
         <p class="tw-device" id="philipp-device">Dein Gerät: …</p>
       </fieldset>
 
+      <div class="tw-note">
+        <strong>Wie die Erinnerungen funktionieren</strong>
+        <ul>
+          <li><b>Zeit 1</b> und <b>Zeit 2</b> sind zwei tägliche Anstoßzeiten. Jede ist einzeln an-/abschaltbar (Häkchen davor) — nur angehakte Zeiten lösen etwas aus.</li>
+          <li>Eine Benachrichtigung erscheint <b>nur, wenn an diesem Tag noch keine Runde abgegeben wurde</b> — es ist keine feste tägliche Erinnerung. Wer seine Runde schon abgegeben hat, wird an dem Tag nicht mehr erinnert.</li>
+          <li>Erreicht die Ortszeit eine angehakte Zeit und die Runde ist noch offen, geht die Erinnerung <b>einmalig</b> raus (pro Zeit und Tag genau einmal).</li>
+          <li>Der Haupt­schalter „Erinnerungen … aktiv" schaltet alle Zeiten dieser Person auf einmal ab.</li>
+        </ul>
+      </div>
+
       <fieldset class="tw-set">
-        <legend>Hinweise</legend>
+        <legend>Weitere Hinweise</legend>
         <label class="tw-switch"><input type="checkbox" id="notify_philipp_on_lena_submit"> Wenn Lena eine Runde abgibt → sofort an Philipp</label>
-        <label class="tw-switch"><input type="checkbox" id="dispute_alert_enabled"> Offene Streitfälle ab Schwelle → täglich an beide</label>
+        <label class="tw-switch"><input type="checkbox" id="dispute_alert_enabled"> Offene Streitfälle ab Schwelle → einmal täglich an beide</label>
         <label><span>Schwelle X (offene Streitfälle)</span><input type="number" id="dispute_threshold" min="1" max="999" step="1"></label>
       </fieldset>
 

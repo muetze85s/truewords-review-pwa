@@ -176,8 +176,11 @@ async function saveSettings(request: Request, env: Env): Promise<Response> {
     return error('Ungültige Anfrage.');
   }
   const bool = (value: unknown): number => (value ? 1 : 0);
+  // Leerer String = diese Zeit ist abgeschaltet (der Cron überspringt sie, weil
+  // parseHhmm(null) → null). Nur bei nicht-leerem Unfug wird der alte Wert gehalten.
   const time = (value: unknown, fallback: string): string => {
-    const text = String(value ?? '');
+    const text = String(value ?? '').trim();
+    if (text === '') return '';
     return parseHhmm(text) === null ? fallback : text;
   };
   const current = await loadSettings(env);

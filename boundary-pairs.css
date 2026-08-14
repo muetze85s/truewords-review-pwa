@@ -340,3 +340,23 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
   background: var(--tw-philipp); color: #fff;
 }
 .dp-wrap .primary:disabled { opacity: .6; cursor: default; }
+
+/* Aufgabe 8: Benachrichtigungsseite — Zeit-Felder mit eigenem An/Aus,
+   Erklärkasten, abgeschaltete Zeit sichtbar ausgegraut. */
+.tw-timefield > span { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tw-text); margin-bottom: 4px; }
+.tw-timefield input[type="checkbox"] { width: auto; margin: 0; }
+.tw-set input[type="time"].is-off { opacity: .45; }
+.tw-note {
+  border: 1px solid var(--tw-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  background: var(--tw-surface-secondary, var(--tw-surface-raised));
+  font-size: 13px;
+}
+.tw-note strong { display: block; margin-bottom: 6px; }
+.tw-note ul { margin: 0; padding-left: 18px; }
+.tw-note li { margin: 4px 0; color: var(--tw-text-muted); }
+.tw-note li b { color: var(--tw-text); }
+#device-box { display: block; }
+#allow-here { margin-top: 8px; }

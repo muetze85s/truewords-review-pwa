@@ -39,8 +39,8 @@
       const result = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       if (!response.ok) throw new Error(result.error || 'Anmeldung fehlgeschlagen.');
 
-      setStatus('Angemeldet. Erklärung wird geöffnet …', 'ok');
-      location.replace('/situation-info.html');
+      setStatus('Angemeldet. Dashboard wird geöffnet …', 'ok');
+      location.replace('/dashboard.html');
     } catch (caught) {
       setStatus(caught?.message || 'Anmeldung fehlgeschlagen.', 'error');
     } finally {
