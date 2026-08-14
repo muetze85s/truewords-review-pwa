@@ -115,3 +115,32 @@ Ereignisstrom gespeichert wird.
 - Web-Push vollständig implementiert (VAPID/`aes128gcm`, Erinnerungen je Zeitzone, Sofort-Hinweis bei Lenas Abgabe, Streitfall-Alarm ab Schwelle, 15-Min-Cron). Live-Zustellung erfordert gesetzte `VAPID_*`-Secrets **und** Geräte-Opt-in je Browser.
 - Live-F1 in der Doppelprüfung: nach jeder Annotation Neuberechnung und Anzeige, **ohne** automatische Parameteränderung.
 - Persistente Navigation über alle Seiten (mobil/iPad-tauglich).
+
+## Aktueller Fokus
+
+_Stand: 2026-08-14_
+
+**Stand heute:** Deploy #59 ist grün und **live** unter
+`https://truewords-review-sync.das-sind-meine.workers.dev` (Health `{"ok":true,…,"storage":"d1"}`).
+Umstieg auf `philena-4y` inkl. `?dataset=`-Schalter und Einfrieren von
+`philena-2026-pilot-v4-unseen` ist ausgerollt; persistente Navigation und
+Live-F1 in der Doppelprüfung ebenso. Web-Push ist serverseitig scharf: alle drei
+`VAPID_*`-Secrets sind gesetzt und Migration `0009` ist remote angewandt.
+Branch: `claude/segmentation-v5-migration-h0syxc`.
+
+**Morgen zuerst — Push wirklich zustellen (einziges offenes Gate):** Push kommt
+erst an, wenn **jedes Gerät einmal opt-in** gemacht hat. Philipp **und** Lena
+öffnen `/doppelpruefung.html` und tippen in der Leiste (`push-enable.js`)
+„Benachrichtigungen auf diesem Gerät erlauben". Danach verifizieren:
+Lena gibt eine Runde ab → Philipp muss den Sofort-Hinweis bekommen
+(`maybeNotifyOnSubmit` in `src/worker-push.ts`). Kontrolle je Gerät auf
+`/push-settings.html` (nur Philipp, zeigt ✓/✕). Erinnerungen laufen über den
+15-Min-Cron (`runScheduled`), Zeiten/Schwelle dort einstellbar.
+
+**Offene Punkte:**
+- Push-Opt-in beider Geräte + Zustell-Test (s. o.) — noch nicht erfolgt.
+- Live-F1 nur auf abgeschlossenen (beidseitig abgegebenen) Runden belastbar; bei
+  < 40 gemeinsamen Grenzen bleibt die Zahl volatil (`lowData`-Hinweis).
+- `?dataset=`-Wechsel ist rein additiv gedacht — beim Testen der Live-Umschaltung
+  darauf achten, dass `philena-2026` als eingefroren keine neuen Runden zieht.
+- Kein PR offen; Arbeit liegt auf dem Feature-Branch. PR bei Bedarf noch anlegen.
