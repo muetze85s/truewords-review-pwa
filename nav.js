@@ -12,15 +12,15 @@
     { value: 'philena-2026-pilot-v4-unseen', label: 'philena-2026 (Pilot, eingefroren)' },
   ];
 
-  // Alle für Prüfer sinnvollen Seiten/Routen. `admin` = nur mit canUpload.
+  // Nur die tatsächlich funktionierenden Seiten. Dashboard steht vorn (zentrale
+  // Startseite). `admin` = nur mit canUpload. Quiz/Situationen wurden entfernt;
+  // Admin/Analyse waren reine Weiterleitungen auf Upload und sind zu „Upload"
+  // zusammengeführt.
   const LINKS = [
+    { href: '/dashboard.html', label: 'Dashboard' },
     { href: '/review.html', label: 'Prüfstand' },
     { href: '/doppelpruefung.html', label: 'Doppelprüfung' },
-    { href: '/situation-info.html', label: 'Situationen' },
-    { href: '/situation-quiz.html', label: 'Quiz' },
     { href: '/upload.html', label: 'Upload', admin: true },
-    { href: '/admin.html', label: 'Admin', admin: true },
-    { href: '/analysis-import.html', label: 'Analyse', admin: true },
     { href: '/push-settings.html', label: 'Benachrichtigungen', admin: true },
   ];
 

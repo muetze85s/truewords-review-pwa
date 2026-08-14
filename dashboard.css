@@ -1,0 +1,46 @@
+/* Dashboard — zentrale Startseite. Nutzt die Theme-Variablen der PWA
+   (truewords-ui-theme.css), damit Dark/Light automatisch mitgehen. */
+.db-title { margin: 16px 0 4px; font-size: 22px; }
+.db-subtitle { margin: 24px 0 10px; font-size: 16px; }
+.db-hint { font-size: 12px; color: var(--tw-text-muted); font-weight: 400; }
+
+.db-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .db-grid { grid-template-columns: 1fr; }
+}
+.db-stat { text-align: center; padding: 16px 12px; }
+.db-stat-name { font-size: 13px; color: var(--tw-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.db-stat-big { font-size: 40px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.db-stat-sub { font-size: 13px; color: var(--tw-text-muted); }
+.db-stat-meta { font-size: 12px; color: var(--tw-text-muted); margin-top: 6px; }
+
+.db-dispute {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--tw-border);
+  border-radius: 10px;
+  background: var(--tw-surface-raised);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.db-dispute:hover { border-color: var(--tw-accent, #3c9d5b); }
+.db-dispute-round {
+  flex: 0 0 auto;
+  min-width: 66px;
+  font-weight: 800;
+  font-size: 15px;
+}
+.db-dispute-info { flex: 1 1 auto; font-size: 13px; }
+.db-dispute-info .muted { color: var(--tw-text-muted); }
+.db-dispute-go { flex: 0 0 auto; font-size: 18px; color: var(--tw-text-muted); }
+.db-empty { color: var(--tw-text-muted); padding: 8px 2px; }

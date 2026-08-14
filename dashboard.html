@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Dashboard · TrueWords</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./truewords-theme.css">
+<link rel="stylesheet" href="./truewords-ui-theme.css">
+<link rel="stylesheet" href="./boundary-pairs.css">
+<link rel="stylesheet" href="./nav.css">
+<link rel="stylesheet" href="./dashboard.css">
+<script src="./truewords-user-theme.js" defer></script>
+<script src="./nav.js" defer></script>
+</head>
+<body class="dp">
+
+<main class="dp-wrap">
+  <h1 class="db-title">Überblick</h1>
+  <p class="dp-status" id="db-status">Wird geladen …</p>
+
+  <section class="db-grid" id="db-status-block" hidden>
+    <div class="dp-card db-stat">
+      <div class="db-stat-name">Philipp</div>
+      <div class="db-stat-big" id="db-philipp-open">–</div>
+      <div class="db-stat-sub">offene Runden</div>
+      <div class="db-stat-meta" id="db-philipp-meta"></div>
+    </div>
+    <div class="dp-card db-stat">
+      <div class="db-stat-name">Lena</div>
+      <div class="db-stat-big" id="db-lena-open">–</div>
+      <div class="db-stat-sub">offene Runden</div>
+      <div class="db-stat-meta" id="db-lena-meta"></div>
+    </div>
+    <div class="dp-card db-stat">
+      <div class="db-stat-name">Streitfälle</div>
+      <div class="db-stat-big" id="db-disputes-open">–</div>
+      <div class="db-stat-sub">noch offen</div>
+      <div class="db-stat-meta" id="db-rounds-meta"></div>
+    </div>
+  </section>
+
+  <section id="db-disputes-section" hidden>
+    <h2 class="db-subtitle">Offene Streitfälle <span class="db-hint">— älteste zuerst, antippen springt zur Runde</span></h2>
+    <div id="db-disputes-list"></div>
+  </section>
+</main>
+
+<script src="./dashboard.js" defer></script>
+</body>
+</html>

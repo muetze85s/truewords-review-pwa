@@ -424,22 +424,47 @@
   // Rein informativ — es wird KEIN Parameter automatisch geändert; Toleranz &
   // Umgang mit „unsicher" entscheidet weiterhin die Person von Hand.
   let liveF1Timer = null;
+  function setLiveF1Message(node, text, state) {
+    node.innerHTML = `<span class="dp-live-item muted">${escapeHtml(text)}</span>`;
+    node.dataset.state = state;
+  }
   function refreshLiveF1() {
     const node = $('dp-live-f1');
     if (!node) return;
     // Kurzes Entprellen: mehrere schnelle Klicks lösen nur einen Abruf aus.
     clearTimeout(liveF1Timer);
     liveF1Timer = setTimeout(() => {
-      fetchJson(`agreement/summary${agreementQuery()}`).then(({ status, payload }) => {
-        if (status !== 200 || !payload.ok) return;
-        const human = payload.agreementF1 === null ? '–' : payload.agreementF1.toFixed(2);
-        const auto = payload.automaticVsCombined && payload.automaticVsCombined.agreementF1 !== null
-          ? payload.automaticVsCombined.agreementF1.toFixed(2) : '–';
+      // Aufgabe 7: harter Timeout, damit der Spinner nie endlos hängt.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      fetch(API + withDataset(`agreement/summary${agreementQuery()}`), {
+        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+      }).then((response) => {
+        if (response.status === 401) { location.href = '/login.html'; throw new Error('abgemeldet'); }
+        return response.json().then((payload) => ({ status: response.status, payload }));
+      }).then(({ status, payload }) => {
+        clearTimeout(timeout);
+        if (status !== 200 || !payload.ok) { setLiveF1Message(node, 'F1: keine Daten', 'empty'); return; }
+        const hasHuman = payload.agreementF1 !== null && payload.agreementF1 !== undefined;
+        const hasAuto = payload.automaticVsCombined && payload.automaticVsCombined.agreementF1 !== null
+          && payload.automaticVsCombined.agreementF1 !== undefined;
+        // Keine beidseitig abgegebene Runde → nichts zu vergleichen, sauber melden.
+        if (!payload.roundsReady || (!hasHuman && !hasAuto)) {
+          setLiveF1Message(node, 'F1: keine Daten (noch keine beidseitig abgegebene Runde)', 'empty');
+          return;
+        }
+        const human = hasHuman ? payload.agreementF1.toFixed(2) : '–';
+        const auto = hasAuto ? payload.automaticVsCombined.agreementF1.toFixed(2) : '–';
         node.innerHTML = `<span class="dp-live-item">Übereinstimmung <b>${escapeHtml(human)}</b></span>`
           + `<span class="dp-live-item">Automatik vs. gemeinsam <b>${escapeHtml(auto)}</b></span>`
-          + `<span class="dp-live-item muted">n=${payload.roundsReady ?? 0} Runden · tol=${state.tolerance}</span>`;
+          + `<span class="dp-live-item muted">n=${payload.roundsReady} Runden · tol=${state.tolerance}</span>`;
         node.dataset.state = 'ready';
-      }).catch(() => { /* stiller Fehlschlag — der Balken bleibt einfach stehen */ });
+      }).catch((caught) => {
+        clearTimeout(timeout);
+        if (caught && caught.message === 'abgemeldet') return;
+        const reason = caught && caught.name === 'AbortError' ? 'Zeitüberschreitung' : 'Fehler';
+        setLiveF1Message(node, `F1: keine Daten (${reason})`, 'error');
+      });
     }, 250);
   }
 
@@ -537,8 +562,34 @@
       refreshLiveF1();
     });
 
-    loadRound();
-    refreshLiveF1();
+    startAtRightRound();
+  }
+
+  // Aufgabe 4.1: Beim Laden nicht stumpf auf Runde 1 bleiben. Ein explizites
+  // ?round=N (z. B. aus dem Dashboard-Link) gewinnt; sonst springt die Ansicht
+  // auf die nächste noch nicht abgegebene Runde der eingeloggten Person.
+  function startAtRightRound() {
+    let requested = null;
+    try { requested = Number(new URLSearchParams(location.search).get('round')); } catch (_) { requested = null; }
+    if (Number.isInteger(requested) && requested > 0) {
+      state.round = requested;
+      $('dp-round-input').value = state.round;
+      loadRound();
+      refreshLiveF1();
+      return;
+    }
+    fetchJson('overview').then(({ status, payload }) => {
+      if (status === 200 && payload.ok) {
+        const mine = payload.reviewers && payload.reviewers[payload.reviewer];
+        if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
+          state.round = mine.nextRound;
+          $('dp-round-input').value = state.round;
+        }
+      }
+    }).catch(() => { /* Fallback: bleibt bei Runde 1 */ }).then(() => {
+      loadRound();
+      refreshLiveF1();
+    });
   }
 
   boot();

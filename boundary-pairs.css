@@ -319,3 +319,24 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .dp-live-item { white-space: nowrap; }
 .dp-live-item b { font-variant-numeric: tabular-nums; }
 .dp-live-item.muted { color: var(--tw-text-muted); }
+
+/* Aufgabe 6: Formular-Felder der Benachrichtigungsseite ohne portal.css.
+   Nutzt die Theme-Variablen, damit Dark/Light automatisch stimmt. */
+.tw-set .grid { display: flex; gap: 12px; flex-wrap: wrap; }
+.tw-set label { display: block; margin: 6px 0; }
+.tw-set label > span { display: block; font-size: 12px; color: var(--tw-text-muted); margin-bottom: 4px; }
+.tw-set input[type="time"],
+.tw-set input[type="number"] {
+  padding: 8px 10px;
+  border: 1px solid var(--tw-border);
+  border-radius: 8px;
+  background: var(--tw-surface-raised);
+  color: var(--tw-text);
+  font: inherit;
+}
+.tw-set input[type="checkbox"] { accent-color: var(--tw-philipp); }
+.dp-wrap .primary {
+  padding: 9px 16px; border: 0; border-radius: 8px; font-weight: 700; cursor: pointer;
+  background: var(--tw-philipp); color: #fff;
+}
+.dp-wrap .primary:disabled { opacity: .6; cursor: default; }

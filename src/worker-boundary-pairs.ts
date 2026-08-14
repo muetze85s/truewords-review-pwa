@@ -838,6 +838,111 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
   });
 }
 
+/** Kleinste Runde ≥1, die diese Person noch NICHT abgegeben hat (erste Lücke). */
+function nextUnsubmittedRound(submitted: Set<number>): number {
+  let round = 1;
+  while (submitted.has(round)) round += 1;
+  return round;
+}
+
+/**
+ * Dashboard-Überblick: pro Person offene/abgegebene Runden + die nächste noch
+ * offene Runde (für den Auto-Sprung der Doppelprüfung), dazu die Liste aller
+ * noch offenen Streitfälle (älteste Runde zuerst), direkt in die Runde
+ * verlinkbar. Zählung folgt Auftrag 2 (geklärt nur bei beidseitiger Einigung).
+ */
+async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: URL): Promise<Response> {
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+
+  const [roundRows, submissionRows] = await Promise.all([
+    env.DB.prepare('SELECT round FROM review_rounds WHERE dataset_id = ?1').bind(dataset.id).all<{ round: number }>(),
+    env.DB.prepare('SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1').bind(dataset.id).all<{ round: number; reviewer: Role }>(),
+  ]);
+  const existingRounds = (roundRows.results || []).map((row) => row.round).sort((a, b) => a - b);
+  const submittedBy: Record<Role, Set<number>> = { Philipp: new Set(), Lena: new Set() };
+  const byRound = new Map<number, Set<Role>>();
+  for (const row of submissionRows.results || []) {
+    submittedBy[row.reviewer]?.add(row.round);
+    if (!byRound.has(row.round)) byRound.set(row.round, new Set());
+    byRound.get(row.round)?.add(row.reviewer);
+  }
+
+  const reviewerStat = (role: Role) => {
+    const submitted = submittedBy[role];
+    const open = existingRounds.filter((round) => !submitted.has(round));
+    return { submitted: submitted.size, open: open.length, nextRound: nextUnsubmittedRound(submitted) };
+  };
+
+  const readyRounds = existingRounds.filter((round) => {
+    const both = byRound.get(round);
+    return both?.has('Philipp') && both?.has('Lena');
+  });
+
+  // Offene Streitfälle einsammeln — dieselbe Rechnung wie getAgreement, aber nur
+  // die noch nicht beidseitig geklärten Nähte, mit Runde/Zeitabstand für die Liste.
+  const openDisputes: Array<{
+    round: number; seamMessageId: string; position: number; setBy: Role; pauseSeconds: number;
+  }> = [];
+  for (const round of readyRounds) {
+    const { messages } = await loadRoundWindow(env, dataset, round);
+    const positions = seamPositions(messages);
+    const positionToId = new Map<number, string>();
+    for (const [id, position] of positions) positionToId.set(position, id);
+    const totalSeams = Math.max(0, messages.length - 1);
+    const [philippMarks, lenaMarks, resolutionRows] = await Promise.all([
+      loadMarks(env, dataset.id, round, 'Philipp'),
+      loadMarks(env, dataset.id, round, 'Lena'),
+      env.DB.prepare(`
+        SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
+        WHERE dataset_id = ?1 AND round = ?2
+      `).bind(dataset.id, round).all<{ seam_message_id: string; decided_by: string; decision: string }>(),
+    ]);
+    const comparison = compareReviewers(
+      toPositionalMarks(philippMarks, positions),
+      toPositionalMarks(lenaMarks, positions),
+      { totalSeams, tolerance, doubtMode },
+    );
+    const resolvedSeams = new Set(
+      agreeResolutions(resolutionRows.results || [])
+        .filter((entry) => entry.resolved)
+        .map((entry) => entry.seam_message_id),
+    );
+    const collect = (position: number, setBy: Role) => {
+      const seamMessageId = positionToId.get(position);
+      if (!seamMessageId || resolvedSeams.has(seamMessageId)) return;
+      const before = messages[position - 1];
+      const after = messages[position];
+      openDisputes.push({
+        round,
+        seamMessageId,
+        position,
+        setBy,
+        pauseSeconds: before && after ? Math.max(0, after.t - before.t) : 0,
+      });
+    };
+    comparison.onlyA.forEach((position) => collect(position, 'Philipp'));
+    comparison.onlyB.forEach((position) => collect(position, 'Lena'));
+  }
+  // Älteste/dringendste zuerst: frühe Runde vor später, darin frühe Naht zuerst.
+  openDisputes.sort((a, b) => (a.round - b.round) || (a.position - b.position));
+
+  return json({
+    ok: true,
+    reviewer,
+    dataset: dataset.id,
+    tolerance,
+    doubtMode,
+    totalRounds: existingRounds.length,
+    readyRounds: readyRounds.length,
+    reviewers: {
+      Philipp: reviewerStat('Philipp'),
+      Lena: reviewerStat('Lena'),
+    },
+    openDisputes,
+  });
+}
+
 /**
  * Nur-Lese-Kennzahlen zur Filter-Migration (`isReviewable` → `isReviewableBroad`):
  * ausschließlich Zählungen. Kein Nachrichtentext, kein Name — auch nicht, um ihn
@@ -1286,6 +1391,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   if (
     !url.pathname.startsWith('/api/rounds/')
     && url.pathname !== '/api/agreement/summary'
+    && url.pathname !== '/api/overview'
     && url.pathname !== '/api/admin/filter-check'
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/transfer-boundaries'
@@ -1305,6 +1411,10 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   try {
     if (url.pathname === '/api/agreement/summary' && request.method === 'GET') {
       return await getSummary(env, dataset, user.role, url);
+    }
+
+    if (url.pathname === '/api/overview' && request.method === 'GET') {
+      return await getOverview(env, dataset, user.role, url);
     }
 
     if (url.pathname === '/api/admin/filter-check' && request.method === 'GET') {
