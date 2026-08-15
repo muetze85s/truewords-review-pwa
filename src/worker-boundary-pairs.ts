@@ -448,7 +448,17 @@ function toPositionalMarks(rows: MarkRow[], positions: Map<string, number>): Bou
 }
 
 function parseTolerance(url: URL): number {
-  const value = Number(url.searchParams.get('tol'));
+  // Number(null) ist 0 — ein fehlender Parameter sah dadurch wie eine
+  // gültige, absichtlich strikte Toleranz von 0 aus und fiel NIE auf den
+  // beabsichtigten Standard 1 zurück (der Fallback griff nur bei wirklich
+  // ungültigen Werten wie "abc"). Betraf jeden Aufrufer, der ?tol= nicht
+  // mitschickt: /api/overview (Übersicht) und den Schwellwert-Optimizer —
+  // beide liefen seither mit strikter statt der überall sonst genutzten
+  // Toleranz 1, was Runden mit Ein-Positions-Abweichung fälschlich als
+  // Streitfall zählte.
+  const raw = url.searchParams.get('tol');
+  if (raw === null) return 1;
+  const value = Number(raw);
   return [0, 1, 2].includes(value) ? value : 1;
 }
 
