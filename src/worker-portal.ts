@@ -315,11 +315,10 @@ async function routePage(request: Request, env: Env): Promise<Response | null> {
   const user = await sessionUser(request, env);
   if (pathname === '/' || pathname === '/index.html') {
     if (!user) return asset(request, env, '/login.html');
-    // Dashboard ist die zentrale Startseite für beide Prüfer.
-    return asset(request, env, '/dashboard.html');
+    return redirect('/doppelpruefung.html?tab=overview');
   }
   if (pathname === '/dashboard.html') {
-    return user ? asset(request, env, '/dashboard.html') : redirect('/login.html');
+    return user ? redirect('/doppelpruefung.html?tab=overview') : redirect('/login.html');
   }
   if (pathname === '/login.html') {
     return user ? redirect('/') : asset(request, env, '/login.html');

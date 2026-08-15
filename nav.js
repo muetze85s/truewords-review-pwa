@@ -17,9 +17,9 @@
   // Admin/Analyse waren reine Weiterleitungen auf Upload und sind zu „Upload"
   // zusammengeführt.
   const LINKS = [
-    { href: '/dashboard.html', label: 'Dashboard' },
+    { href: '/doppelpruefung.html?tab=overview', label: 'Übersicht', match: '/doppelpruefung.html' },
     { href: '/review.html', label: 'Prüfstand' },
-    { href: '/doppelpruefung.html', label: 'Doppelprüfung' },
+    { href: '/doppelpruefung.html', label: 'Doppelprüfung', match: '/doppelpruefung.html' },
     { href: '/upload.html', label: 'Upload', admin: true },
     { href: '/push-settings.html', label: 'Benachrichtigungen', admin: true },
   ];
@@ -50,12 +50,20 @@
 
     const links = document.createElement('div');
     links.className = 'tw-nav-links';
+    const search = location.search || '';
     LINKS.forEach((item) => {
       if (item.admin && !canUpload) return;
       const a = document.createElement('a');
       a.href = item.href;
       a.textContent = item.label;
-      if (here === item.href || location.pathname === item.href) a.classList.add('active');
+      const pathMatch = (item.match || item.href) === here || (item.match || item.href) === location.pathname;
+      if (item.href.includes('?tab=overview')) {
+        if (pathMatch && search.includes('tab=overview')) a.classList.add('active');
+      } else if (item.label === 'Doppelprüfung') {
+        if (pathMatch && !search.includes('tab=overview')) a.classList.add('active');
+      } else {
+        if (pathMatch) a.classList.add('active');
+      }
       links.appendChild(a);
     });
     nav.appendChild(links);

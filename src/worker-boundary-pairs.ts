@@ -846,86 +846,108 @@ function nextUnsubmittedRound(submitted: Set<number>): number {
 }
 
 /**
- * Dashboard-Überblick: pro Person offene/abgegebene Runden + die nächste noch
- * offene Runde (für den Auto-Sprung der Doppelprüfung), dazu die Liste aller
- * noch offenen Streitfälle (älteste Runde zuerst), direkt in die Runde
- * verlinkbar. Zählung folgt Auftrag 2 (geklärt nur bei beidseitiger Einigung).
+ * Schneller Übersichts-Endpunkt: lädt die gefilterte Nachrichtenfolge EINMAL
+ * und alle Runden/Abgaben/Markierungen/Streitfälle in 4 parallelen Bulk-Queries.
+ * Eliminiert das N+1 der alten getOverview (jede Runde einzeln über
+ * loadRoundWindow → filteredSequence). Ergebnis: pro Runde Abgabestatus,
+ * offene/geklärte Streitfälle, Farbcode für die Tabelle.
  */
 async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: URL): Promise<Response> {
   const tolerance = parseTolerance(url);
   const doubtMode = parseDoubtMode(url);
 
-  const [roundRows, submissionRows] = await Promise.all([
-    env.DB.prepare('SELECT round FROM review_rounds WHERE dataset_id = ?1').bind(dataset.id).all<{ round: number }>(),
-    env.DB.prepare('SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1').bind(dataset.id).all<{ round: number; reviewer: Role }>(),
+  const [sequence, roundRows, submissionRows, allMarks, allResolutions] = await Promise.all([
+    filteredSequence(env, dataset.id),
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(dataset.id).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string; seam_message_id: string; mark: string }>(),
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
-  const existingRounds = (roundRows.results || []).map((row) => row.round).sort((a, b) => a - b);
-  const submittedBy: Record<Role, Set<number>> = { Philipp: new Set(), Lena: new Set() };
-  const byRound = new Map<number, Set<Role>>();
+
+  const seqIndex = new Map<string, number>();
+  for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
+
+  const philippSubmitted = new Set<number>();
+  const lenaSubmitted = new Set<number>();
   for (const row of submissionRows.results || []) {
-    submittedBy[row.reviewer]?.add(row.round);
-    if (!byRound.has(row.round)) byRound.set(row.round, new Set());
-    byRound.get(row.round)?.add(row.reviewer);
+    if (row.reviewer === 'Philipp') philippSubmitted.add(row.round);
+    else if (row.reviewer === 'Lena') lenaSubmitted.add(row.round);
   }
 
-  const reviewerStat = (role: Role) => {
-    const submitted = submittedBy[role];
-    const open = existingRounds.filter((round) => !submitted.has(round));
-    return { submitted: submitted.size, open: open.length, nextRound: nextUnsubmittedRound(submitted) };
-  };
+  const marksByRound = new Map<number, { philipp: MarkRow[]; lena: MarkRow[] }>();
+  for (const row of allMarks.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, { philipp: [], lena: [] });
+    const entry = marksByRound.get(row.round)!;
+    const markRow: MarkRow = { seam_message_id: row.seam_message_id, mark: row.mark as 'cut' | 'doubt' };
+    if (row.reviewer === 'Philipp') entry.philipp.push(markRow);
+    else if (row.reviewer === 'Lena') entry.lena.push(markRow);
+  }
 
-  const readyRounds = existingRounds.filter((round) => {
-    const both = byRound.get(round);
-    return both?.has('Philipp') && both?.has('Lena');
-  });
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  for (const row of allResolutions.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
 
-  // Offene Streitfälle einsammeln — dieselbe Rechnung wie getAgreement, aber nur
-  // die noch nicht beidseitig geklärten Nähte, mit Runde/Zeitabstand für die Liste.
-  const openDisputes: Array<{
-    round: number; seamMessageId: string; position: number; setBy: Role; pauseSeconds: number;
+  const existingRounds = (roundRows.results || []).sort((a, b) => a.round - b.round);
+
+  const rounds: Array<{
+    round: number;
+    philippSubmitted: boolean;
+    lenaSubmitted: boolean;
+    openDisputes: number;
+    resolvedDisputes: number;
   }> = [];
-  for (const round of readyRounds) {
-    const { messages } = await loadRoundWindow(env, dataset, round);
-    const positions = seamPositions(messages);
-    const positionToId = new Map<number, string>();
-    for (const [id, position] of positions) positionToId.set(position, id);
-    const totalSeams = Math.max(0, messages.length - 1);
-    const [philippMarks, lenaMarks, resolutionRows] = await Promise.all([
-      loadMarks(env, dataset.id, round, 'Philipp'),
-      loadMarks(env, dataset.id, round, 'Lena'),
-      env.DB.prepare(`
-        SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
-        WHERE dataset_id = ?1 AND round = ?2
-      `).bind(dataset.id, round).all<{ seam_message_id: string; decided_by: string; decision: string }>(),
-    ]);
-    const comparison = compareReviewers(
-      toPositionalMarks(philippMarks, positions),
-      toPositionalMarks(lenaMarks, positions),
-      { totalSeams, tolerance, doubtMode },
-    );
-    const resolvedSeams = new Set(
-      agreeResolutions(resolutionRows.results || [])
-        .filter((entry) => entry.resolved)
-        .map((entry) => entry.seam_message_id),
-    );
-    const collect = (position: number, setBy: Role) => {
-      const seamMessageId = positionToId.get(position);
-      if (!seamMessageId || resolvedSeams.has(seamMessageId)) return;
-      const before = messages[position - 1];
-      const after = messages[position];
-      openDisputes.push({
-        round,
-        seamMessageId,
-        position,
-        setBy,
-        pauseSeconds: before && after ? Math.max(0, after.t - before.t) : 0,
-      });
-    };
-    comparison.onlyA.forEach((position) => collect(position, 'Philipp'));
-    comparison.onlyB.forEach((position) => collect(position, 'Lena'));
+
+  for (const roundRow of existingRounds) {
+    const pSub = philippSubmitted.has(roundRow.round);
+    const lSub = lenaSubmitted.has(roundRow.round);
+    let open = 0;
+    let resolved = 0;
+
+    if (pSub && lSub) {
+      const startIdx = seqIndex.get(roundRow.first_message_id);
+      if (startIdx !== undefined) {
+        const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
+        const positions = seamPositions(messages);
+        const totalSeams = Math.max(0, messages.length - 1);
+        const marks = marksByRound.get(roundRow.round) || { philipp: [], lena: [] };
+        const comparison = compareReviewers(
+          toPositionalMarks(marks.philipp, positions),
+          toPositionalMarks(marks.lena, positions),
+          { totalSeams, tolerance, doubtMode },
+        );
+        const resolutions = resByRound.get(roundRow.round) || [];
+        const agreed = agreeResolutions(resolutions);
+        const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
+        const positionToId = new Map<number, string>();
+        for (const [id, pos] of positions) positionToId.set(pos, id);
+        for (const pos of [...comparison.onlyA, ...comparison.onlyB]) {
+          const seamId = positionToId.get(pos);
+          if (seamId && resolvedSeams.has(seamId)) resolved += 1;
+          else if (seamId) open += 1;
+        }
+      }
+    }
+
+    rounds.push({
+      round: roundRow.round,
+      philippSubmitted: pSub,
+      lenaSubmitted: lSub,
+      openDisputes: open,
+      resolvedDisputes: resolved,
+    });
   }
-  // Älteste/dringendste zuerst: frühe Runde vor später, darin frühe Naht zuerst.
-  openDisputes.sort((a, b) => (a.round - b.round) || (a.position - b.position));
+
+  const allRoundNums = existingRounds.map((row) => row.round);
 
   return json({
     ok: true,
@@ -933,13 +955,21 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     dataset: dataset.id,
     tolerance,
     doubtMode,
-    totalRounds: existingRounds.length,
-    readyRounds: readyRounds.length,
+    totalRounds: allRoundNums.length,
+    readyRounds: allRoundNums.filter((round) => philippSubmitted.has(round) && lenaSubmitted.has(round)).length,
     reviewers: {
-      Philipp: reviewerStat('Philipp'),
-      Lena: reviewerStat('Lena'),
+      Philipp: {
+        submitted: philippSubmitted.size,
+        open: allRoundNums.filter((round) => !philippSubmitted.has(round)).length,
+        nextRound: nextUnsubmittedRound(philippSubmitted),
+      },
+      Lena: {
+        submitted: lenaSubmitted.size,
+        open: allRoundNums.filter((round) => !lenaSubmitted.has(round)).length,
+        nextRound: nextUnsubmittedRound(lenaSubmitted),
+      },
     },
-    openDisputes,
+    rounds,
   });
 }
 

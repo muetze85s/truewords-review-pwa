@@ -74,6 +74,8 @@ const files = [
   'portal.css',
   'manifest.webmanifest',
   'icon.svg',
+  'icon-192.png',
+  'icon-512.png',
   'sw.js',
   'enhancements.css',
   'enhancements.js',

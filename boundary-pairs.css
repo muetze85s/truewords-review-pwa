@@ -360,3 +360,45 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .tw-note li b { color: var(--tw-text); }
 #device-box { display: block; }
 #allow-here { margin-top: 8px; }
+
+/* --- Übersicht (Aufgabe 10) ------------------------------------------- */
+.ov-stats {
+  display: flex; gap: 12px; margin: 0 0 16px; flex-wrap: wrap;
+}
+.ov-stat {
+  flex: 1 1 0; min-width: 100px; text-align: center; padding: 14px 8px;
+  background: var(--tw-surface-raised, var(--tw-surface)); border: 1px solid var(--tw-border);
+  border-radius: 10px;
+}
+.ov-stat-num { display: block; font-size: 28px; font-weight: 700; color: var(--tw-text); }
+.ov-stat-label { font-size: 12px; color: var(--tw-text-muted); }
+
+.ov-table-wrap { overflow-x: auto; border: 1px solid var(--tw-border); border-radius: 10px; background: var(--tw-surface-raised, var(--tw-surface)); }
+.ov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ov-table thead th { padding: 8px 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--tw-text-muted); border-bottom: 2px solid var(--tw-border); text-align: left; white-space: nowrap; }
+.ov-table tbody tr { border-bottom: 1px solid var(--tw-border); cursor: pointer; transition: background .12s; }
+.ov-table tbody tr:last-child { border-bottom: none; }
+.ov-table tbody tr:hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); }
+.ov-table td { padding: 7px 10px; white-space: nowrap; }
+.ov-round-num { font-weight: 600; }
+
+.ov-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.ov-badge.done { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.ov-badge.open { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+
+.ov-disputes-open { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+.ov-disputes-cell { font-size: 13px; color: var(--tw-text-muted); }
+
+.ov-go { font-size: 13px; color: var(--tw-philipp-strong); text-decoration: none; font-weight: 500; }
+.ov-go:hover { text-decoration: underline; }
+
+tr.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
+tr.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
+tr.ov-both-open { border-left: 3px solid var(--tw-status-open, #b78b43); }
+tr.ov-done { border-left: 3px solid transparent; }
+
+.ov-empty { text-align: center; padding: 24px; color: var(--tw-text-muted); }
+
+.tw-push-install { padding: 10px 14px; font-size: 13.5px; line-height: 1.6; }
+.tw-push-install b { display: block; margin-bottom: 4px; }
+.tw-push-steps { color: var(--tw-text-muted, #68726e); }

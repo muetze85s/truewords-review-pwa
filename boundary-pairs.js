@@ -180,7 +180,19 @@
       .then(({ status, payload }) => {
         if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
         refreshLiveF1();
-        return loadRound().then(() => scrollToTop());
+        cachedOverview = null;
+        return fetchJson('overview').then(({ status: oStatus, payload: oPayload }) => {
+          if (oStatus === 200 && oPayload.ok) {
+            cachedOverview = oPayload;
+            const mine = oPayload.reviewers && oPayload.reviewers[oPayload.reviewer];
+            if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
+              state.round = mine.nextRound;
+              $('dp-round-input').value = state.round;
+              return loadRound().then(() => scrollToTop());
+            }
+          }
+          return loadRound().then(() => scrollToTop());
+        });
       })
       .catch((caught) => {
         setStatus(`Abgabe fehlgeschlagen: ${caught.message}`, true);
@@ -469,51 +481,94 @@
   }
 
   // ------------------------------------------------------------- Übersicht
+  // Aufgabe 10: Runden-Tabelle als zentrale Startseite, Aufgabe 11: < 2s via
+  // Bulk-API (/api/overview), Aufgabe 12: neueste oben, nach Abgabe weiter.
+
+  let cachedOverview = null;
 
   function loadOverview() {
     $('dp-overview-body').innerHTML = '<p class="dp-hint">Wird geladen …</p>';
-    return fetchJson(`agreement/summary${agreementQuery()}`).then(({ status, payload }) => {
+    return fetchJson('overview').then(({ status, payload }) => {
       if (status !== 200 || !payload.ok) throw new Error(payload.error || `HTTP ${status}`);
+      cachedOverview = payload;
       renderOverview(payload);
     }).catch((caught) => {
       $('dp-overview-body').innerHTML = `<p class="dp-status error">Konnte Übersicht nicht laden: ${escapeHtml(caught.message)}</p>`;
     });
   }
 
+  function roundStatusClass(row) {
+    if (row.philippSubmitted && row.lenaSubmitted) return 'ov-done';
+    if (row.philippSubmitted && !row.lenaSubmitted) return 'ov-lena-open';
+    if (!row.philippSubmitted && row.lenaSubmitted) return 'ov-philipp-open';
+    return 'ov-both-open';
+  }
+
   function renderOverview(data) {
-    const lowData = data.lowData
-      ? `<div class="dp-lowdata">Noch weniger als 40 beidseitig gesetzte Grenzen (${data.combinedBoundaries}) — die Übereinstimmungszahl schwankt bei dieser Menge stark und sollte nicht als belastbar gelten.</div>`
-      : '';
-    const overall = data.agreementF1 === null ? '–' : data.agreementF1.toFixed(2);
-    const auto = data.automaticVsCombined.agreementF1 === null ? '–' : data.automaticVsCombined.agreementF1.toFixed(2);
-    const rows = data.perRound.map((row) => `
-      <tr>
-        <td>${row.round}</td>
-        <td class="n">${row.philippCuts}</td>
-        <td class="n">${row.lenaCuts}</td>
-        <td class="n">${row.agreementF1.toFixed(2)}</td>
-        <td class="n">${row.kappa.toFixed(2)}</td>
-        <td class="n">${row.resolved}/${row.disputes}</td>
-        <td class="n">${row.automaticBoundaryCount}</td>
-      </tr>
-    `).join('');
+    const pStat = data.reviewers.Philipp;
+    const lStat = data.reviewers.Lena;
+    const totalOpen = data.rounds.reduce((sum, row) => sum + row.openDisputes, 0);
+    const totalResolved = data.rounds.reduce((sum, row) => sum + row.resolvedDisputes, 0);
+
+    const statsHtml = `<div class="ov-stats">
+      <div class="ov-stat"><span class="ov-stat-num">${data.readyRounds}</span><span class="ov-stat-label">beidseitig abgegeben</span></div>
+      <div class="ov-stat"><span class="ov-stat-num">${totalOpen}</span><span class="ov-stat-label">offene Streitfälle</span></div>
+      <div class="ov-stat"><span class="ov-stat-num">${data.totalRounds}</span><span class="ov-stat-label">Runden gesamt</span></div>
+    </div>`;
+
+    const sorted = [...data.rounds].sort((a, b) => b.round - a.round);
+
+    const rows = sorted.map((row) => {
+      const cls = roundStatusClass(row);
+      const pIcon = row.philippSubmitted ? '✓' : 'offen';
+      const lIcon = row.lenaSubmitted ? '✓' : 'offen';
+      const disputes = (row.philippSubmitted && row.lenaSubmitted)
+        ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : (row.resolvedDisputes > 0 ? `${row.resolvedDisputes} geklärt` : '–'))
+        : '–';
+      return `<tr class="${cls}" data-round="${row.round}">
+        <td class="ov-round-num">${row.round}</td>
+        <td class="ov-status-cell"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></td>
+        <td class="ov-status-cell"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></td>
+        <td class="ov-disputes-cell">${disputes}</td>
+        <td class="ov-link-cell"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></td>
+      </tr>`;
+    }).join('');
+
+    const emptyRow = sorted.length
+      ? ''
+      : '<tr><td colspan="5" class="ov-empty">Noch keine Runden angelegt.</td></tr>';
 
     $('dp-overview-body').innerHTML = `
-      ${lowData}
-      <div class="dp-card" style="text-align:center">
-        <div class="dp-agreement-number">${overall}</div>
-        <div class="dp-agreement-meta"><span>Übereinstimmung über ${data.roundsReady} abgeschlossene Runden</span></div>
-        <div class="dp-automatic-row">Automatik gegen die gemeinsame Fassung: <b>${auto}</b></div>
-        <div class="dp-automatic-row">Automatik hat roh ${data.automaticBoundariesTotal} Grenzen über alle abgeschlossenen Runden gesetzt.</div>
-        <div class="dp-automatic-row">Streitfälle: ${data.disputes.resolved} geklärt, ${data.disputes.open} offen</div>
-      </div>
-      <div class="dp-card" style="overflow-x:auto">
-        <table class="dp-overview-table">
-          <tr><th>Runde</th><th class="n">Philipp</th><th class="n">Lena</th><th class="n">Übereinst.</th><th class="n">κ</th><th class="n">Streitfälle</th><th class="n">Automatik roh</th></tr>
-          ${rows || '<tr><td colspan="7">Noch keine beidseitig abgegebene Runde.</td></tr>'}
+      ${statsHtml}
+      <div class="ov-table-wrap">
+        <table class="ov-table">
+          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>Streitfälle</th><th></th></tr></thead>
+          <tbody>${rows || emptyRow}</tbody>
         </table>
-      </div>
-    `;
+      </div>`;
+
+    $('dp-overview-body').querySelectorAll('.ov-go').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const round = Number(link.dataset.go);
+        state.round = round;
+        $('dp-round-input').value = round;
+        setTab('round');
+        loadRound();
+        refreshLiveF1();
+      });
+    });
+  }
+
+  function navigateToNextOpen() {
+    if (!cachedOverview) return;
+    const mine = cachedOverview.reviewers && cachedOverview.reviewers[cachedOverview.reviewer];
+    if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
+      state.round = mine.nextRound;
+      $('dp-round-input').value = state.round;
+      loadRound();
+      refreshLiveF1();
+    }
   }
 
   // ------------------------------------------------------------------ Tabs
@@ -565,12 +620,16 @@
     startAtRightRound();
   }
 
-  // Aufgabe 4.1: Beim Laden nicht stumpf auf Runde 1 bleiben. Ein explizites
-  // ?round=N (z. B. aus dem Dashboard-Link) gewinnt; sonst springt die Ansicht
-  // auf die nächste noch nicht abgegebene Runde der eingeloggten Person.
   function startAtRightRound() {
+    const params = new URLSearchParams(location.search);
+
+    if (params.get('tab') === 'overview') {
+      setTab('overview');
+      return;
+    }
+
     let requested = null;
-    try { requested = Number(new URLSearchParams(location.search).get('round')); } catch (_) { requested = null; }
+    try { requested = Number(params.get('round')); } catch (_) { requested = null; }
     if (Number.isInteger(requested) && requested > 0) {
       state.round = requested;
       $('dp-round-input').value = state.round;
@@ -578,8 +637,10 @@
       refreshLiveF1();
       return;
     }
+
     fetchJson('overview').then(({ status, payload }) => {
       if (status === 200 && payload.ok) {
+        cachedOverview = payload;
         const mine = payload.reviewers && payload.reviewers[payload.reviewer];
         if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
           state.round = mine.nextRound;

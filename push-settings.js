@@ -105,6 +105,16 @@
     return out;
   }
 
+  function isIos() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      navigator.standalone === true;
+  }
+
   function pushSupported() {
     return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   }
@@ -122,6 +132,14 @@
   async function refreshThisDevice() {
     const line = $('this-device');
     const button = $('allow-here');
+    if (isIos() && !isStandalone()) {
+      line.innerHTML = '<b>Push braucht die installierte App.</b><br>'
+        + '1. Tippe auf <b>Teilen</b> (das Quadrat mit dem Pfeil).<br>'
+        + '2. Wähle <b>Zum Home-Bildschirm</b>.<br>'
+        + '3. Öffne die App vom Home-Bildschirm und komm hierher zurück.';
+      button.hidden = true;
+      return;
+    }
     if (!pushSupported()) {
       line.textContent = 'Dieses Gerät/Browser unterstützt keine Web-Push-Benachrichtigungen.';
       button.hidden = true;
