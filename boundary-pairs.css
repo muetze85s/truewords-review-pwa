@@ -133,9 +133,12 @@ body.dp {
   color: var(--tw-text-muted);
   top: 8px;
 }
-.dp-seam[data-mark="cut"] { background: var(--tw-status-unclear-surface); }
-.dp-seam[data-mark="cut"] .line { background: var(--tw-status-unclear); height: 2px; }
-.dp-seam[data-mark="cut"] .label { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); font-weight: 700; }
+[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] { background: var(--tw-philipp-surface); }
+[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .line { background: var(--tw-philipp); height: 2px; }
+[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .label { background: var(--tw-philipp-surface); color: var(--tw-philipp-text); font-weight: 700; }
+[data-reviewer="Lena"] .dp-seam[data-mark="cut"] { background: var(--tw-lena-surface); }
+[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .line { background: var(--tw-lena); height: 2px; }
+[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .label { background: var(--tw-lena-surface); color: var(--tw-lena-text); font-weight: 700; }
 .dp-seam[data-mark="doubt"] { background: var(--tw-status-open-surface); }
 .dp-seam[data-mark="doubt"] .line { background: var(--tw-status-open); height: 2px; border-top: 1px dashed var(--tw-status-open); }
 .dp-seam[data-mark="doubt"] .label { background: var(--tw-status-open-surface); color: var(--tw-status-open); font-weight: 700; }
@@ -388,6 +391,7 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 
 .ov-disputes-open { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
 .ov-disputes-cell { font-size: 13px; color: var(--tw-text-muted); }
+.ov-f1-cell { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
 
 .ov-go { font-size: 13px; color: var(--tw-philipp-strong); text-decoration: none; font-weight: 500; }
 .ov-go:hover { text-decoration: underline; }

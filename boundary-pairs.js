@@ -72,16 +72,18 @@
     }
     const { text } = messageText(quoted);
     const start = text.length > 90 ? `${text.slice(0, 90)}…` : text;
-    return `<div class="dp-reply-quote"><span class="dp-reply-from">↩ ${escapeHtml(quoted.from)}</span> <span class="dp-reply-text">${escapeHtml(start)}</span></div>`;
+    const quotedName = String(quoted.from || '').trim().split(/\s+/u)[0] || quoted.from;
+    return `<div class="dp-reply-quote"><span class="dp-reply-from">↩ ${escapeHtml(quotedName)}</span> <span class="dp-reply-text">${escapeHtml(start)}</span></div>`;
   }
 
   function messageHtml(message, dim) {
     const { text, placeholder } = messageText(message);
     const time = message.t ? new Date(message.t * 1000).toLocaleString('de-DE', {
-      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
     }) : '';
-    return `<div class="dp-message${dim ? ' dim' : ''}" data-speaker="${escapeHtml(message.from)}">
-      <div class="dp-message-meta"><b>${escapeHtml(message.from)}</b> · ${escapeHtml(time)}</div>
+    const name = String(message.from || '').trim().split(/\s+/u)[0] || message.from;
+    return `<div class="dp-message${dim ? ' dim' : ''}" data-speaker="${escapeHtml(name)}">
+      <div class="dp-message-meta"><b>${escapeHtml(name)}</b> · ${escapeHtml(time)}</div>
       ${replyPreviewHtml(message)}
       <div class="dp-message-text${placeholder ? ' placeholder' : ''}">${escapeHtml(text)}</div>
     </div>`;
@@ -111,6 +113,7 @@
 
   function renderStream(readOnly) {
     const container = readOnly ? $('dp-waiting-stream') : $('dp-stream');
+    container.dataset.reviewer = state.reviewer || '';
     setMessageIndex(state.messages);
     const parts = [];
     state.messages.forEach((message, index) => {
@@ -518,17 +521,24 @@
 
     const sorted = [...data.rounds].sort((a, b) => b.round - a.round);
 
+    const fmtF1 = (v) => v === null || v === undefined ? '–' : v.toFixed(2);
+
     const rows = sorted.map((row) => {
       const cls = roundStatusClass(row);
       const pIcon = row.philippSubmitted ? '✓' : 'offen';
       const lIcon = row.lenaSubmitted ? '✓' : 'offen';
-      const disputes = (row.philippSubmitted && row.lenaSubmitted)
+      const both = row.philippSubmitted && row.lenaSubmitted;
+      const f1 = both ? fmtF1(row.f1) : '–';
+      const appF1 = both ? fmtF1(row.appF1) : '–';
+      const disputes = both
         ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : (row.resolvedDisputes > 0 ? `${row.resolvedDisputes} geklärt` : '–'))
         : '–';
       return `<tr class="${cls}" data-round="${row.round}">
         <td class="ov-round-num">${row.round}</td>
         <td class="ov-status-cell"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></td>
         <td class="ov-status-cell"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></td>
+        <td class="ov-f1-cell">${f1}</td>
+        <td class="ov-f1-cell">${appF1}</td>
         <td class="ov-disputes-cell">${disputes}</td>
         <td class="ov-link-cell"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></td>
       </tr>`;
@@ -536,13 +546,13 @@
 
     const emptyRow = sorted.length
       ? ''
-      : '<tr><td colspan="5" class="ov-empty">Noch keine Runden angelegt.</td></tr>';
+      : '<tr><td colspan="7" class="ov-empty">Noch keine Runden angelegt.</td></tr>';
 
     $('dp-overview-body').innerHTML = `
       ${statsHtml}
       <div class="ov-table-wrap">
         <table class="ov-table">
-          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>Streitfälle</th><th></th></tr></thead>
+          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>F1</th><th>App</th><th>Streitfälle</th><th></th></tr></thead>
           <tbody>${rows || emptyRow}</tbody>
         </table>
       </div>`;

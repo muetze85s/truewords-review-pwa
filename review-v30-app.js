@@ -126,8 +126,7 @@
   }
 
   function shortDate(message) {
-    const value = formatParts(message).date;
-    return value ? value.replace(/(\.\d{2})$/, '.') : '';
+    return formatParts(message).date;
   }
 
   function assignment(message) {

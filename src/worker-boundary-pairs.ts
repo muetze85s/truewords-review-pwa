@@ -905,6 +905,8 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     lenaSubmitted: boolean;
     openDisputes: number;
     resolvedDisputes: number;
+    f1: number | null;
+    appF1: number | null;
   }> = [];
 
   for (const roundRow of existingRounds) {
@@ -912,6 +914,8 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     const lSub = lenaSubmitted.has(roundRow.round);
     let open = 0;
     let resolved = 0;
+    let f1: number | null = null;
+    let appF1: number | null = null;
 
     if (pSub && lSub) {
       const startIdx = seqIndex.get(roundRow.first_message_id);
@@ -920,13 +924,21 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
         const positions = seamPositions(messages);
         const totalSeams = Math.max(0, messages.length - 1);
         const marks = marksByRound.get(roundRow.round) || { philipp: [], lena: [] };
-        const comparison = compareReviewers(
-          toPositionalMarks(marks.philipp, positions),
-          toPositionalMarks(marks.lena, positions),
-          { totalSeams, tolerance, doubtMode },
-        );
+        const marksP = toPositionalMarks(marks.philipp, positions);
+        const marksL = toPositionalMarks(marks.lena, positions);
+        const comparison = compareReviewers(marksP, marksL, { totalSeams, tolerance, doubtMode });
+        f1 = comparison.agreementF1;
+
         const resolutions = resByRound.get(roundRow.round) || [];
         const agreed = agreeResolutions(resolutions);
+        const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+        const autoResult = segmentConversationWindow(toSegmentationInput(messages));
+        const autoPositions = autoResult.boundaries
+          .map((b: { beforeEventId: string }) => positions.get(b.beforeEventId))
+          .filter((p: number | undefined): p is number => p !== undefined);
+        const vsCombined = pairSeams(autoPositions, combined.cuts, tolerance);
+        appF1 = agreementF1(vsCombined);
+
         const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
         const positionToId = new Map<number, string>();
         for (const [id, pos] of positions) positionToId.set(pos, id);
@@ -944,6 +956,8 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
       lenaSubmitted: lSub,
       openDisputes: open,
       resolvedDisputes: resolved,
+      f1,
+      appF1,
     });
   }
 
