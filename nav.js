@@ -18,6 +18,18 @@
     { href: '/push-settings.html', label: 'Settings', admin: true },
   ];
 
+  // Aufgabe 20: die Doppelprüfung wechselt intern per JS zwischen Runde und
+  // Übersicht, ohne die Seite neu zu laden — der Balken wird aber nur einmal
+  // gebaut. `window.TW_NAV.setActive(search)` lässt boundary-pairs.js die
+  // aktive Markierung bei jedem Tab-Wechsel nachziehen, ohne den Balken neu
+  // aufzubauen.
+  function computeActive(item, here, search) {
+    const pathMatch = (item.match || item.href) === here || (item.match || item.href) === location.pathname;
+    if (item.href.includes('?tab=overview')) return pathMatch && search.includes('tab=overview');
+    if (item.label === 'Doppelprüfung') return pathMatch && !search.includes('tab=overview');
+    return pathMatch;
+  }
+
   function build(user) {
     const canUpload = Boolean(user && user.canUpload);
     const here = location.pathname.replace(/\/index\.html$/, '/');
@@ -33,23 +45,25 @@
 
     const links = document.createElement('div');
     links.className = 'tw-nav-links';
-    const search = location.search || '';
+    const entries = [];
     LINKS.forEach((item) => {
       if (item.admin && !canUpload) return;
       const a = document.createElement('a');
       a.href = item.href;
       a.textContent = item.label;
-      const pathMatch = (item.match || item.href) === here || (item.match || item.href) === location.pathname;
-      if (item.href.includes('?tab=overview')) {
-        if (pathMatch && search.includes('tab=overview')) a.classList.add('active');
-      } else if (item.label === 'Doppelprüfung') {
-        if (pathMatch && !search.includes('tab=overview')) a.classList.add('active');
-      } else {
-        if (pathMatch) a.classList.add('active');
-      }
+      if (computeActive(item, here, location.search || '')) a.classList.add('active');
+      entries.push({ a, item });
       links.appendChild(a);
     });
     nav.appendChild(links);
+
+    window.TW_NAV = {
+      setActive(search) {
+        entries.forEach(({ a, item }) => {
+          a.classList.toggle('active', computeActive(item, here, search || ''));
+        });
+      },
+    };
 
     const right = document.createElement('div');
     right.className = 'tw-nav-right';

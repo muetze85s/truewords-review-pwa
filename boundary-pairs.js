@@ -528,12 +528,18 @@
       const pIcon = row.philippSubmitted ? '✓' : 'offen';
       const lIcon = row.lenaSubmitted ? '✓' : 'offen';
       const both = row.philippSubmitted && row.lenaSubmitted;
-      const f1 = both ? fmtF1(row.f1) : '–';
+      // Punkt 18/19: Startpunkt dieser Runde nicht in der aktuellen Folge auffindbar
+      // (z. B. additiv übertragene Runde aus einem anderen Datensatz) — F1/Streitfälle
+      // sind hier keine echten Nullen, sondern schlicht nicht berechenbar.
+      const unresolvable = both && row.unresolvable;
+      const f1 = unresolvable ? '⚠' : (both ? fmtF1(row.f1) : '–');
       // App-F1 nur zeigen, wenn beide abgegeben haben UND keine offenen Streitfälle bestehen.
-      const appF1 = (both && row.openDisputes === 0) ? fmtF1(row.appF1) : '–';
-      const disputes = both
-        ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : (row.resolvedDisputes > 0 ? `${row.resolvedDisputes} geklärt` : '–'))
-        : '–';
+      const appF1 = unresolvable ? '⚠' : ((both && row.openDisputes === 0) ? fmtF1(row.appF1) : '–');
+      const disputes = unresolvable
+        ? '<span class="ov-disputes-open" title="Startpunkt der Runde in der aktuellen Nachrichtenfolge nicht auffindbar — nicht berechenbar.">⚠ unklar</span>'
+        : (both
+          ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : (row.resolvedDisputes > 0 ? `${row.resolvedDisputes} geklärt` : '–'))
+          : '–');
       return `<div class="ov-row ${cls}" data-round="${row.round}">
         <div class="ov-cell ov-c-round" data-label="Runde">${row.round}</div>
         <div class="ov-cell ov-c-philipp" data-label="Philipp"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></div>
@@ -554,13 +560,13 @@
       <div class="ov-table-wrap">
         <div class="ov-table" role="table">
           <div class="ov-row ov-head" role="row" aria-hidden="true">
-            <div class="ov-cell">Runde</div>
-            <div class="ov-cell">Philipp</div>
-            <div class="ov-cell">Lena</div>
-            <div class="ov-cell">F1</div>
-            <div class="ov-cell">Streitfälle</div>
-            <div class="ov-cell">App</div>
-            <div class="ov-cell"></div>
+            <div class="ov-cell ov-c-round">Runde</div>
+            <div class="ov-cell ov-c-philipp">Philipp</div>
+            <div class="ov-cell ov-c-lena">Lena</div>
+            <div class="ov-cell ov-c-f1">F1</div>
+            <div class="ov-cell ov-c-disputes">Streitfälle</div>
+            <div class="ov-cell ov-c-app">App</div>
+            <div class="ov-cell ov-c-open"></div>
           </div>
           ${rows || emptyRow}
         </div>
@@ -587,17 +593,31 @@
       $('dp-round-input').value = state.round;
       loadRound();
       refreshLiveF1();
+      syncUrlAndNav();
     }
   }
 
   // ------------------------------------------------------------------ Tabs
+
+  // Aufgabe 20: hält Adresszeile und die aktive Markierung im Kopfbalken in
+  // Sync mit dem intern (per JS, ohne Neuladen) gewählten Tab/Runde — nav.js
+  // baut den Balken nur einmal und braucht sonst keine Rückmeldung darüber.
+  function syncUrlAndNav() {
+    const search = state.tab === 'overview' ? '?tab=overview' : (state.round ? `?round=${state.round}` : '');
+    const url = `${location.pathname}${search}`;
+    if (`${location.pathname}${location.search}` !== url) history.replaceState(null, '', url);
+    if (window.TW_NAV) window.TW_NAV.setActive(search);
+  }
 
   function setTab(tab) {
     state.tab = tab;
     $('dp-round-picker').classList.toggle('dp-weg', tab !== 'round');
     $('dp-round-view').classList.toggle('dp-weg', tab !== 'round');
     $('dp-overview-view').classList.toggle('dp-weg', tab !== 'overview');
-    if (tab === 'overview') loadOverview();
+    // Punkt 13: Titelzeile bleibt sonst dauerhaft auf „Wird geladen …" stehen,
+    // sobald man einmal zur Übersicht gewechselt hat.
+    if (tab === 'overview') { $('dp-sub').textContent = 'Übersicht'; loadOverview(); }
+    syncUrlAndNav();
   }
 
   // -------------------------------------------------------------------- Init
@@ -608,16 +628,19 @@
       const value = Number($('dp-round-input').value);
       state.round = Number.isInteger(value) && value > 0 ? value : 1;
       loadRound();
+      syncUrlAndNav();
     });
     $('dp-round-prev').addEventListener('click', () => {
       state.round = Math.max(1, state.round - 1);
       $('dp-round-input').value = state.round;
       loadRound();
+      syncUrlAndNav();
     });
     $('dp-round-next').addEventListener('click', () => {
       state.round += 1;
       $('dp-round-input').value = state.round;
       loadRound();
+      syncUrlAndNav();
     });
     $('dp-tolerance').addEventListener('change', (event) => {
       state.tolerance = Number(event.target.value);

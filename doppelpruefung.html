@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -28,13 +28,15 @@
 <main class="dp-wrap">
 
   <section id="dp-round-picker" class="dp-card">
-    <label for="dp-round-input">Runde</label>
-    <div class="dp-round-row">
-      <button type="button" id="dp-round-prev" aria-label="Vorherige Runde">←</button>
-      <input type="number" id="dp-round-input" min="1" step="1" value="1">
-      <button type="button" id="dp-round-next" aria-label="Nächste Runde">→</button>
-      <button type="button" id="dp-round-go" class="primary">Öffnen</button>
+    <div class="dp-round-nav">
+      <button type="button" id="dp-round-prev" class="dp-round-step" aria-label="Vorherige Runde">←</button>
+      <label class="dp-round-field">
+        <span>Runde</span>
+        <input type="number" id="dp-round-input" min="1" step="1" value="1">
+      </label>
+      <button type="button" id="dp-round-next" class="dp-round-step" aria-label="Nächste Runde">→</button>
     </div>
+    <button type="button" id="dp-round-go" class="primary dp-round-open">Öffnen</button>
   </section>
 
   <section id="dp-round-view">

@@ -367,14 +367,21 @@ async function loadRoundWindow(
       SELECT first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1
     `).bind(dataset.id).all<{ first_message_id: string; message_count: number }>();
 
+    // Runden, deren first_message_id in der aktuellen Folge nicht mehr auftaucht
+    // (z. B. additiv aus einem anderen Datensatz übertragene Runden, deren
+    // Start-Nachricht in diesem Datensatz nicht vorkommt), können hier nicht
+    // überschneiden — sie fließen einfach nicht in die Kollisionsprüfung ein,
+    // statt das Anlegen JEDER neuen Runde zu blockieren.
     const idIndex = new Map(sequence.map((message, index) => [rawId(message), index]));
-    const existingRanges = (otherRounds.results || []).map((existing) => {
+    const existingRanges: Array<{ start: number; count: number }> = [];
+    for (const existing of otherRounds.results || []) {
       const start = idIndex.get(existing.first_message_id);
       if (start === undefined) {
-        throw new Error('Eine bestehende Runde ist in der aktuellen Nachrichtenfolge nicht mehr auffindbar.');
+        console.error(`Runde mit first_message_id ${existing.first_message_id} nicht in der Folge von ${dataset.id} auffindbar — aus der Kollisionsprüfung ausgenommen.`);
+        continue;
       }
-      return { start, count: existing.message_count };
-    });
+      existingRanges.push({ start, count: existing.message_count });
+    }
 
     const start = pickRoundStart({
       datasetId: dataset.id,
@@ -400,7 +407,10 @@ async function loadRoundWindow(
 
   const startIndex = sequence.findIndex((message) => rawId(message) === row!.first_message_id);
   if (startIndex < 0) {
-    throw new Error('Der Startpunkt der Runde ist in der Nachrichtenfolge nicht mehr auffindbar.');
+    throw new Error(
+      `Runde ${round} (${dataset.id}): Startpunkt „${row.first_message_id}" ist in der aktuellen Nachrichtenfolge nicht auffindbar. `
+      + 'Möglich, wenn diese Runde additiv aus einem anderen Datensatz übertragen wurde.',
+    );
   }
   const messages = sequence.slice(startIndex, startIndex + row.message_count).map(toView);
   return { round: row, messages };
@@ -908,6 +918,7 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     resolvedDisputes: number;
     f1: number | null;
     appF1: number | null;
+    unresolvable: boolean;
   }> = [];
 
   for (const roundRow of existingRounds) {
@@ -917,9 +928,15 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     let resolved = 0;
     let f1: number | null = null;
     let appF1: number | null = null;
+    // Punkt 18/19: Runden, deren Startpunkt in der aktuellen Nachrichtenfolge
+    // nicht auffindbar ist (z. B. additiv übertragene Runden aus einem
+    // anderen Datensatz), zeigen sonst still F1/Streitfälle = 0/– vor, ohne
+    // dass klar wird, dass hier gar nicht gerechnet werden konnte.
+    let unresolvable = false;
 
     if (pSub && lSub) {
       const startIdx = seqIndex.get(roundRow.first_message_id);
+      if (startIdx === undefined) unresolvable = true;
       if (startIdx !== undefined) {
         const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
         const positions = seamPositions(messages);
@@ -959,6 +976,7 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
       resolvedDisputes: resolved,
       f1,
       appF1,
+      unresolvable,
     });
   }
 
