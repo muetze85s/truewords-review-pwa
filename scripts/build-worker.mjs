@@ -65,6 +65,8 @@ const files = [
   'doppelpruefung.html',
   'boundary-pairs.css',
   'boundary-pairs.js',
+  'migration-check.html',
+  'migration-check.js',
   'nav.css',
   'nav.js',
   'dashboard.html',

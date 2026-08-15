@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="theme-color" content="#f3f2ef">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Migrations-Diagnose</title>
+  <link rel="stylesheet" href="./truewords-theme.css">
+  <link rel="stylesheet" href="./truewords-ui-theme.css">
+  <link rel="stylesheet" href="./boundary-pairs.css">
+  <link rel="stylesheet" href="./nav.css">
+  <script src="./truewords-user-theme.js" defer></script>
+  <script src="./nav.js" defer></script>
+</head>
+<body class="dp">
+  <main class="dp-wrap">
+    <div class="tw-page-head">
+      <div class="tw-page-eyebrow">Nur für Philipp · Nur-Lese-Diagnose</div>
+      <h1>Migrations-Diagnose</h1>
+      <p class="dp-status">Vergleicht die additiv übertragenen Runden 1–17 (philena-2026-pilot-v4-unseen → philena-4y) — dieselbe D1-Datenbank, dieselben Tabellen, nur nach dataset_id gefiltert. Kein separates altes Backup.</p>
+    </div>
+
+    <div id="status" class="dp-status">Wird geladen …</div>
+
+    <div id="summary-wrap" hidden>
+      <div class="ov-stats" id="summary-stats"></div>
+
+      <div class="tw-set">
+        <legend>Gesamtergebnis</legend>
+        <p id="verdict" style="font-size:15px;margin:0 0 8px"></p>
+        <p id="failed-rounds" style="font-size:13px;color:var(--tw-text-muted);margin:0"></p>
+      </div>
+
+      <div class="tw-set">
+        <legend>Abweichungs-Tabelle je Runde</legend>
+        <div style="overflow-x:auto">
+          <table class="tw-optimizer-log-table" id="round-table">
+            <thead>
+              <tr>
+                <th>Runde</th>
+                <th>Verankert</th>
+                <th>Marks alt</th>
+                <th>Marks neu</th>
+                <th>Diff</th>
+                <th>Streitfälle alt</th>
+                <th>Streitfälle neu</th>
+                <th>Diff</th>
+                <th>Fenster alt</th>
+                <th>Fenster neu</th>
+              </tr>
+            </thead>
+            <tbody id="round-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="./migration-check.js" defer></script>
+</body>
+</html>

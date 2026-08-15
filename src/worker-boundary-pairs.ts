@@ -1264,7 +1264,7 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
     if (id && !idToIndex.has(id)) idToIndex.set(id, index);
   });
 
-  const [roundRows, markRows, resolutionRows] = await Promise.all([
+  const [roundRows, markRows, resolutionRows, targetRoundRows, targetMarkCounts, targetResolutionCounts] = await Promise.all([
     env.DB.prepare(`
       SELECT dataset_id, round, first_message_id, message_count FROM review_rounds
       WHERE dataset_id = ?1 ORDER BY round
@@ -1275,6 +1275,17 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
     env.DB.prepare(`
       SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1
     `).bind(baseId).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
+    // Ziel-Datensatz (philena-4y): gleiche Tabellen, andere dataset_id — kein
+    // separater „alter" Speicher, nur eine zweite Zeile je seam/Runde hier.
+    env.DB.prepare(`
+      SELECT round, message_count FROM review_rounds WHERE dataset_id = ?1
+    `).bind(targetId).all<{ round: number; message_count: number }>(),
+    env.DB.prepare(`
+      SELECT round, COUNT(*) AS n FROM review_boundary_marks WHERE dataset_id = ?1 GROUP BY round
+    `).bind(targetId).all<{ round: number; n: number }>(),
+    env.DB.prepare(`
+      SELECT round, COUNT(*) AS n FROM review_boundary_resolutions WHERE dataset_id = ?1 GROUP BY round
+    `).bind(targetId).all<{ round: number; n: number }>(),
   ]);
   const rounds = roundRows.results || [];
 
@@ -1330,6 +1341,28 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
     && marksMatched === marksTotal
     && resolutionsMatched === resolutionsTotal;
 
+  // Abweichungs-Tabelle je Runde: „alt" und „neu" sind dieselbe Tabelle in
+  // derselben D1 — nur nach dataset_id gefiltert (philena-2026-pilot-v4-unseen
+  // vs. philena-4y). Kein separates altes Backup, kein zweites Schema.
+  const targetMessageCountByRound = new Map((targetRoundRows.results || []).map((r) => [r.round, r.message_count]));
+  const targetMarksByRound = new Map((targetMarkCounts.results || []).map((r) => [r.round, r.n]));
+  const targetResolutionsByRound = new Map((targetResolutionCounts.results || []).map((r) => [r.round, r.n]));
+  const failedRoundSet = new Set(failedRounds);
+  const perRound = rounds.map((roundRow) => {
+    const oldMarks = (marksByRound.get(roundRow.round) || []).length;
+    const oldResolutions = (resolutionsByRound.get(roundRow.round) || []).length;
+    const newMarks = targetMarksByRound.get(roundRow.round) ?? 0;
+    const newResolutions = targetResolutionsByRound.get(roundRow.round) ?? 0;
+    const newMessageCount = targetMessageCountByRound.get(roundRow.round) ?? 0;
+    return {
+      round: roundRow.round,
+      anchored: !failedRoundSet.has(roundRow.round),
+      messageCount: { old: roundRow.message_count, new: newMessageCount },
+      marks: { old: oldMarks, new: newMarks, diff: newMarks - oldMarks },
+      resolutions: { old: oldResolutions, new: newResolutions, diff: newResolutions - oldResolutions },
+    };
+  });
+
   return {
     present: true,
     allGreen,
@@ -1348,6 +1381,7 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
       resolved: resolutionsResolved,
       rawRows: rawResolutionRows,
     },
+    perRound,
   };
 }
 
