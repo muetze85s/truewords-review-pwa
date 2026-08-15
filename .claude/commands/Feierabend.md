@@ -1,6 +1,6 @@
 ---
 description: Fasst den heutigen Fortschritt zusammen und schreibt den Abschnitt „Aktueller Fokus" in CLAUDE.md fort
-allowed-tools: Bash(git log:*), Bash(git status:*), Bash(git diff:*), Edit, Read
+allowed-tools: Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Edit, Read
 ---
 
 Es ist Feierabend. Fasse den heutigen Arbeitsstand zusammen und halte ihn so
@@ -25,7 +25,11 @@ Vorgehen:
    - **Offene Punkte:** kurze Liste dessen, was noch aussteht.
    Datum im Format `Stand: JJJJ-MM-TT` mitschreiben.
 
-4. Halte dich kurz und konkret. Keine Platzhalter, nur was tatsächlich passiert
-   ist. Committe die CLAUDE.md-Änderung **nicht** automatisch — das entscheiden wir.
+4. **CLAUDE.md committen und pushen:**
+   - `git add CLAUDE.md`
+   - Commit mit Nachricht `CLAUDE.md: Feierabend-Update — <kurze Zusammenfassung>`
+   - `git push -u origin <aktueller Branch>`
+
+5. Halte dich kurz und konkret. Keine Platzhalter, nur was tatsächlich passiert ist.
 
 $ARGUMENTS
