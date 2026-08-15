@@ -194,5 +194,27 @@
     }
   });
 
+  $('test-push').addEventListener('click', async () => {
+    const btn = $('test-push');
+    const result = $('test-result');
+    btn.disabled = true;
+    btn.textContent = 'Wird gesendet …';
+    result.textContent = '';
+    result.style.color = '';
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST', credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Fehlgeschlagen.');
+      result.textContent = 'Gesendet — die Benachrichtigung sollte gleich erscheinen.';
+      result.style.color = 'var(--tw-status-confirmed)';
+    } catch (err) {
+      result.textContent = err.message || 'Fehler beim Senden.';
+      result.style.color = 'var(--tw-status-unclear)';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test-Push senden';
+    }
+  });
+
   load();
 })();

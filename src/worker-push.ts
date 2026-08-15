@@ -234,6 +234,11 @@ async function handlePushApi(request: Request, env: Env): Promise<Response> {
     if (request.method === 'GET') return getSettings(env);
     if (request.method === 'POST') return saveSettings(request, env);
   }
+  if (url.pathname === '/api/push/test' && request.method === 'POST') {
+    if (reviewer !== 'Philipp') return error('Nur Philipp darf testen.', 403);
+    await notifyReviewer(env, reviewer, 'TrueWords Test', 'Push funktioniert!');
+    return json({ ok: true, sent: true });
+  }
   return error('Endpunkt nicht gefunden.', 404);
 }
 
