@@ -82,8 +82,11 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 ### PWA (Browser)
 
 Statische Seiten, ausgeliefert vom Worker; Service Worker `sw.js` (Cache-Name
-`truewords-review-pwa-server-v35`) precacht Assets und trägt `push`- und
-`notificationclick`-Handler. Hauptseiten:
+`truewords-review-pwa-server-v39`) precacht Assets und trägt `push`- und
+`notificationclick`-Handler. **Fetch-Strategie ist Stale-while-revalidate**
+(Cache antwortet sofort, holt aber immer parallel eine frische Kopie nach) —
+bei künftigen Deploys muss die Cache-Version **nicht mehr** manuell erhöht
+werden, damit Änderungen ankommen. Hauptseiten:
 
 - `login.html` / `account-setup.html` / `reset-password.html` — Zugang
 - `review.html` — Prüfstand (Einzelsegmentierung)
@@ -129,23 +132,75 @@ Ereignisstrom gespeichert wird.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-15 · 13:27_
+_Stand: 2026-08-15 · 19:00_
 
-**Stand heute:** Master-Handoff komplett umgesetzt, deployed und live (Commit
-`27f4f19`, Workflow-Run 31887201669 — `success`, inkl. D1-Migrationen 0010+0011
-gegen die Produktivdatenbank).
+**Stand heute:** Langer Tag, viele Deploys, alle erfolgreich. Letzter Commit
+`b5c9f34`, Branch `claude/segmentation-v5-migration-h0syxc`, kein PR offen,
+Arbeitsverzeichnis sauber (nichts uncommittet). Reihenfolge der heutigen
+Etappen:
 
-**Was sich geändert hat:**
-- **Navigation restlos bereinigt**: Doppelprüfung-interne Runde/Übersicht-Tabs entfernt (nav.js deckt das schon ab), toter Doppelprüfung-Link im Prüfstand-Kopf weg, tote „Zum Prüfstand"-Schaltfläche auf Upload weg (führte auf eine Seite außerhalb des Login-Flows). Navigation läuft jetzt ausschließlich über die eine Tab-Leiste oben.
-- **Übersicht-Tabelle mobil ohne horizontales Scrollen**: `<table>` durch responsives Div-Grid ersetzt — identisches Markup auf allen Größen, per Media Query wird daraus auf dem Handy ein zweizeiliges Karten-Layout (Runde/Philipp/Lena/öffnen + F1/Streitfälle/App darunter).
-- **APP-F1-Spalte** zeigt nur noch einen Wert, wenn beide abgegeben haben **und** keine offenen Streitfälle bestehen (vorher reichte „beide abgegeben").
-- **Zwischenzeiten zentriert**: fehlte bei `.dp-dispute-seam` in der Streitfälle-Ansicht (Runden-Ansicht war schon korrekt) — behoben.
-- **Settings-Seite neu in 4 Abschnitten**: 1 Gerät-Einstellungen, 2 Push-Benachrichtigungen (zwei strukturell identische Module Philipp/Lena — jede Person hat jetzt einen eigenen Schalter für „wenn die andere Person abgibt" und die Streitfall-Erinnerung statt einem gemeinsamen), 3 Optimierung (neu, siehe unten), 4 Datenbank (Dataset-Dropdown, aus dem Kopfbalken hierher verschoben — dort erscheint er nirgendwo mehr).
-- **Schwellwert-Optimizer auf Settings** (neu): zeigt aktuellen Schwellwert (3h, Code-Konstante, rein informativ überschrieben durch nichts), letzte Optimierung, trainierte Runden, bestes F1, Status. „Neu trainieren" ruft `/api/admin/optimize-threshold` auf und persistiert das Ergebnis (neue Tabelle `segment_optimizer_runs`, neuer Endpoint `/api/admin/optimizer-status` für den schnellen Seitenaufruf ohne erneute Gittersuche). Deaktiviert unter 20 beidseitig abgegebenen Runden. Nur Philipp sieht den Abschnitt.
-- Verifiziert mit Playwright (Mock-API) bei 375/768/1280px auf Settings- und Übersicht-Seite: kein horizontales Scrollen, keine Konsolenfehler; Upload/Prüfstand laden weiterhin fehlerfrei ohne doppelte Nav-Buttons.
+1. **Master-Handoff** (`27f4f19`): Konsistenz-Bereinigung, mobiles
+   Div-Grid-Layout für die Übersicht, Settings-Seite in 4 Abschnitte
+   umgebaut, Schwellwert-Optimizer neu (Migrationen 0010+0011).
+2. **Titel/Nav-Polish + Bugfixes** (`a7ea94f`): Seitentitel zentriert,
+   Runden-Navigation neu angeordnet (44×44px Touch-Ziele), Tabellen-Spalten
+   ausgerichtet, iPhone-Safe-Area ergänzt. Dabei zwei echte Bugs gefunden und
+   gefixt: (a) `loadRoundWindow` blockierte das Anlegen **jeder** neuen Runde
+   (auch >18), sobald eine additiv übertragene Alt-Runde ihren Ankerpunkt
+   nicht mehr fand — jetzt werden solche Runden nur aus der Kollisionsprüfung
+   ausgenommen statt alles zu blockieren; (b) `.dp-top` war zusätzlich sticky
+   wie der nav.js-Balken und verschwand beim Scrollen dahinter.
+3. **Service-Worker-Cache-Bug** (`983255e`) — **wichtig, betraf alle
+   vorherigen Deploys**: Cache-Name war seit Ewigkeiten nicht mehr erhöht
+   worden und die Fetch-Strategie war reines Cache-first — CSS/JS wie
+   `boundary-pairs.js` wurden nach einem Deploy nie neu vom Server geholt.
+   Fix: Version gesprungen (jetzt v39) + Strategie auf
+   Stale-while-revalidate umgestellt, damit das künftig nicht mehr manuell
+   gepflegt werden muss.
+4. **Migrations-Diagnose** (`232e35f`, `22a2746`): neue Seite
+   `/migration-check.html` + erweiterter `/api/admin/anchor-check`-Endpunkt
+   zeigt für jede der additiv übertragenen Runden 1–17 Alt- vs. Neu-Zahlen.
+   Ergebnis: **alles grün**, 301/301 Marks, 32/32 Runden verankert, 50/50
+   Streitfälle — keine Daten verloren, keine Rekonstruktion nötig.
+5. **Marks-Nachtrag** (`aee92f4`): neue Seite `/marks-backfill.html` +
+   Endpunkte `/api/admin/marks-backfill-plan` (GET, Vorschau) und
+   `/api/admin/marks-backfill-apply` (POST, Admin-Token). Trägt bei
+   gemeinsam geklärten Streitfällen die Entscheidung auch in die rohen
+   Einzelmarkierungen beider Personen nach. Von Philipp ausgeführt.
+6. **`parseTolerance`-Bug** (`b5c9f34`) — **der eigentliche Grund für die
+   Zahlenverwirrung am Ende des Tages**: `Number(null) === 0` in JS, ein
+   fehlender `?tol=`-Parameter fiel dadurch auf Toleranz 0 statt des
+   beabsichtigten Standards 1 zurück. Betraf `/api/overview` (Übersicht) und
+   `/api/admin/optimize-threshold` (Optimizer) — beide liefen strikter als
+   gedacht. Rundendetail war nicht betroffen (schickt `?tol=1` explizit).
+   Jetzt gefixt.
 
-**Bekannt/offen:**
-- Playwright-Visual-Snapshots (`tests/visual/boundary-pairs.visual.spec.mjs`) brauchen nach dem Tabellen-Umbau ein `--update-snapshots` — nicht Teil des Deploy-Gates (`npm run check`), daher unkritisch.
-- Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt (Philipp: Home-Screen-Icon neu anlegen → Benachrichtigungen erlauben; Lena: dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und prüfen, ob die Benachrichtigung ankommt — auf der Settings-Seite lassen sich beide Richtungen jetzt einzeln an-/abschalten).
-- Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen Grenzen volatil.
-- Arbeit auf Branch `claude/segmentation-v5-migration-h0syxc` (Deploy ist live, kein PR offen).
+**Wichtige Klarstellung für morgen (falls die Frage nochmal aufkommt):**
+App-F1 vergleicht den Algorithmus schon immer gegen `combinedBoundary`
+(rohe Übereinstimmung **plus** geklärte Streitfälle), nie gegen die rohe
+Erstabgabe — das war nie anders und hat sich durch nichts Heutiges
+verändert. Der Marks-Nachtrag ändert nur die rohe „Übereinstimmung"-Zahl
+und die Streitfälle-Zählung, nicht App-F1. Die Zahlenverschiebungen, die
+Philipp gesehen hat, kamen vom `parseTolerance`-Bug (Punkt 6).
+
+**Morgen zuerst:**
+1. **Optimizer neu trainieren** — auf der Settings-Seite „Neu trainieren"
+   klicken. Alle bisherigen `segment_optimizer_runs`-Einträge liefen mit der
+   falschen Toleranz (0 statt 1) und sind damit nicht mehr aussagekräftig.
+2. Prüfen, ob nach dem `parseTolerance`-Fix die Übersicht (F1/Streitfälle je
+   Runde) jetzt mit der Rundendetail-Ansicht übereinstimmt (war vorher bei
+   Runde 10 nachweislich inkonsistent).
+3. Push-Opt-in beider Geräte + Zustell-Test steht weiterhin aus (siehe unten).
+
+**Offene Punkte:**
+- Optimizer-Neutraining ausstehend (s. o.).
+- Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt (Philipp:
+  Home-Screen-Icon neu anlegen → Benachrichtigungen erlauben; Lena:
+  dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und
+  prüfen, ob die Benachrichtigung ankommt — beide Richtungen einzeln
+  an-/abschaltbar auf der Settings-Seite).
+- Playwright-Visual-Snapshots (`tests/visual/boundary-pairs.visual.spec.mjs`)
+  brauchen nach den UI-Umbauten ein `--update-snapshots` — nicht Teil des
+  Deploy-Gates (`npm run check`), daher unkritisch.
+- Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen
+  Grenzen volatil.
