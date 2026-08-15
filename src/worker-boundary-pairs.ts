@@ -1485,6 +1485,132 @@ async function transferBoundaries(request: Request, env: Env): Promise<Response>
   });
 }
 
+// -------------------------------------------- Marks-Nachtrag (beide Reviewer)
+
+/**
+ * Bei einem gemeinsam geklärten Streitfall (BEIDE haben dieselbe Nicht-open-
+ * Entscheidung protokolliert, siehe agreeResolutions) trägt diese Funktion die
+ * geklärte Entscheidung auch in die rohen Einzelmarkierungen (review_boundary_marks)
+ * BEIDER Personen nach — auf ausdrücklichen Wunsch von Philipp, mit dem
+ * Wissen, dass die rohe „Übereinstimmung"-Kennzahl dadurch für diese
+ * konkreten, damals strittigen Nähte rückwirkend keine ursprüngliche
+ * Uneinigkeit mehr zeigt. App-F1/Optimizer brauchen das NICHT — die rechnen
+ * bereits über combinedBoundary (Marks + Resolutions) korrekt.
+ *
+ * decision 'cut'    → beide Reviewer sollen dort mark='cut' stehen haben.
+ * decision 'no_cut' → beide Reviewer sollen dort KEINE Zeile haben (entfernen).
+ * 'open' (nicht beidseitig geklärt) wird nie angefasst.
+ */
+type MarksBackfillChange = {
+  round: number;
+  seamMessageId: string;
+  reviewer: Role;
+  action: 'set_cut' | 'remove';
+  from: 'cut' | 'doubt' | null;
+};
+
+async function computeMarksBackfillPlan(env: Env, datasetId: string): Promise<{
+  datasetId: string;
+  resolvedSeams: number;
+  changes: MarksBackfillChange[];
+  alreadyCorrect: number;
+}> {
+  const [resolutionRows, markRows] = await Promise.all([
+    env.DB.prepare(`
+      SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1
+    `).bind(datasetId).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
+    env.DB.prepare(`
+      SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1
+    `).bind(datasetId).all<{ round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' }>(),
+  ]);
+
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  for (const row of resolutionRows.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
+
+  const markByKey = new Map<string, 'cut' | 'doubt'>();
+  for (const row of markRows.results || []) {
+    markByKey.set(`${row.round}|${row.reviewer}|${row.seam_message_id}`, row.mark);
+  }
+
+  const changes: MarksBackfillChange[] = [];
+  let resolvedSeams = 0;
+  let alreadyCorrect = 0;
+
+  for (const [round, rows] of resByRound) {
+    const agreed = agreeResolutions(rows);
+    for (const entry of agreed) {
+      if (!entry.resolved) continue; // nur beidseitig übereinstimmend geklärte Nähte
+      resolvedSeams += 1;
+      for (const reviewer of ['Philipp', 'Lena'] as Role[]) {
+        const key = `${round}|${reviewer}|${entry.seam_message_id}`;
+        const current = markByKey.get(key) ?? null;
+        if (entry.decision === 'cut') {
+          if (current === 'cut') { alreadyCorrect += 1; continue; }
+          changes.push({ round, seamMessageId: entry.seam_message_id, reviewer, action: 'set_cut', from: current });
+        } else if (entry.decision === 'no_cut') {
+          if (current === null) { alreadyCorrect += 1; continue; }
+          changes.push({ round, seamMessageId: entry.seam_message_id, reviewer, action: 'remove', from: current });
+        }
+      }
+    }
+  }
+
+  return { datasetId, resolvedSeams, changes, alreadyCorrect };
+}
+
+async function getMarksBackfillPlan(env: Env): Promise<Response> {
+  const plan = await computeMarksBackfillPlan(env, env.ACTIVE_DATASET_ID);
+  return json({ ok: true, ...plan });
+}
+
+async function applyMarksBackfill(request: Request, env: Env): Promise<Response> {
+  if (!(await adminAuthorized(request, env))) {
+    return error('Nur der Admin darf den Marks-Nachtrag auslösen.', 403);
+  }
+  let body: { confirm?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return error('Ungültige Anfrage.');
+  }
+  const datasetId = env.ACTIVE_DATASET_ID;
+  if (body.confirm !== datasetId) {
+    return error(`Bestätigung fehlt: confirm muss '${datasetId}' sein.`, 400);
+  }
+
+  const plan = await computeMarksBackfillPlan(env, datasetId);
+  if (plan.changes.length === 0) {
+    return json({ ok: true, applied: 0, ...plan });
+  }
+
+  const now = new Date().toISOString();
+  const statements = plan.changes.map((change) => {
+    if (change.action === 'set_cut') {
+      return env.DB.prepare(`
+        INSERT INTO review_boundary_marks (dataset_id, round, reviewer, seam_message_id, mark, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, 'cut', ?5, ?5)
+        ON CONFLICT(dataset_id, round, reviewer, seam_message_id) DO UPDATE SET mark = 'cut', updated_at = ?5
+      `).bind(datasetId, change.round, change.reviewer, change.seamMessageId, now);
+    }
+    return env.DB.prepare(`
+      DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3 AND seam_message_id = ?4
+    `).bind(datasetId, change.round, change.reviewer, change.seamMessageId);
+  });
+  await env.DB.batch(statements);
+
+  return json({
+    ok: true,
+    applied: plan.changes.length,
+    datasetId: plan.datasetId,
+    resolvedSeams: plan.resolvedSeams,
+    alreadyCorrect: plan.alreadyCorrect,
+    changes: plan.changes,
+  });
+}
+
 // ------------------------------------------------------ Schwellwert-Optimizer
 
 async function optimizeThreshold(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
@@ -1707,11 +1833,16 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
     && url.pathname !== '/api/admin/optimizer-status'
+    && url.pathname !== '/api/admin/marks-backfill-plan'
+    && url.pathname !== '/api/admin/marks-backfill-apply'
   ) return null;
 
-  // Admin-getokte Übertragung: eigener Gate, nicht die Prüfer-Session.
+  // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
   if (url.pathname === '/api/admin/transfer-boundaries' && request.method === 'POST') {
     return await transferBoundaries(request, env);
+  }
+  if (url.pathname === '/api/admin/marks-backfill-apply' && request.method === 'POST') {
+    return await applyMarksBackfill(request, env);
   }
 
   const user = await sessionUser(request, env);
@@ -1745,6 +1876,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/optimizer-status' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf den Optimizer-Status sehen.', 403);
       return await optimizerStatus(env, dataset);
+    }
+
+    if (url.pathname === '/api/admin/marks-backfill-plan' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Marks-Nachtrag sehen.', 403);
+      return await getMarksBackfillPlan(env);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
