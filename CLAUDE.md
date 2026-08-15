@@ -125,18 +125,24 @@ Ereignisstrom gespeichert wird.
 
 _Stand: 2026-08-15_
 
-**Stand heute:** Übersicht ist die zentrale Startseite nach Login. Navigation
-umgestellt: Übersicht · Prüfstand · Doppelprüfung · Upload · Benachrichtigungen.
-Dashboard wird auf die Übersicht umgeleitet. PWA-Manifest hat PNG-Icons und
-alle HTML-Seiten Apple-Meta-Tags. Safari/iPad: Installationsanleitung statt
-generischer Fehlermeldung. SW-Cache v38.
+**Stand heute:** Aufgaben 9–14 sind implementiert, deployed und live
+(Workflow `cloudflare-review.yml` Run 31866713828 — `success`). Commit `d27f1a4`,
+29 Dateien, 401 Zeilen neu. Übersicht ist die Startseite nach Login; Navigation:
+Übersicht · Prüfstand · Doppelprüfung · Upload · Benachrichtigungen. `getOverview()`
+ruft `filteredSequence` einmal + 4 Bulk-SQL statt N+1. PWA-Manifest hat PNG-Icons
+(192+512), alle 15 HTML-Seiten tragen Apple-Meta-Tags. Safari/iPad: Installations-
+anleitung statt generischer Fehlermeldung wenn nicht im Standalone-Modus. SW-Cache v38.
 
-**Nächster Schritt — Push-Opt-in beider Geräte:**
-Philipp **und** Lena öffnen die installierte PWA (Zum-Home-Bildschirm auf iPad!)
-und erlauben Benachrichtigungen. Dann: Lena gibt Runde ab → Philipp
-muss den Sofort-Hinweis bekommen. Kontrolle auf `/push-settings.html`.
+**Morgen zuerst — Push-Opt-in beider Geräte:**
+1. Philipp: altes Home-Screen-Icon löschen → Safari → Seite laden → Teilen → „Zum Home-Bildschirm" → PWA öffnen → Benachrichtigungen erlauben.
+2. Lena: dasselbe auf ihrem iPad.
+3. Lena gibt eine Runde ab → Philipp muss den Sofort-Hinweis bekommen.
+4. Kontrolle: `/push-settings.html` zeigt registrierte Geräte.
+Wenn die Zustellung nicht klappt: `VAPID_*`-Secrets in GitHub Actions prüfen
+(`wrangler.jsonc` Vars vs. Workflow-Secrets), und auf der Konsole
+`/api/push/test` aufrufen (nur Philipp).
 
 **Offene Punkte:**
 - Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt.
 - Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen Grenzen volatil.
-- Kein PR offen; Arbeit liegt auf dem Feature-Branch.
+- Kein PR offen; Arbeit liegt auf Branch `claude/segmentation-v5-migration-h0syxc`.
