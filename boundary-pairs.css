@@ -26,20 +26,6 @@ body.dp {
 .dp-brand { display: flex; flex-direction: column; }
 .dp-brand strong { font-size: 16px; }
 .dp-brand span { font-size: 12.5px; color: var(--tw-text-muted); }
-.dp-tabs { display: flex; gap: 4px; margin-left: auto; }
-.dp-tab {
-  border: 1px solid var(--tw-border);
-  background: var(--tw-surface-secondary);
-  color: var(--tw-text-muted);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.dp-tab.active { background: var(--tw-text); color: var(--tw-surface); border-color: transparent; }
-.dp-back { font-size: 13px; color: var(--tw-text-muted); text-decoration: none; }
-.dp-back:hover { text-decoration: underline; }
 
 .dp-wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 80px; }
 
@@ -194,7 +180,7 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-messages .dp-message-text { font-size: 15.5px; }
 .dp-dispute-messages .dp-message.dim .dp-message-text { font-size: 15.5px; }
 
-.dp-dispute-seam { position: relative; height: 30px; margin: 2px 0; }
+.dp-dispute-seam { position: relative; height: 30px; margin: 2px 0; text-align: center; }
 .dp-dispute-seam .line {
   position: absolute; left: 4px; right: 4px; top: 50%; height: 1px;
   transform: translateY(-50%); background: var(--tw-border);
@@ -257,10 +243,6 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 }
 .dp-dispute-status { font-size: 12px; color: var(--tw-text-muted); margin-top: 6px; }
 
-.dp-overview-table { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
-.dp-overview-table th, .dp-overview-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--tw-border); }
-.dp-overview-table th.n, .dp-overview-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
-.dp-overview-table th { font-size: 12px; color: var(--tw-text-muted); font-weight: 700; }
 .dp-lowdata { background: var(--tw-status-open-surface); border: 1px solid var(--tw-status-open); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 14px; }
 
 @media (max-width: 620px) {
@@ -375,6 +357,36 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 #device-box { display: block; }
 #allow-here { margin-top: 8px; }
 
+/* Master-Handoff: Settings-Seite in 4 Abschnitte gegliedert. */
+.tw-settings-section { margin: 0 0 22px; }
+.tw-settings-heading {
+  font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--tw-text-muted); margin: 0 0 10px;
+}
+/* Zwei identische Push-Module (Philipp/Lena) — nebeneinander auf breiten
+   Screens, gestapelt auf schmalen. Gleiches Markup, nur CSS reflowt. */
+.tw-push-modules { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) {
+  .tw-push-modules { grid-template-columns: 1fr; }
+}
+.tw-push-module { margin: 0; }
+.tw-inline-num { display: flex; align-items: center; gap: 8px; }
+.tw-inline-num > span { margin: 0 !important; white-space: nowrap; }
+.tw-inline-num input[type="number"] { width: 80px; }
+
+.tw-optimizer-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin: 0 0 14px; }
+@media (max-width: 480px) {
+  .tw-optimizer-facts { grid-template-columns: 1fr; }
+}
+.tw-optimizer-facts dt { font-size: 12px; color: var(--tw-text-muted); }
+.tw-optimizer-facts dd { margin: 2px 0 0; font-size: 15px; font-weight: 600; }
+.tw-optimizer-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.tw-optimizer-log-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+.tw-optimizer-log-table th, .tw-optimizer-log-table td {
+  text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--tw-border);
+}
+.tw-optimizer-log-table th { color: var(--tw-text-muted); font-weight: 600; }
+
 /* --- Übersicht (Aufgabe 10) ------------------------------------------- */
 .ov-stats {
   display: flex; gap: 12px; margin: 0 0 16px; flex-wrap: wrap;
@@ -387,32 +399,72 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .ov-stat-num { display: block; font-size: 28px; font-weight: 700; color: var(--tw-text); }
 .ov-stat-label { font-size: 12px; color: var(--tw-text-muted); }
 
-.ov-table-wrap { overflow-x: auto; border: 1px solid var(--tw-border); border-radius: 10px; background: var(--tw-surface-raised, var(--tw-surface)); }
-.ov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.ov-table thead th { padding: 8px 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--tw-text-muted); border-bottom: 2px solid var(--tw-border); text-align: left; white-space: nowrap; }
-.ov-table tbody tr { border-bottom: 1px solid var(--tw-border); cursor: pointer; transition: background .12s; }
-.ov-table tbody tr:last-child { border-bottom: none; }
-.ov-table tbody tr:hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); }
-.ov-table td { padding: 7px 10px; white-space: nowrap; }
-.ov-round-num { font-weight: 600; }
+/* Div-basiertes Grid statt <table>: gleiches Markup auf allen Größen, nur die
+   Spaltenaufteilung ändert sich per Media Query — kein horizontales Scrollen,
+   keine getrennten Mobile-/Desktop-Codepfade. */
+.ov-table-wrap { border: 1px solid var(--tw-border); border-radius: 10px; background: var(--tw-surface-raised, var(--tw-surface)); overflow: hidden; }
+.ov-table { width: 100%; font-size: 14px; }
+.ov-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr 52px 96px 56px 56px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--tw-border);
+}
+.ov-row:last-child { border-bottom: none; }
+.ov-row:not(.ov-head):hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); cursor: pointer; }
+.ov-row.ov-head {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em;
+  color: var(--tw-text-muted); border-bottom: 2px solid var(--tw-border);
+}
+.ov-row.ov-head .ov-cell { white-space: normal; overflow: visible; text-overflow: unset; line-height: 1.25; }
+.ov-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ov-c-round { font-weight: 600; }
 
 .ov-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 .ov-badge.done { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
 .ov-badge.open { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
 
 .ov-disputes-open { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
-.ov-disputes-cell { font-size: 13px; color: var(--tw-text-muted); }
-.ov-f1-cell { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
+.ov-c-disputes { font-size: 13px; color: var(--tw-text-muted); }
+.ov-c-f1, .ov-c-app { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
 
-.ov-go { font-size: 13px; color: var(--tw-philipp-strong); text-decoration: none; font-weight: 500; }
+.ov-go { font-size: 13px; color: var(--tw-philipp-strong); text-decoration: none; font-weight: 500; padding: 4px; display: inline-block; }
 .ov-go:hover { text-decoration: underline; }
 
-tr.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
-tr.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
-tr.ov-both-open { border-left: 3px solid var(--tw-status-open, #b78b43); }
-tr.ov-done { border-left: 3px solid transparent; }
+.ov-row.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
+.ov-row.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
+.ov-row.ov-both-open { border-left: 3px solid var(--tw-status-open, #b78b43); }
+.ov-row.ov-done { border-left: 3px solid transparent; }
 
 .ov-empty { text-align: center; padding: 24px; color: var(--tw-text-muted); }
+
+/* Mobile: zweizeiliges Karten-Layout je Runde statt 7 Spalten in einer Zeile.
+   Zeile 1: Runde · Philipp · Lena · öffnen — Zeile 2: F1 · Streitfälle · App
+   (mit Label-Präfix). Touch-Ziel bleibt die ganze Zeile. */
+@media (max-width: 560px) {
+  .ov-row.ov-head { display: none; }
+  .ov-row {
+    grid-template-columns: auto 1fr 1fr auto;
+    grid-template-areas:
+      "round philipp lena open"
+      "f1 disputes disputes app";
+    row-gap: 6px;
+    padding: 10px;
+  }
+  .ov-c-round { grid-area: round; }
+  .ov-c-philipp { grid-area: philipp; }
+  .ov-c-lena { grid-area: lena; }
+  .ov-c-open { grid-area: open; text-align: right; }
+  .ov-c-f1 { grid-area: f1; font-size: 12px; }
+  .ov-c-disputes { grid-area: disputes; font-size: 12px; }
+  .ov-c-app { grid-area: app; font-size: 12px; text-align: right; }
+  .ov-c-f1::before, .ov-c-disputes::before, .ov-c-app::before {
+    content: attr(data-label) ": "; color: var(--tw-text-muted); font-weight: 400;
+  }
+  .ov-go { padding: 8px 4px; }
+}
 
 .tw-push-install { padding: 10px 14px; font-size: 13.5px; line-height: 1.6; }
 .tw-push-install b { display: block; margin-bottom: 4px; }

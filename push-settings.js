@@ -7,9 +7,12 @@
 
   const CHECKS = [
     'reminders_lena_enabled', 'reminders_philipp_enabled',
-    'notify_philipp_on_lena_submit', 'dispute_alert_enabled',
+    'notify_philipp_on_lena_submit', 'notify_lena_on_philipp_submit',
+    'dispute_alert_philipp_enabled', 'dispute_alert_lena_enabled',
   ];
   const TIMES = ['lena_time_1', 'lena_time_2', 'philipp_time_1', 'philipp_time_2'];
+  // Ein gemeinsamer Schwellwert, in beiden Push-Modulen gespiegelt angezeigt.
+  const THRESHOLD_INPUTS = ['dispute_threshold_philipp', 'dispute_threshold_lena'];
 
   let publicKey = '';
 
@@ -34,7 +37,7 @@
       timeToggle(key).checked = value !== '';
       syncTimeField(key);
     });
-    $('dispute_threshold').value = s.dispute_threshold ?? 5;
+    THRESHOLD_INPUTS.forEach((id) => { $(id).value = s.dispute_threshold ?? 5; });
 
     const dev = data.devices || {};
     $('lena-device').textContent = dev.lenaSubscribed
@@ -68,11 +71,18 @@
     });
   });
 
+  // Beide Schwellwert-Felder spiegeln denselben Wert.
+  THRESHOLD_INPUTS.forEach((id) => {
+    $(id).addEventListener('input', () => {
+      THRESHOLD_INPUTS.forEach((other) => { if (other !== id) $(other).value = $(id).value; });
+    });
+  });
+
   $('push-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     $('save').disabled = true;
     setStatus('Wird gespeichert …', 'working');
-    const payload = { dispute_threshold: Number($('dispute_threshold').value) };
+    const payload = { dispute_threshold: Number($('dispute_threshold_philipp').value) };
     CHECKS.forEach((key) => { payload[key] = $(key).checked ? 1 : 0; });
     // Abgeschaltete Zeit → leeren String senden (der Server schaltet sie damit ab).
     TIMES.forEach((key) => { payload[key] = timeToggle(key).checked ? $(key).value : ''; });
@@ -216,5 +226,139 @@
     }
   });
 
+  // --- Abschnitt 3: Schwellwert-Optimizer ------------------------------------
+
+  const MIN_ROUNDS_FOR_TRAINING = 20;
+  let lastRecentRuns = [];
+
+  // Optimizer-Endpunkte sind datensatzabhängig (wie die Doppelprüfung selbst) —
+  // denselben ?dataset=-Schalter anhängen wie boundary-pairs.js.
+  function withDataset(path) {
+    let dataset = '';
+    try { dataset = new URLSearchParams(location.search).get('dataset') || localStorage.getItem('tw_dataset') || ''; } catch (_) { dataset = ''; }
+    if (!dataset) return path;
+    return path + (path.includes('?') ? '&' : '?') + 'dataset=' + encodeURIComponent(dataset);
+  }
+
+  function fmtDateTime(iso) {
+    if (!iso) return '–';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '–';
+    return date.toLocaleString('de-DE', {
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  function renderOptimizerFacts(data) {
+    $('opt-current').textContent = `${data.currentThresholdHours} Stunden`;
+    const run = data.latestRun;
+    if (run) {
+      $('opt-last-run').textContent = fmtDateTime(run.ranAt);
+      $('opt-rounds').textContent = `${run.roundsUsed} Runden`;
+      $('opt-best-f1').textContent = run.bestF1.toFixed(4);
+    } else {
+      $('opt-last-run').textContent = 'noch nie';
+      $('opt-rounds').textContent = '–';
+      $('opt-best-f1').textContent = '–';
+    }
+    lastRecentRuns = data.recentRuns || [];
+    const ready = data.readyRoundsNow ?? 0;
+    const trainButton = $('opt-train');
+    const hint = $('opt-hint');
+    if (ready < MIN_ROUNDS_FOR_TRAINING) {
+      trainButton.disabled = true;
+      hint.textContent = `Braucht mindestens ${MIN_ROUNDS_FOR_TRAINING} beidseitig abgegebene Runden (aktuell ${ready}).`;
+    } else {
+      trainButton.disabled = false;
+      hint.textContent = `${ready} beidseitig abgegebene Runden verfügbar.`;
+    }
+  }
+
+  async function loadOptimizerStatus() {
+    try {
+      const response = await fetch(withDataset('/api/admin/optimizer-status'), { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Konnte Optimizer-Status nicht laden.');
+      renderOptimizerFacts(data);
+    } catch (caught) {
+      $('opt-status').textContent = `Fehler: ${caught.message}`;
+    }
+  }
+
+  $('opt-train').addEventListener('click', async () => {
+    const button = $('opt-train');
+    const statusEl = $('opt-status');
+    button.disabled = true;
+    statusEl.textContent = 'Training …';
+    try {
+      const response = await fetch(withDataset('/api/admin/optimize-threshold'), { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Optimierung fehlgeschlagen.');
+      statusEl.textContent = 'Idle (bereit)';
+      $('opt-last-run').textContent = fmtDateTime(new Date().toISOString());
+      $('opt-rounds').textContent = `${data.roundsUsed} Runden`;
+      $('opt-best-f1').textContent = data.best ? data.best.f1.toFixed(4) : '–';
+      if (data.best) {
+        setStatus(`Optimierung fertig! Bester Schwellwert: ${data.best.thresholdHours} h (F1 ${data.best.f1.toFixed(4)})`, 'ok');
+      }
+      await loadOptimizerStatus();
+    } catch (caught) {
+      statusEl.textContent = `Fehler: ${caught.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('opt-logs').addEventListener('click', () => {
+    const wrap = $('opt-logs-wrap');
+    const body = $('opt-logs-body');
+    if (!wrap.hidden) { wrap.hidden = true; return; }
+    body.innerHTML = lastRecentRuns.length
+      ? lastRecentRuns.map((run) => `<tr>
+          <td>${fmtDateTime(run.ranAt)}</td>
+          <td>${run.roundsUsed}</td>
+          <td>${run.bestThresholdHours} h</td>
+          <td>${run.bestF1.toFixed(4)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="4">Noch keine Läufe.</td></tr>';
+    wrap.hidden = false;
+  });
+
+  // --- Abschnitt 4: Datenbank (Dataset-Schalter) -----------------------------
+
+  const DATASETS = [
+    { value: '', label: 'Aktiv (Server-Standard)' },
+    { value: 'philena-4y', label: 'philena-4y (4 Jahre)' },
+    { value: 'philena-2026-pilot-v4-unseen', label: 'philena-2026 (Pilot, eingefroren)' },
+  ];
+
+  function currentDataset() {
+    try { return localStorage.getItem('tw_dataset') || ''; } catch (_) { return ''; }
+  }
+
+  function setupDatasetSelect() {
+    const select = $('dataset-select');
+    const active = currentDataset();
+    DATASETS.forEach((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.value;
+      option.textContent = entry.label;
+      if (entry.value === active) option.selected = true;
+      select.appendChild(option);
+    });
+    select.addEventListener('change', () => {
+      try {
+        if (select.value) localStorage.setItem('tw_dataset', select.value);
+        else localStorage.removeItem('tw_dataset');
+      } catch (_) { /* egal */ }
+      const url = new URL(location.href);
+      if (select.value) url.searchParams.set('dataset', select.value);
+      else url.searchParams.delete('dataset');
+      location.href = url.toString();
+    });
+  }
+
+  setupDatasetSelect();
+  loadOptimizerStatus();
   load();
 })();

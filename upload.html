@@ -56,7 +56,6 @@
               <div class="notice">Test 4 erstellt einen eigenen Datensatz und eine eigene Analyseversion. Test 3 wird weder überschrieben noch neu segmentiert. Beim Aktivieren wird Test 4 lediglich zum aktuellen Prüfstand.</div>
               <div class="actions">
                 <button id="submit" class="primary" type="submit" disabled>Test 4 erzeugen und aktivieren</button>
-                <button id="skip" class="secondary" type="button">Zum Prüfstand</button>
               </div>
               <div id="progress-wrap" class="progress-wrap" hidden>
                 <div class="progress-head"><span id="progress-label">Vorbereitung</span><strong id="progress-percent">0 %</strong></div>
@@ -82,19 +81,6 @@
     </div>
   </main>
   <script src="./pilot-v2.js?v=2"></script>
-  <script>
-    (() => {
-      const key = 'truewords/review-after-upload';
-      const status = document.getElementById('status');
-      const markReviewNext = () => sessionStorage.setItem(key, '1');
-      document.getElementById('skip')?.addEventListener('click', markReviewNext, { capture: true });
-      if (status) {
-        new MutationObserver(() => {
-          if (status.dataset.state === 'ok' && status.textContent.includes('Test 4 ist aktiv')) markReviewNext();
-        }).observe(status, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['data-state'] });
-      }
-    })();
-  </script>
-  <script type="module" src="./upload.js?v=16"></script>
+  <script type="module" src="./upload.js?v=17"></script>
 </body>
 </html>

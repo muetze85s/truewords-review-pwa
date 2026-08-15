@@ -24,73 +24,120 @@
     <h1 style="margin:4px 0 6px">Settings</h1>
     <p class="dp-status">Zentrale Steuerung. Zeiten gelten in der Ortszeit der jeweiligen Person (Sommerzeit automatisch).</p>
 
-    <!-- Dieses Gerät: Push-Erlaubnis direkt hier anfordern (ein Klick). -->
-    <div class="tw-set" id="device-box">
-      <legend style="font-weight:700;font-size:13px">Dieses Gerät</legend>
-      <p class="tw-device" id="this-device">Wird geprüft …</p>
-      <button type="button" id="allow-here" class="primary" hidden>Benachrichtigungen auf diesem Gerät erlauben</button>
-      <p class="tw-device" id="allow-error" style="color:var(--tw-status-unclear)"></p>
-    </div>
+    <!-- Abschnitt 1: Gerät-Einstellungen -->
+    <section class="tw-settings-section">
+      <h2 class="tw-settings-heading">1. Gerät-Einstellungen</h2>
+      <div class="tw-set" id="device-box">
+        <legend style="font-weight:700;font-size:13px">Dieses Gerät</legend>
+        <p class="tw-device" id="this-device">Wird geprüft …</p>
+        <button type="button" id="allow-here" class="primary" hidden>Benachrichtigungen auf diesem Gerät erlauben</button>
+        <p class="tw-device" id="allow-error" style="color:var(--tw-status-unclear)"></p>
+      </div>
+    </section>
 
     <form id="push-form">
-      <fieldset class="tw-set">
-        <legend>Erinnerung an Lena · Europe/Berlin</legend>
-        <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> Erinnerungen für Lena aktiv</label>
-        <div class="grid">
-          <label class="tw-timefield">
-            <span><input type="checkbox" class="tw-time-on" data-for="lena_time_1"> Zeit 1</span>
-            <input type="time" id="lena_time_1">
-          </label>
-          <label class="tw-timefield">
-            <span><input type="checkbox" class="tw-time-on" data-for="lena_time_2"> Zeit 2</span>
-            <input type="time" id="lena_time_2">
-          </label>
+      <!-- Abschnitt 2: Push-Benachrichtigungen — zwei identische Module -->
+      <section class="tw-settings-section">
+        <h2 class="tw-settings-heading">2. Push-Benachrichtigungen</h2>
+        <div class="tw-push-modules">
+          <fieldset class="tw-set tw-push-module">
+            <legend>Philipp · Asia/Bangkok</legend>
+            <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> Benachrichtigungen Philipp aktiv</label>
+            <div class="grid">
+              <label class="tw-timefield">
+                <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_1"> Zeit 1</span>
+                <input type="time" id="philipp_time_1">
+              </label>
+              <label class="tw-timefield">
+                <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_2"> Zeit 2</span>
+                <input type="time" id="philipp_time_2">
+              </label>
+            </div>
+            <label class="tw-switch"><input type="checkbox" id="notify_philipp_on_lena_submit"> Wenn Lena eine Runde abgibt → sofort Benachrichtigung</label>
+            <label class="tw-switch"><input type="checkbox" id="dispute_alert_philipp_enabled"> Offene Streitfälle ab Schwelle</label>
+            <label class="tw-inline-num"><span>Schwelle (Anzahl)</span><input type="number" id="dispute_threshold_philipp" min="1" max="999" step="1"></label>
+            <p class="tw-device" id="philipp-device">Dein Gerät: …</p>
+          </fieldset>
+
+          <fieldset class="tw-set tw-push-module">
+            <legend>Lena · Europe/Berlin</legend>
+            <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> Benachrichtigungen Lena aktiv</label>
+            <div class="grid">
+              <label class="tw-timefield">
+                <span><input type="checkbox" class="tw-time-on" data-for="lena_time_1"> Zeit 1</span>
+                <input type="time" id="lena_time_1">
+              </label>
+              <label class="tw-timefield">
+                <span><input type="checkbox" class="tw-time-on" data-for="lena_time_2"> Zeit 2</span>
+                <input type="time" id="lena_time_2">
+              </label>
+            </div>
+            <label class="tw-switch"><input type="checkbox" id="notify_lena_on_philipp_submit"> Wenn Philipp eine Runde abgibt → sofort Benachrichtigung</label>
+            <label class="tw-switch"><input type="checkbox" id="dispute_alert_lena_enabled"> Offene Streitfälle ab Schwelle</label>
+            <label class="tw-inline-num"><span>Schwelle (Anzahl)</span><input type="number" id="dispute_threshold_lena" min="1" max="999" step="1"></label>
+            <p class="tw-device" id="lena-device">Lenas Gerät: …</p>
+          </fieldset>
         </div>
-        <p class="tw-device" id="lena-device">Lenas Gerät: …</p>
-      </fieldset>
 
-      <fieldset class="tw-set">
-        <legend>Erinnerung an Philipp · Asia/Bangkok</legend>
-        <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> Erinnerungen für Philipp aktiv</label>
-        <div class="grid">
-          <label class="tw-timefield">
-            <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_1"> Zeit 1</span>
-            <input type="time" id="philipp_time_1">
-          </label>
-          <label class="tw-timefield">
-            <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_2"> Zeit 2</span>
-            <input type="time" id="philipp_time_2">
-          </label>
+        <div class="tw-note">
+          <strong>Wie die Erinnerungen funktionieren</strong>
+          <ul>
+            <li><b>Zeit 1</b> und <b>Zeit 2</b> sind zwei tägliche Anstoßzeiten. Jede ist einzeln an-/abschaltbar (Häkchen davor) — nur angehakte Zeiten lösen etwas aus.</li>
+            <li>Eine Benachrichtigung erscheint <b>nur, wenn an diesem Tag noch keine Runde abgegeben wurde</b> — es ist keine feste tägliche Erinnerung. Wer seine Runde schon abgegeben hat, wird an dem Tag nicht mehr erinnert.</li>
+            <li>Erreicht die Ortszeit eine angehakte Zeit und die Runde ist noch offen, geht die Erinnerung <b>einmalig</b> raus (pro Zeit und Tag genau einmal).</li>
+            <li>Die Streitfall-Schwelle gilt für beide gemeinsam — jede Person kann den Alarm für sich einzeln an- oder abschalten.</li>
+          </ul>
         </div>
-        <p class="tw-device" id="philipp-device">Dein Gerät: …</p>
-      </fieldset>
 
-      <div class="tw-note">
-        <strong>Wie die Erinnerungen funktionieren</strong>
-        <ul>
-          <li><b>Zeit 1</b> und <b>Zeit 2</b> sind zwei tägliche Anstoßzeiten. Jede ist einzeln an-/abschaltbar (Häkchen davor) — nur angehakte Zeiten lösen etwas aus.</li>
-          <li>Eine Benachrichtigung erscheint <b>nur, wenn an diesem Tag noch keine Runde abgegeben wurde</b> — es ist keine feste tägliche Erinnerung. Wer seine Runde schon abgegeben hat, wird an dem Tag nicht mehr erinnert.</li>
-          <li>Erreicht die Ortszeit eine angehakte Zeit und die Runde ist noch offen, geht die Erinnerung <b>einmalig</b> raus (pro Zeit und Tag genau einmal).</li>
-          <li>Der Haupt­schalter „Erinnerungen … aktiv" schaltet alle Zeiten dieser Person auf einmal ab.</li>
-        </ul>
-      </div>
+        <fieldset class="tw-set" id="test-box">
+          <legend>Test</legend>
+          <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Schickt eine Test-Benachrichtigung an alle deine registrierten Geräte.</p>
+          <button type="button" id="test-push" class="primary">Test-Push senden</button>
+          <p id="test-result" style="font-size:13px;margin:6px 0 0"></p>
+        </fieldset>
+      </section>
 
-      <fieldset class="tw-set">
-        <legend>Weitere Hinweise</legend>
-        <label class="tw-switch"><input type="checkbox" id="notify_philipp_on_lena_submit"> Wenn Lena eine Runde abgibt → sofort an Philipp</label>
-        <label class="tw-switch"><input type="checkbox" id="dispute_alert_enabled"> Offene Streitfälle ab Schwelle → einmal täglich an beide</label>
-        <label><span>Schwelle X (offene Streitfälle)</span><input type="number" id="dispute_threshold" min="1" max="999" step="1"></label>
-      </fieldset>
+      <!-- Abschnitt 3: Optimierung -->
+      <section class="tw-settings-section" id="optimizer-section">
+        <h2 class="tw-settings-heading">3. Optimierung</h2>
+        <div class="tw-set">
+          <legend>Schwellwert-Optimizer</legend>
+          <dl class="tw-optimizer-facts">
+            <div><dt>Aktueller Schwellwert</dt><dd id="opt-current">–</dd></div>
+            <div><dt>Letzte Optimierung</dt><dd id="opt-last-run">–</dd></div>
+            <div><dt>Trainiert auf</dt><dd id="opt-rounds">–</dd></div>
+            <div><dt>Bestes F1 erreicht</dt><dd id="opt-best-f1">–</dd></div>
+            <div><dt>Status</dt><dd id="opt-status">Idle (bereit)</dd></div>
+          </dl>
+          <div class="tw-optimizer-actions">
+            <button type="button" id="opt-train" class="primary">Neu trainieren</button>
+            <button type="button" id="opt-logs">Logs anzeigen</button>
+          </div>
+          <p id="opt-hint" class="tw-device"></p>
+          <div id="opt-logs-wrap" hidden>
+            <table class="tw-optimizer-log-table">
+              <thead><tr><th>Datum</th><th>Runden</th><th>Schwellwert</th><th>F1</th></tr></thead>
+              <tbody id="opt-logs-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Abschnitt 4: Datenbank -->
+      <section class="tw-settings-section">
+        <h2 class="tw-settings-heading">4. Datenbank</h2>
+        <div class="tw-set">
+          <legend>Aktiver Datensatz</legend>
+          <label>
+            <span>Dataset</span>
+            <select id="dataset-select"></select>
+          </label>
+          <p class="tw-device">Wechselt den Prüfdatenbestand für dieses Gerät, ohne Redeploy. Wirkt sich auf alle Seiten aus.</p>
+        </div>
+      </section>
 
       <button id="save" class="primary" type="submit">Speichern</button>
     </form>
-
-    <fieldset class="tw-set" id="test-box">
-      <legend>Test</legend>
-      <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Schickt eine Test-Benachrichtigung an alle deine registrierten Geräte.</p>
-      <button type="button" id="test-push">Test-Push senden</button>
-      <p id="test-result" style="font-size:13px;margin:6px 0 0"></p>
-    </fieldset>
 
     <div id="status" class="dp-status" role="status" aria-live="polite" style="margin-top:12px">Wird geladen …</div>
   </main>

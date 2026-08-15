@@ -529,32 +529,41 @@
       const lIcon = row.lenaSubmitted ? '✓' : 'offen';
       const both = row.philippSubmitted && row.lenaSubmitted;
       const f1 = both ? fmtF1(row.f1) : '–';
-      const appF1 = both ? fmtF1(row.appF1) : '–';
+      // App-F1 nur zeigen, wenn beide abgegeben haben UND keine offenen Streitfälle bestehen.
+      const appF1 = (both && row.openDisputes === 0) ? fmtF1(row.appF1) : '–';
       const disputes = both
         ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : (row.resolvedDisputes > 0 ? `${row.resolvedDisputes} geklärt` : '–'))
         : '–';
-      return `<tr class="${cls}" data-round="${row.round}">
-        <td class="ov-round-num">${row.round}</td>
-        <td class="ov-status-cell"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></td>
-        <td class="ov-status-cell"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></td>
-        <td class="ov-f1-cell">${f1}</td>
-        <td class="ov-disputes-cell">${disputes}</td>
-        <td class="ov-f1-cell">${appF1}</td>
-        <td class="ov-link-cell"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></td>
-      </tr>`;
+      return `<div class="ov-row ${cls}" data-round="${row.round}">
+        <div class="ov-cell ov-c-round" data-label="Runde">${row.round}</div>
+        <div class="ov-cell ov-c-philipp" data-label="Philipp"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></div>
+        <div class="ov-cell ov-c-lena" data-label="Lena"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></div>
+        <div class="ov-cell ov-c-f1" data-label="F1">${f1}</div>
+        <div class="ov-cell ov-c-disputes" data-label="Streitfälle">${disputes}</div>
+        <div class="ov-cell ov-c-app" data-label="App">${appF1}</div>
+        <div class="ov-cell ov-c-open"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></div>
+      </div>`;
     }).join('');
 
     const emptyRow = sorted.length
       ? ''
-      : '<tr><td colspan="7" class="ov-empty">Noch keine Runden angelegt.</td></tr>';
+      : '<p class="ov-empty">Noch keine Runden angelegt.</p>';
 
     $('dp-overview-body').innerHTML = `
       ${statsHtml}
       <div class="ov-table-wrap">
-        <table class="ov-table">
-          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>F1</th><th>Streitfälle</th><th>App</th><th></th></tr></thead>
-          <tbody>${rows || emptyRow}</tbody>
-        </table>
+        <div class="ov-table" role="table">
+          <div class="ov-row ov-head" role="row" aria-hidden="true">
+            <div class="ov-cell">Runde</div>
+            <div class="ov-cell">Philipp</div>
+            <div class="ov-cell">Lena</div>
+            <div class="ov-cell">F1</div>
+            <div class="ov-cell">Streitfälle</div>
+            <div class="ov-cell">App</div>
+            <div class="ov-cell"></div>
+          </div>
+          ${rows || emptyRow}
+        </div>
       </div>`;
 
     $('dp-overview-body').querySelectorAll('.ov-go').forEach((link) => {
@@ -585,9 +594,6 @@
 
   function setTab(tab) {
     state.tab = tab;
-    document.querySelectorAll('.dp-tab').forEach((button) => {
-      button.classList.toggle('active', button.dataset.tab === tab);
-    });
     $('dp-round-picker').classList.toggle('dp-weg', tab !== 'round');
     $('dp-round-view').classList.toggle('dp-weg', tab !== 'round');
     $('dp-overview-view').classList.toggle('dp-weg', tab !== 'overview');
@@ -597,10 +603,6 @@
   // -------------------------------------------------------------------- Init
 
   function boot() {
-    $('dp-tabs').addEventListener('click', (event) => {
-      const button = event.target.closest('.dp-tab');
-      if (button) setTab(button.dataset.tab);
-    });
     $('dp-submit').addEventListener('click', submitRound);
     $('dp-round-go').addEventListener('click', () => {
       const value = Number($('dp-round-input').value);

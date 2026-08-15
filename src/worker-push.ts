@@ -81,7 +81,10 @@ type Settings = {
   lena_tz: string;
   philipp_tz: string;
   notify_philipp_on_lena_submit: number;
+  notify_lena_on_philipp_submit: number;
   dispute_alert_enabled: number;
+  dispute_alert_philipp_enabled: number;
+  dispute_alert_lena_enabled: number;
   dispute_threshold: number;
 };
 
@@ -98,7 +101,10 @@ async function loadSettings(env: Env): Promise<Settings> {
     lena_tz: 'Europe/Berlin',
     philipp_tz: 'Asia/Bangkok',
     notify_philipp_on_lena_submit: 1,
+    notify_lena_on_philipp_submit: 1,
     dispute_alert_enabled: 1,
+    dispute_alert_philipp_enabled: 1,
+    dispute_alert_lena_enabled: 1,
     dispute_threshold: 5,
   };
 }
@@ -185,6 +191,9 @@ async function saveSettings(request: Request, env: Env): Promise<Response> {
   };
   const current = await loadSettings(env);
   const threshold = Number(body.dispute_threshold);
+  const nextThreshold = Number.isInteger(threshold) && threshold >= 1 && threshold <= 999 ? threshold : current.dispute_threshold;
+  const nextDisputePhilipp = bool(body.dispute_alert_philipp_enabled);
+  const nextDisputeLena = bool(body.dispute_alert_lena_enabled);
   const next: Settings = {
     reminders_lena_enabled: bool(body.reminders_lena_enabled),
     reminders_philipp_enabled: bool(body.reminders_philipp_enabled),
@@ -195,21 +204,27 @@ async function saveSettings(request: Request, env: Env): Promise<Response> {
     lena_tz: current.lena_tz,
     philipp_tz: current.philipp_tz,
     notify_philipp_on_lena_submit: bool(body.notify_philipp_on_lena_submit),
-    dispute_alert_enabled: bool(body.dispute_alert_enabled),
-    dispute_threshold: Number.isInteger(threshold) && threshold >= 1 && threshold <= 999 ? threshold : current.dispute_threshold,
+    notify_lena_on_philipp_submit: bool(body.notify_lena_on_philipp_submit),
+    // Rückwärtskompatible Sammelspalte: „an" solange mindestens eine Person den Alarm bekommt.
+    dispute_alert_enabled: (nextDisputePhilipp || nextDisputeLena) ? 1 : 0,
+    dispute_alert_philipp_enabled: nextDisputePhilipp,
+    dispute_alert_lena_enabled: nextDisputeLena,
+    dispute_threshold: nextThreshold,
   };
   await env.DB.prepare(`
     UPDATE push_settings SET
       reminders_lena_enabled = ?1, reminders_philipp_enabled = ?2,
       lena_time_1 = ?3, lena_time_2 = ?4, philipp_time_1 = ?5, philipp_time_2 = ?6,
-      notify_philipp_on_lena_submit = ?7, dispute_alert_enabled = ?8, dispute_threshold = ?9,
-      updated_at = ?10
+      notify_philipp_on_lena_submit = ?7, notify_lena_on_philipp_submit = ?8,
+      dispute_alert_enabled = ?9, dispute_alert_philipp_enabled = ?10, dispute_alert_lena_enabled = ?11,
+      dispute_threshold = ?12, updated_at = ?13
     WHERE id = 1
   `).bind(
     next.reminders_lena_enabled, next.reminders_philipp_enabled,
     next.lena_time_1, next.lena_time_2, next.philipp_time_1, next.philipp_time_2,
-    next.notify_philipp_on_lena_submit, next.dispute_alert_enabled, next.dispute_threshold,
-    new Date().toISOString(),
+    next.notify_philipp_on_lena_submit, next.notify_lena_on_philipp_submit,
+    next.dispute_alert_enabled, next.dispute_alert_philipp_enabled, next.dispute_alert_lena_enabled,
+    next.dispute_threshold, new Date().toISOString(),
   ).run();
   return json({ ok: true, settings: next });
 }
@@ -296,9 +311,12 @@ async function maybeNotifyOnSubmit(env: Env, round: number, request: Request, re
     const data = await response.json().catch(() => null) as { ok?: boolean; submitted?: boolean } | null;
     if (!data?.ok || !data?.submitted) return;
     const settings = await loadSettings(env);
-    if (!settings.notify_philipp_on_lena_submit) return;
+    // Bidirektional, je Person einzeln abschaltbar: Wenn Lena eingibt → Philipp
+    // benachrichtigen (sofern Philipp das will); wenn Philipp eingibt → Lena
+    // benachrichtigen (sofern Lena das will).
+    const enabled = reviewer === 'Lena' ? settings.notify_philipp_on_lena_submit : settings.notify_lena_on_philipp_submit;
+    if (!enabled) return;
 
-    // Bidirektional: Wenn Lena eingibt → Philipp benachrichtigen; wenn Philipp eingibt → Lena benachrichtigen.
     const notifyTo: Role = reviewer === 'Lena' ? 'Philipp' : 'Lena';
     const fromWho = reviewer === 'Lena' ? 'lena_submit' : 'philipp_submit';
     const fromText = reviewer === 'Lena' ? 'Lena hat Runde' : 'Philipp hat Runde';
@@ -330,18 +348,20 @@ async function runScheduled(env: Env): Promise<void> {
     console.error('openDisputeTotal failed', caught);
   }
 
-  const roleConfig: Array<{ reviewer: Role; tz: string; times: string[]; enabled: boolean }> = [
+  const roleConfig: Array<{ reviewer: Role; tz: string; times: string[]; enabled: boolean; disputeAlertEnabled: boolean }> = [
     {
       reviewer: 'Lena',
       tz: settings.lena_tz,
       times: [settings.lena_time_1, settings.lena_time_2],
       enabled: Boolean(settings.reminders_lena_enabled),
+      disputeAlertEnabled: Boolean(settings.dispute_alert_lena_enabled),
     },
     {
       reviewer: 'Philipp',
       tz: settings.philipp_tz,
       times: [settings.philipp_time_1, settings.philipp_time_2],
       enabled: Boolean(settings.reminders_philipp_enabled),
+      disputeAlertEnabled: Boolean(settings.dispute_alert_philipp_enabled),
     },
   ];
 
@@ -367,10 +387,10 @@ async function runScheduled(env: Env): Promise<void> {
       await notifyReviewer(env, config.reviewer, 'TrueWords', 'Erinnerung: Deine Runde wartet.');
     }
 
-    // Streitfall-Warnung — an beide, einmal je Ortstag pro Person.
+    // Streitfall-Warnung — je Person einzeln abschaltbar, einmal je Ortstag.
     const disputeSent = await alreadySent(env, config.reviewer, 'dispute', ymd);
     if (disputeAlertDue({
-      enabled: Boolean(settings.dispute_alert_enabled),
+      enabled: config.disputeAlertEnabled,
       openCount: openDisputes,
       threshold: settings.dispute_threshold,
       sentToday: disputeSent,

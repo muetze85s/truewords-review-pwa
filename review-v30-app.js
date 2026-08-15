@@ -501,7 +501,7 @@
       <header class="tw-topbar">
         <div class="tw-brand"><div class="tw-logo" aria-hidden="true"></div><div class="tw-brand-copy"><strong>TrueWords</strong><span>${escapeHtml(state.dataset?.name || 'Prüfstand')}</span></div></div>
         <div class="tw-mobile-summary" data-mobile-summary></div>
-        <div class="tw-top-actions">${reviewerControl()}<a class="tw-icon-btn" href="/doppelpruefung.html" aria-label="Doppelprüfung" title="Doppelprüfung">${icon('split')}</a><button class="tw-icon-btn" type="button" data-nav="theme" aria-label="Darstellung wechseln"></button><button class="tw-profile" type="button" data-profile aria-label="Profil">${activeReviewer() === 'Lena' ? 'L' : 'P'}</button></div>
+        <div class="tw-top-actions">${reviewerControl()}<button class="tw-icon-btn" type="button" data-nav="theme" aria-label="Darstellung wechseln"></button><button class="tw-profile" type="button" data-profile aria-label="Profil">${activeReviewer() === 'Lena' ? 'L' : 'P'}</button></div>
       </header>
       <nav class="tw-slider" data-situation-slider aria-label="Situationen"><div class="tw-embla-viewport" data-embla-viewport><div class="tw-embla-container" data-situation-slider-container></div></div></nav>
       <main class="tw-main"><div class="tw-workspace">

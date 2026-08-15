@@ -2,15 +2,9 @@
   'use strict';
   // Persistente Navigation: baut oben einen Balken mit Links zu allen Seiten der
   // Review-PWA. Rolle wird über /api/auth/me bestimmt; Upload-/Admin-/Push-Links
-  // erscheinen nur für Personen mit canUpload (Philipp). Enthält zugleich den
-  // ?dataset=-Schalter (Aufgabe 1): Wahl wird pro Gerät gemerkt und beim Wechsel
-  // neu geladen, ganz ohne Redeploy.
-
-  const DATASETS = [
-    { value: '', label: 'Aktiv (Server-Standard)' },
-    { value: 'philena-4y', label: 'philena-4y (4 Jahre)' },
-    { value: 'philena-2026-pilot-v4-unseen', label: 'philena-2026 (Pilot, eingefroren)' },
-  ];
+  // erscheinen nur für Personen mit canUpload (Philipp). Der ?dataset=-Schalter
+  // lebt ausschließlich auf der Settings-Seite (Abschnitt „Datenbank") — hier im
+  // Balken erscheint er nirgendwo, um Konsistenz über alle Seiten zu wahren.
 
   // Nur die tatsächlich funktionierenden Seiten. Dashboard steht vorn (zentrale
   // Startseite). `admin` = nur mit canUpload. Quiz/Situationen wurden entfernt;
@@ -23,17 +17,6 @@
     { href: '/upload.html', label: 'Upload', admin: true },
     { href: '/push-settings.html', label: 'Settings', admin: true },
   ];
-
-  function currentDataset() {
-    try { return localStorage.getItem('tw_dataset') || ''; } catch (_) { return ''; }
-  }
-
-  function setDataset(value) {
-    try {
-      if (value) localStorage.setItem('tw_dataset', value);
-      else localStorage.removeItem('tw_dataset');
-    } catch (_) { /* egal */ }
-  }
 
   function build(user) {
     const canUpload = Boolean(user && user.canUpload);
@@ -70,29 +53,6 @@
 
     const right = document.createElement('div');
     right.className = 'tw-nav-right';
-
-    // Dataset-Schalter nur auf Settings-Seite anzeigen
-    if (location.pathname === '/push-settings.html') {
-      const ds = document.createElement('select');
-      ds.className = 'tw-nav-ds';
-      ds.setAttribute('aria-label', 'Datensatz wählen');
-      const active = currentDataset();
-      DATASETS.forEach((entry) => {
-        const option = document.createElement('option');
-        option.value = entry.value;
-        option.textContent = entry.label;
-        if (entry.value === active) option.selected = true;
-        ds.appendChild(option);
-      });
-      ds.addEventListener('change', () => {
-        setDataset(ds.value);
-        const url = new URL(location.href);
-        if (ds.value) url.searchParams.set('dataset', ds.value);
-        else url.searchParams.delete('dataset');
-        location.href = url.toString();
-      });
-      right.appendChild(ds);
-    }
 
     if (user) {
       const logout = document.createElement('button');

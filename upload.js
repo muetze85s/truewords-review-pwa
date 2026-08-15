@@ -15,7 +15,6 @@ const rawInput = document.getElementById('raw-file');
 const detectedFiles = document.getElementById('detected-files');
 const status = document.getElementById('status');
 const submit = document.getElementById('submit');
-const skip = document.getElementById('skip');
 const logout = document.getElementById('logout');
 const progressWrap = document.getElementById('progress-wrap');
 const progress = document.getElementById('progress');
@@ -341,7 +340,6 @@ form.addEventListener('submit', async (event) => {
     submit.disabled = !selected;
   }
 });
-skip.addEventListener('click', () => { location.href = '/situation-info.html'; });
 logout.addEventListener('click', async () => {
   try { await fetchJson('/api/auth/logout', { method: 'POST' }); } catch {}
   location.replace('/login.html');

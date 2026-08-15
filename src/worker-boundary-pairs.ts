@@ -1550,6 +1550,23 @@ async function optimizeThreshold(env: Env, dataset: DatasetRow, url: URL): Promi
 
   const best = results.reduce((a, b) => (b.f1 > a.f1 ? b : a), results[0]);
 
+  // Rein informativer Verlauf für die Settings-Seite — ändert nichts an der
+  // tatsächlich laufenden Segmentierung (die bleibt PAUSE_BOUNDARY_HOURS).
+  if (best) {
+    try {
+      await env.DB.prepare(`
+        INSERT INTO segment_optimizer_runs
+          (dataset_id, ran_at, rounds_used, tolerance, doubt_mode, best_threshold_minutes, best_threshold_hours, best_f1)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+      `).bind(
+        dataset.id, new Date().toISOString(), roundData.length, tolerance, doubtMode,
+        best.thresholdMinutes, best.thresholdHours, best.f1,
+      ).run();
+    } catch (caught) {
+      console.error('optimizer run logging failed', caught);
+    }
+  }
+
   return json({
     ok: true,
     dataset: dataset.id,
@@ -1566,6 +1583,61 @@ async function optimizeThreshold(env: Env, dataset: DatasetRow, url: URL): Promi
   });
 }
 
+type OptimizerRunRow = {
+  ran_at: string;
+  rounds_used: number;
+  tolerance: number;
+  doubt_mode: string;
+  best_threshold_minutes: number;
+  best_threshold_hours: number;
+  best_f1: number;
+};
+
+/** Leichtgewichtiger Status für den Seitenaufruf: letzter Lauf + aktuelle
+ * Anzahl beidseitig abgegebener Runden, ohne die teure Gittersuche erneut
+ * auszuführen. */
+async function optimizerStatus(env: Env, dataset: DatasetRow): Promise<Response> {
+  const [latestRun, recentRuns, readyRow] = await Promise.all([
+    env.DB.prepare(
+      'SELECT * FROM segment_optimizer_runs WHERE dataset_id = ?1 ORDER BY ran_at DESC LIMIT 1',
+    ).bind(dataset.id).first<OptimizerRunRow>(),
+    env.DB.prepare(
+      'SELECT * FROM segment_optimizer_runs WHERE dataset_id = ?1 ORDER BY ran_at DESC LIMIT 10',
+    ).bind(dataset.id).all<OptimizerRunRow>(),
+    env.DB.prepare(`
+      SELECT COUNT(*) AS n FROM (
+        SELECT round FROM review_round_submissions WHERE dataset_id = ?1
+        GROUP BY round HAVING COUNT(DISTINCT reviewer) = 2
+      )
+    `).bind(dataset.id).first<{ n: number }>(),
+  ]);
+
+  return json({
+    ok: true,
+    dataset: dataset.id,
+    currentThresholdHours: 3,
+    readyRoundsNow: readyRow?.n ?? 0,
+    latestRun: latestRun ? {
+      ranAt: latestRun.ran_at,
+      roundsUsed: latestRun.rounds_used,
+      tolerance: latestRun.tolerance,
+      doubtMode: latestRun.doubt_mode,
+      bestThresholdMinutes: latestRun.best_threshold_minutes,
+      bestThresholdHours: latestRun.best_threshold_hours,
+      bestF1: latestRun.best_f1,
+    } : null,
+    recentRuns: (recentRuns.results || []).map((row) => ({
+      ranAt: row.ran_at,
+      roundsUsed: row.rounds_used,
+      tolerance: row.tolerance,
+      doubtMode: row.doubt_mode,
+      bestThresholdMinutes: row.best_threshold_minutes,
+      bestThresholdHours: row.best_threshold_hours,
+      bestF1: row.best_f1,
+    })),
+  });
+}
+
 // ----------------------------------------------------------- Verdrahtung
 
 async function boundaryPairsApi(request: Request, env: Env): Promise<Response | null> {
@@ -1578,6 +1650,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
+    && url.pathname !== '/api/admin/optimizer-status'
   ) return null;
 
   // Admin-getokte Übertragung: eigener Gate, nicht die Prüfer-Session.
@@ -1611,6 +1684,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf den Optimizer aufrufen.', 403);
       return await optimizeThreshold(env, dataset, url);
+    }
+
+    if (url.pathname === '/api/admin/optimizer-status' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Optimizer-Status sehen.', 403);
+      return await optimizerStatus(env, dataset);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);

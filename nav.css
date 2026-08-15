@@ -50,16 +50,6 @@
   gap: 8px;
   flex: 0 0 auto;
 }
-.tw-nav-ds {
-  background: rgba(255, 255, 255, 0.10);
-  color: #f6f2ec;
-  border: 1px solid rgba(255, 255, 255, 0.20);
-  border-radius: 8px;
-  padding: 6px 8px;
-  font: inherit;
-  max-width: 44vw;
-}
-.tw-nav-ds option { color: #1f2933; }
 .tw-nav-logout {
   background: transparent;
   color: #d7dee5;
