@@ -1,0 +1,1 @@
+Lies die Datei CLAUDE.md im Projekt-Root vollständig ein und melde dich mit einer kurzen Zusammenfassung des aktuellen Fokus und der offenen Punkte zurück. Orientiere dich dabei am Abschnitt „Aktueller Fokus". Fasse dich kurz — maximal 5–6 Sätze.
