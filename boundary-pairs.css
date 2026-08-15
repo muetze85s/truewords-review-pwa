@@ -139,6 +139,11 @@ body.dp {
 [data-reviewer="Lena"] .dp-seam[data-mark="cut"] { background: var(--tw-lena-surface); }
 [data-reviewer="Lena"] .dp-seam[data-mark="cut"] .line { background: var(--tw-lena); height: 2px; }
 [data-reviewer="Lena"] .dp-seam[data-mark="cut"] .label { background: var(--tw-lena-surface); color: var(--tw-lena-text); font-weight: 700; }
+/* Agreement lines: dashed pattern with alternating Philipp (Türkis) and Lena (Rosa) */
+.dp-seam[data-agreement="true"] .line {
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
+}
 .dp-seam[data-mark="doubt"] { background: var(--tw-status-open-surface); }
 .dp-seam[data-mark="doubt"] .line { background: var(--tw-status-open); height: 2px; border-top: 1px dashed var(--tw-status-open); }
 .dp-seam[data-mark="doubt"] .label { background: var(--tw-status-open-surface); color: var(--tw-status-open); font-weight: 700; }
@@ -202,8 +207,14 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-seam.central .label {
   color: var(--tw-status-unclear); font-weight: 700; background: var(--tw-status-unclear-surface);
 }
+.dp-dispute-seam.marked-philipp .line { background: var(--tw-philipp); }
 .dp-dispute-seam.marked-philipp .label { color: var(--tw-philipp-text); background: var(--tw-philipp-surface); }
+.dp-dispute-seam.marked-lena .line { background: var(--tw-lena); }
 .dp-dispute-seam.marked-lena .label { color: var(--tw-lena-text); background: var(--tw-lena-surface); }
+.dp-dispute-seam.marked-both .line {
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
+}
 .dp-dispute-seam.marked-both .label { color: var(--tw-status-open); background: var(--tw-status-open-surface); }
 .dp-dispute-seam.central.marked-philipp .line,
 .dp-dispute-seam.central.marked-lena .line,

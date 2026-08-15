@@ -287,20 +287,26 @@ async function sentReminderSlots(env: Env, reviewer: Role, ymd: string): Promise
   return (rows.results || []).map((row) => Number(row.kind.split(':')[1])).filter((slot) => Number.isInteger(slot));
 }
 
-/** Sofort-Hinweis: hat Lena eine Runde neu abgegeben, geht das an Philipp. */
+/** Sofort-Hinweis: hat Lena/Philipp eine Runde neu abgegeben, geht das an den anderen. */
 async function maybeNotifyOnSubmit(env: Env, round: number, request: Request, response: Response): Promise<void> {
   try {
     const reviewer = await sessionReviewer(request, env);
-    if (reviewer !== 'Lena') return;
+    if (reviewer !== 'Lena' && reviewer !== 'Philipp') return;
     // `response` ist bereits ein dedizierter Klon (siehe fetch) — direkt lesen.
     const data = await response.json().catch(() => null) as { ok?: boolean; submitted?: boolean } | null;
     if (!data?.ok || !data?.submitted) return;
     const settings = await loadSettings(env);
     if (!settings.notify_philipp_on_lena_submit) return;
+
+    // Bidirektional: Wenn Lena eingibt → Philipp benachrichtigen; wenn Philipp eingibt → Lena benachrichtigen.
+    const notifyTo: Role = reviewer === 'Lena' ? 'Philipp' : 'Lena';
+    const fromWho = reviewer === 'Lena' ? 'lena_submit' : 'philipp_submit';
+    const fromText = reviewer === 'Lena' ? 'Lena hat Runde' : 'Philipp hat Runde';
+
     // Dedup je Runde (ymd fix '-'), damit ein erneutes Abgeben nicht doppelt meldet.
-    if (await alreadySent(env, 'Philipp', `lena_submit:${round}`, '-')) return;
-    await markSent(env, 'Philipp', `lena_submit:${round}`, '-');
-    await notifyReviewer(env, 'Philipp', 'TrueWords', `Lena hat Runde ${round} abgegeben.`);
+    if (await alreadySent(env, notifyTo, `${fromWho}:${round}`, '-')) return;
+    await markSent(env, notifyTo, `${fromWho}:${round}`, '-');
+    await notifyReviewer(env, notifyTo, 'TrueWords', `${fromText} ${round} abgegeben.`);
   } catch (caught) {
     console.error('Submit notify failed', caught);
   }
