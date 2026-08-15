@@ -76,6 +76,8 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 - `0007` Doppelprüfung (`review_rounds`, `review_marks`, `review_round_submissions`, `review_resolutions`)
 - `0008` Streitfall-Auflösung „beide müssen zustimmen" (`ON CONFLICT(dataset_id, round, seam_message_id, decided_by)`)
 - `0009` Web-Push (`push_subscriptions`, `push_settings` (Singleton id=1), `push_state` für Dedup)
+- `0010` Push-Einstellungen symmetrisch: `notify_lena_on_philipp_submit`, `dispute_alert_philipp_enabled`, `dispute_alert_lena_enabled` (je Person einzeln abschaltbar statt ein geteilter Schalter)
+- `0011` `segment_optimizer_runs` — Verlauf der Schwellwert-Optimierung (rein informativ, ändert nicht die laufende Segmentierung)
 
 ### PWA (Browser)
 
@@ -85,11 +87,11 @@ Statische Seiten, ausgeliefert vom Worker; Service Worker `sw.js` (Cache-Name
 
 - `login.html` / `account-setup.html` / `reset-password.html` — Zugang
 - `review.html` — Prüfstand (Einzelsegmentierung)
-- `doppelpruefung.html` + `boundary-pairs.js`/`.css` — Doppelprüfung, Vergleich, Live-F1
-- `situation-info.html`, `situation-quiz.html` — Situationskunde
+- `doppelpruefung.html` + `boundary-pairs.js`/`.css` — Doppelprüfung, Vergleich, Live-F1, Übersicht als responsives Div-Grid (kein `<table>`, kein horizontales Scrollen auf Mobile)
+- `situation-info.html`, `situation-quiz.html` — Situationskunde (nicht mehr im aktiven Login-Flow, Login springt direkt auf die Übersicht)
 - `upload.html`, `admin.html`, `analysis-import.html` — Betrieb (nur `canUpload`/Philipp)
-- `push-settings.html` — Benachrichtigungssteuerung (serverseitig nur Philipp)
-- `nav.js`/`nav.css` — persistente Navigation über alle Seiten, rollenbewusst, inkl. `?dataset=`-Schalter
+- `push-settings.html` — Settings, 4 Abschnitte: Gerät-Einstellungen, Push-Benachrichtigungen (zwei symmetrische Module Philipp/Lena), Optimierung (Schwellwert-Optimizer-Verlauf + „Neu trainieren"), Datenbank (`?dataset=`-Schalter)
+- `nav.js`/`nav.css` — persistente Navigation über alle Seiten (TrueWords | Übersicht | Prüfstand | Doppelprüfung | Upload | Settings), rollenbewusst; **kein** Dataset-Schalter mehr im Kopfbalken — der lebt ausschließlich auf der Settings-Seite
 
 Reine Logik liegt in `.mjs`-Modulen (`boundary-pairs-logic.mjs`,
 `push-schedule-logic.mjs`, `push-send.mjs`, `segmentation-v4.mjs`) mit
@@ -113,7 +115,7 @@ Ereignisstrom gespeichert wird.
 ### In Arbeit / zuletzt umgesetzt
 
 - Web-Push vollständig implementiert (VAPID/`aes128gcm`, Erinnerungen je Zeitzone, Sofort-Hinweis bei Lenas Abgabe, Streitfall-Alarm ab Schwelle, 15-Min-Cron). Live-Zustellung erfordert gesetzte `VAPID_*`-Secrets **und** Geräte-Opt-in je Browser.
-- **Web-Push bidirektional** (Handoff 8): Wenn Lena eingibt → Philipp benachrichtigt; wenn Philipp eingibt → Lena benachrichtigt. Nutzung der bestehenden Einstellung.
+- **Web-Push bidirektional, je Person einzeln abschaltbar**: Wenn Lena eingibt → Philipp benachrichtigt (`notify_philipp_on_lena_submit`); wenn Philipp eingibt → Lena benachrichtigt (`notify_lena_on_philipp_submit`, Migration 0010). Ebenso die Streitfall-Erinnerung: `dispute_alert_philipp_enabled`/`dispute_alert_lena_enabled` statt einem geteilten Schalter.
 - Live-F1 in der Doppelprüfung: nach jeder Annotation Neuberechnung und Anzeige, **ohne** automatische Parameteränderung.
 - Persistente Navigation über alle Seiten (mobil/iPad-tauglich).
 - **Übersicht als Startseite** (Runden-Tabelle, Aufgabe 10): nach Login landet man auf der Übersicht (Doppelprüfung-Tab). Tabelle aller Runden: Philipp ✓/offen, Lena ✓/offen, offene Streitfälle, Direktlink. Farbcode: Türkis=Philipp offen, Rosa=Lena offen, Gelb=beide offen, neutral=komplett.
@@ -123,28 +125,27 @@ Ereignisstrom gespeichert wird.
 - **Safari/iPad Push** (Aufgabe 13): iOS-Erkennung in `push-enable.js`/`push-settings.js` — Installationsanleitung statt Fehlermeldung im Browser-Modus.
 - **Konsistenz-Aufräum Handoff 1–4, 7**: Dataset-Schalter nur auf Settings, Nav-Buttons weg, Tabellenspalten-Reihenfolge, F1-Text entfernt.
 - **Konsistenz-Aufräum Handoff 5–6**: Grenzlinien-Styling (Türkis Philipp, Rosa Lena, dashed alternierend bei Übereinstimmung), Namen durchgehend gefärbt.
+- **Master-Handoff (Konsistenz + Mobile + Settings-Neubau + Optimizer)**: siehe unten.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-15 · 11:33_
+_Stand: 2026-08-15 · 13:27_
 
-**Stand heute:** Handoff Phase 2 (Konsistenz-Aufräumarbeiten) abgeschlossen.
-- Commit `b4e41f9`: Items 1–4, 7 (Dataset-Umschaltung, Seiten-Navigation, Tabellenspalten, Text-Cleanup) — deployed ✓
-- Commit `d90aaf1`: Items 5–6, 8 (Grenzlinien-Styling, Push bidirektional) — in Deploy
-- Alle Syntax-Checks grün. Deployment via GitHub Actions läuft (Workflow `cloudflare-review.yml` Run neu).
+**Stand heute:** Master-Handoff komplett umgesetzt, deployed und live (Commit
+`27f4f19`, Workflow-Run 31887201669 — `success`, inkl. D1-Migrationen 0010+0011
+gegen die Produktivdatenbank).
 
-**Visuelle Verbesserungen:**
-- Grenzlinien: Philipps Markierungen solid Türkis, Lenas solid Rosa, gemeinsame dashed mit alternierend Türkis/Rosa.
-- Namen: durchgehend gefärbt (Philipp Türkis, Lena Rosa) via `data-speaker` Attribut in der Doppelprüfung.
-- Push: beide Richtungen aktiv — wenn Lena eingibt → Philipp benachrichtigt, wenn Philipp eingibt → Lena benachrichtigt.
+**Was sich geändert hat:**
+- **Navigation restlos bereinigt**: Doppelprüfung-interne Runde/Übersicht-Tabs entfernt (nav.js deckt das schon ab), toter Doppelprüfung-Link im Prüfstand-Kopf weg, tote „Zum Prüfstand"-Schaltfläche auf Upload weg (führte auf eine Seite außerhalb des Login-Flows). Navigation läuft jetzt ausschließlich über die eine Tab-Leiste oben.
+- **Übersicht-Tabelle mobil ohne horizontales Scrollen**: `<table>` durch responsives Div-Grid ersetzt — identisches Markup auf allen Größen, per Media Query wird daraus auf dem Handy ein zweizeiliges Karten-Layout (Runde/Philipp/Lena/öffnen + F1/Streitfälle/App darunter).
+- **APP-F1-Spalte** zeigt nur noch einen Wert, wenn beide abgegeben haben **und** keine offenen Streitfälle bestehen (vorher reichte „beide abgegeben").
+- **Zwischenzeiten zentriert**: fehlte bei `.dp-dispute-seam` in der Streitfälle-Ansicht (Runden-Ansicht war schon korrekt) — behoben.
+- **Settings-Seite neu in 4 Abschnitten**: 1 Gerät-Einstellungen, 2 Push-Benachrichtigungen (zwei strukturell identische Module Philipp/Lena — jede Person hat jetzt einen eigenen Schalter für „wenn die andere Person abgibt" und die Streitfall-Erinnerung statt einem gemeinsamen), 3 Optimierung (neu, siehe unten), 4 Datenbank (Dataset-Dropdown, aus dem Kopfbalken hierher verschoben — dort erscheint er nirgendwo mehr).
+- **Schwellwert-Optimizer auf Settings** (neu): zeigt aktuellen Schwellwert (3h, Code-Konstante, rein informativ überschrieben durch nichts), letzte Optimierung, trainierte Runden, bestes F1, Status. „Neu trainieren" ruft `/api/admin/optimize-threshold` auf und persistiert das Ergebnis (neue Tabelle `segment_optimizer_runs`, neuer Endpoint `/api/admin/optimizer-status` für den schnellen Seitenaufruf ohne erneute Gittersuche). Deaktiviert unter 20 beidseitig abgegebenen Runden. Nur Philipp sieht den Abschnitt.
+- Verifiziert mit Playwright (Mock-API) bei 375/768/1280px auf Settings- und Übersicht-Seite: kein horizontales Scrollen, keine Konsolenfehler; Upload/Prüfstand laden weiterhin fehlerfrei ohne doppelte Nav-Buttons.
 
-**Morgen zuerst — Push-Opt-in beider Geräte:**
-1. Philipp: altes Home-Screen-Icon löschen → Safari → Seite laden → Teilen → „Zum Home-Bildschirm" → PWA öffnen → Benachrichtigungen erlauben.
-2. Lena: dasselbe auf ihrem iPad.
-3. Testen: Lena gibt Runde ab → Philipp muss sofort Hinweis bekommen; Philipp gibt ab → Lena muss Hinweis bekommen.
-4. Kontrolle: `/push-settings.html` zeigt registrierte Geräte.
-
-**Offene Punkte:**
-- Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt.
+**Bekannt/offen:**
+- Playwright-Visual-Snapshots (`tests/visual/boundary-pairs.visual.spec.mjs`) brauchen nach dem Tabellen-Umbau ein `--update-snapshots` — nicht Teil des Deploy-Gates (`npm run check`), daher unkritisch.
+- Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt (Philipp: Home-Screen-Icon neu anlegen → Benachrichtigungen erlauben; Lena: dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und prüfen, ob die Benachrichtigung ankommt — auf der Settings-Seite lassen sich beide Richtungen jetzt einzeln an-/abschalten).
 - Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen Grenzen volatil.
-- Arbeit auf Branch `claude/segmentation-v5-migration-h0syxc` (Push/Deploy ist live).
+- Arbeit auf Branch `claude/segmentation-v5-migration-h0syxc` (Deploy ist live, kein PR offen).
