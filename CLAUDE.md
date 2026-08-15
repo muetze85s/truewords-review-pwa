@@ -113,6 +113,7 @@ Ereignisstrom gespeichert wird.
 ### In Arbeit / zuletzt umgesetzt
 
 - Web-Push vollständig implementiert (VAPID/`aes128gcm`, Erinnerungen je Zeitzone, Sofort-Hinweis bei Lenas Abgabe, Streitfall-Alarm ab Schwelle, 15-Min-Cron). Live-Zustellung erfordert gesetzte `VAPID_*`-Secrets **und** Geräte-Opt-in je Browser.
+- **Web-Push bidirektional** (Handoff 8): Wenn Lena eingibt → Philipp benachrichtigt; wenn Philipp eingibt → Lena benachrichtigt. Nutzung der bestehenden Einstellung.
 - Live-F1 in der Doppelprüfung: nach jeder Annotation Neuberechnung und Anzeige, **ohne** automatische Parameteränderung.
 - Persistente Navigation über alle Seiten (mobil/iPad-tauglich).
 - **Übersicht als Startseite** (Runden-Tabelle, Aufgabe 10): nach Login landet man auf der Übersicht (Doppelprüfung-Tab). Tabelle aller Runden: Philipp ✓/offen, Lena ✓/offen, offene Streitfälle, Direktlink. Farbcode: Türkis=Philipp offen, Rosa=Lena offen, Gelb=beide offen, neutral=komplett.
@@ -120,29 +121,30 @@ Ereignisstrom gespeichert wird.
 - **Sortierung & Navigation** (Aufgabe 12): neueste Runde oben, nach Abgabe Sprung zur nächsten offenen Runde.
 - **PWA Standalone** (Aufgabe 14): Manifest mit PNG-Icons 192×192/512×512, `apple-mobile-web-app-capable` + `apple-touch-icon` in allen HTML-Köpfen.
 - **Safari/iPad Push** (Aufgabe 13): iOS-Erkennung in `push-enable.js`/`push-settings.js` — Installationsanleitung statt Fehlermeldung im Browser-Modus.
+- **Konsistenz-Aufräum Handoff 1–4, 7**: Dataset-Schalter nur auf Settings, Nav-Buttons weg, Tabellenspalten-Reihenfolge, F1-Text entfernt.
+- **Konsistenz-Aufräum Handoff 5–6**: Grenzlinien-Styling (Türkis Philipp, Rosa Lena, dashed alternierend bei Übereinstimmung), Namen durchgehend gefärbt.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-15_
+_Stand: 2026-08-15 · 11:33_
 
-**Stand heute:** Aufgaben 9–14 sind implementiert, deployed und live
-(Workflow `cloudflare-review.yml` Run 31866713828 — `success`). Commit `d27f1a4`,
-29 Dateien, 401 Zeilen neu. Übersicht ist die Startseite nach Login; Navigation:
-Übersicht · Prüfstand · Doppelprüfung · Upload · Benachrichtigungen. `getOverview()`
-ruft `filteredSequence` einmal + 4 Bulk-SQL statt N+1. PWA-Manifest hat PNG-Icons
-(192+512), alle 15 HTML-Seiten tragen Apple-Meta-Tags. Safari/iPad: Installations-
-anleitung statt generischer Fehlermeldung wenn nicht im Standalone-Modus. SW-Cache v38.
+**Stand heute:** Handoff Phase 2 (Konsistenz-Aufräumarbeiten) abgeschlossen.
+- Commit `b4e41f9`: Items 1–4, 7 (Dataset-Umschaltung, Seiten-Navigation, Tabellenspalten, Text-Cleanup) — deployed ✓
+- Commit `d90aaf1`: Items 5–6, 8 (Grenzlinien-Styling, Push bidirektional) — in Deploy
+- Alle Syntax-Checks grün. Deployment via GitHub Actions läuft (Workflow `cloudflare-review.yml` Run neu).
+
+**Visuelle Verbesserungen:**
+- Grenzlinien: Philipps Markierungen solid Türkis, Lenas solid Rosa, gemeinsame dashed mit alternierend Türkis/Rosa.
+- Namen: durchgehend gefärbt (Philipp Türkis, Lena Rosa) via `data-speaker` Attribut in der Doppelprüfung.
+- Push: beide Richtungen aktiv — wenn Lena eingibt → Philipp benachrichtigt, wenn Philipp eingibt → Lena benachrichtigt.
 
 **Morgen zuerst — Push-Opt-in beider Geräte:**
 1. Philipp: altes Home-Screen-Icon löschen → Safari → Seite laden → Teilen → „Zum Home-Bildschirm" → PWA öffnen → Benachrichtigungen erlauben.
 2. Lena: dasselbe auf ihrem iPad.
-3. Lena gibt eine Runde ab → Philipp muss den Sofort-Hinweis bekommen.
+3. Testen: Lena gibt Runde ab → Philipp muss sofort Hinweis bekommen; Philipp gibt ab → Lena muss Hinweis bekommen.
 4. Kontrolle: `/push-settings.html` zeigt registrierte Geräte.
-Wenn die Zustellung nicht klappt: `VAPID_*`-Secrets in GitHub Actions prüfen
-(`wrangler.jsonc` Vars vs. Workflow-Secrets), und auf der Konsole
-`/api/push/test` aufrufen (nur Philipp).
 
 **Offene Punkte:**
 - Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt.
 - Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen Grenzen volatil.
-- Kein PR offen; Arbeit liegt auf Branch `claude/segmentation-v5-migration-h0syxc`.
+- Arbeit auf Branch `claude/segmentation-v5-migration-h0syxc` (Push/Deploy ist live).
