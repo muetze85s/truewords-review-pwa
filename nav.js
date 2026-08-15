@@ -21,7 +21,7 @@
     { href: '/review.html', label: 'Prüfstand' },
     { href: '/doppelpruefung.html', label: 'Doppelprüfung', match: '/doppelpruefung.html' },
     { href: '/upload.html', label: 'Upload', admin: true },
-    { href: '/push-settings.html', label: 'Benachrichtigungen', admin: true },
+    { href: '/push-settings.html', label: 'Settings', admin: true },
   ];
 
   function currentDataset() {
@@ -71,27 +71,28 @@
     const right = document.createElement('div');
     right.className = 'tw-nav-right';
 
-    const ds = document.createElement('select');
-    ds.className = 'tw-nav-ds';
-    ds.setAttribute('aria-label', 'Datensatz wählen');
-    const active = currentDataset();
-    DATASETS.forEach((entry) => {
-      const option = document.createElement('option');
-      option.value = entry.value;
-      option.textContent = entry.label;
-      if (entry.value === active) option.selected = true;
-      ds.appendChild(option);
-    });
-    ds.addEventListener('change', () => {
-      setDataset(ds.value);
-      // Query-Param mitschreiben, damit auch serverseitig geroutete Seiten den
-      // gewählten Datensatz sofort sehen; ansonsten reicht der localStorage-Wert.
-      const url = new URL(location.href);
-      if (ds.value) url.searchParams.set('dataset', ds.value);
-      else url.searchParams.delete('dataset');
-      location.href = url.toString();
-    });
-    right.appendChild(ds);
+    // Dataset-Schalter nur auf Settings-Seite anzeigen
+    if (location.pathname === '/push-settings.html') {
+      const ds = document.createElement('select');
+      ds.className = 'tw-nav-ds';
+      ds.setAttribute('aria-label', 'Datensatz wählen');
+      const active = currentDataset();
+      DATASETS.forEach((entry) => {
+        const option = document.createElement('option');
+        option.value = entry.value;
+        option.textContent = entry.label;
+        if (entry.value === active) option.selected = true;
+        ds.appendChild(option);
+      });
+      ds.addEventListener('change', () => {
+        setDataset(ds.value);
+        const url = new URL(location.href);
+        if (ds.value) url.searchParams.set('dataset', ds.value);
+        else url.searchParams.delete('dataset');
+        location.href = url.toString();
+      });
+      right.appendChild(ds);
+    }
 
     if (user) {
       const logout = document.createElement('button');

@@ -538,8 +538,8 @@
         <td class="ov-status-cell"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></td>
         <td class="ov-status-cell"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></td>
         <td class="ov-f1-cell">${f1}</td>
-        <td class="ov-f1-cell">${appF1}</td>
         <td class="ov-disputes-cell">${disputes}</td>
+        <td class="ov-f1-cell">${appF1}</td>
         <td class="ov-link-cell"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></td>
       </tr>`;
     }).join('');
@@ -552,7 +552,7 @@
       ${statsHtml}
       <div class="ov-table-wrap">
         <table class="ov-table">
-          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>F1</th><th>App</th><th>Streitfälle</th><th></th></tr></thead>
+          <thead><tr><th>Runde</th><th>Philipp</th><th>Lena</th><th>F1</th><th>Streitfälle</th><th>App</th><th></th></tr></thead>
           <tbody>${rows || emptyRow}</tbody>
         </table>
       </div>`;
