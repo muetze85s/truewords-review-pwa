@@ -123,7 +123,7 @@ function recentOpenQuestion(messages, startIndex, currentIndex) {
   return false;
 }
 
-export function boundaryDecision(messages, startIndex, currentIndex) {
+export function boundaryDecision(messages, startIndex, currentIndex, options = {}) {
   if (currentIndex <= startIndex) return { boundary: false, reason: 'start' };
   const previousIndex = lastMeaningfulIndex(messages, currentIndex - 1);
   if (previousIndex < startIndex) return { boundary: false, reason: 'no_previous_event' };
@@ -136,16 +136,13 @@ export function boundaryDecision(messages, startIndex, currentIndex) {
   const currentKind = eventKind(current);
   const previousKind = eventKind(previous);
   const target = replyTargetId(current);
+  const pauseHours = options.pauseBoundaryHours ?? PAUSE_BOUNDARY_HOURS;
 
   if (!Number.isFinite(gapMinutes) || gapMinutes < 0) {
     return { boundary: false, reason: 'invalid_gap', gapMinutes };
   }
 
-  // Ab dieser Pause gilt der Kommunikationsvorgang als beendet — unabhängig
-  // von Muster, Sprecher und Antwortbezug. Bewusst VOR den Fortsetzungs-
-  // sperren, sonst hielte eine offene Frage die Konversation über Tage
-  // zusammen.
-  if (gapMinutes >= PAUSE_BOUNDARY_HOURS * 60) {
+  if (gapMinutes >= pauseHours * 60) {
     return { boundary: true, reason: 'long_pause', gapMinutes };
   }
 
@@ -222,7 +219,7 @@ function formatSituationDate(message) {
   }
 }
 
-export function segmentConversationWindow(messages) {
+export function segmentConversationWindow(messages, options = {}) {
   if (!Array.isArray(messages) || !messages.length) {
     return { situations: [], assignments: {}, boundaries: [], decisions: [] };
   }
@@ -255,7 +252,7 @@ export function segmentConversationWindow(messages) {
   }
 
   for (let index = 1; index < messages.length; index += 1) {
-    const decision = boundaryDecision(messages, startIndex, index);
+    const decision = boundaryDecision(messages, startIndex, index, options);
     decisions.push({
       beforeEventId: String(messages[index]?.id ?? ''),
       ...decision,

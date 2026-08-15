@@ -14,6 +14,7 @@ import {
   agreeResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
+import type { SegmentationOptions } from '../segmentation-v4.d.mts';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
 
 /**
@@ -1428,6 +1429,143 @@ async function transferBoundaries(request: Request, env: Env): Promise<Response>
   });
 }
 
+// ------------------------------------------------------ Schwellwert-Optimizer
+
+async function optimizeThreshold(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+  const stepMinutes = Math.max(15, Number(url.searchParams.get('step')) || 15);
+  const minMinutes = Math.max(15, Number(url.searchParams.get('min')) || 15);
+  const maxMinutes = Math.min(1440, Number(url.searchParams.get('max')) || 720);
+
+  const [sequence, roundRows, submissionRows, allMarks, allResolutions] = await Promise.all([
+    filteredSequence(env, dataset.id),
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(dataset.id).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string; seam_message_id: string; mark: string }>(),
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
+  ]);
+
+  const seqIndex = new Map<string, number>();
+  for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
+
+  const readyRounds = new Set<number>();
+  const subByRound = new Map<number, Set<string>>();
+  for (const row of submissionRows.results || []) {
+    if (!subByRound.has(row.round)) subByRound.set(row.round, new Set());
+    subByRound.get(row.round)!.add(row.reviewer);
+  }
+  for (const [round, reviewers] of subByRound) {
+    if (reviewers.has('Philipp') && reviewers.has('Lena')) readyRounds.add(round);
+  }
+
+  const marksByRound = new Map<number, { philipp: MarkRow[]; lena: MarkRow[] }>();
+  for (const row of allMarks.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, { philipp: [], lena: [] });
+    const entry = marksByRound.get(row.round)!;
+    const markRow: MarkRow = { seam_message_id: row.seam_message_id, mark: row.mark as 'cut' | 'doubt' };
+    if (row.reviewer === 'Philipp') entry.philipp.push(markRow);
+    else if (row.reviewer === 'Lena') entry.lena.push(markRow);
+  }
+
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  for (const row of allResolutions.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
+
+  type RoundData = {
+    round: number;
+    messages: ViewMessage[];
+    positions: Map<string, number>;
+    totalSeams: number;
+    combinedCuts: number[];
+  };
+
+  const roundData: RoundData[] = [];
+  const existingRounds = (roundRows.results || []).filter((r) => readyRounds.has(r.round));
+  for (const roundRow of existingRounds) {
+    const startIdx = seqIndex.get(roundRow.first_message_id);
+    if (startIdx === undefined) continue;
+    const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
+    const positions = seamPositions(messages);
+    const totalSeams = Math.max(0, messages.length - 1);
+    const marks = marksByRound.get(roundRow.round) || { philipp: [], lena: [] };
+    const marksP = toPositionalMarks(marks.philipp, positions);
+    const marksL = toPositionalMarks(marks.lena, positions);
+    const comparison = compareReviewers(marksP, marksL, { totalSeams, tolerance, doubtMode });
+    const resolutions = resByRound.get(roundRow.round) || [];
+    const agreed = agreeResolutions(resolutions);
+    const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+    roundData.push({ round: roundRow.round, messages, positions, totalSeams, combinedCuts: combined.cuts });
+  }
+
+  const results: Array<{
+    thresholdMinutes: number;
+    thresholdHours: number;
+    f1: number;
+    pairs: number;
+    onlyAuto: number;
+    onlyHuman: number;
+  }> = [];
+
+  for (let minutes = minMinutes; minutes <= maxMinutes; minutes += stepMinutes) {
+    const opts: SegmentationOptions = { pauseBoundaryHours: minutes / 60 };
+    let totalPairs = 0;
+    let totalOnlyAuto = 0;
+    let totalOnlyHuman = 0;
+
+    for (const rd of roundData) {
+      const autoResult = segmentConversationWindow(
+        toSegmentationInput(rd.messages),
+        opts,
+      );
+      const autoPositions = autoResult.boundaries
+        .map((b: { beforeEventId: string }) => rd.positions.get(b.beforeEventId))
+        .filter((p: number | undefined): p is number => p !== undefined);
+      const vs = pairSeams(autoPositions, rd.combinedCuts, tolerance);
+      totalPairs += vs.pairs.length;
+      totalOnlyAuto += vs.onlyA.length;
+      totalOnlyHuman += vs.onlyB.length;
+    }
+
+    const denom = 2 * totalPairs + totalOnlyAuto + totalOnlyHuman;
+    results.push({
+      thresholdMinutes: minutes,
+      thresholdHours: Math.round(minutes / 60 * 100) / 100,
+      f1: denom ? (2 * totalPairs) / denom : 0,
+      pairs: totalPairs,
+      onlyAuto: totalOnlyAuto,
+      onlyHuman: totalOnlyHuman,
+    });
+  }
+
+  const best = results.reduce((a, b) => (b.f1 > a.f1 ? b : a), results[0]);
+
+  return json({
+    ok: true,
+    dataset: dataset.id,
+    tolerance,
+    doubtMode,
+    roundsUsed: roundData.length,
+    currentThresholdHours: 3,
+    grid: results,
+    best: best ? {
+      thresholdMinutes: best.thresholdMinutes,
+      thresholdHours: best.thresholdHours,
+      f1: best.f1,
+    } : null,
+  });
+}
+
 // ----------------------------------------------------------- Verdrahtung
 
 async function boundaryPairsApi(request: Request, env: Env): Promise<Response | null> {
@@ -1439,6 +1577,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/filter-check'
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/transfer-boundaries'
+    && url.pathname !== '/api/admin/optimize-threshold'
   ) return null;
 
   // Admin-getokte Übertragung: eigener Gate, nicht die Prüfer-Session.
@@ -1467,6 +1606,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
 
     if (url.pathname === '/api/admin/anchor-check' && request.method === 'GET') {
       return await getAnchorCheck(env);
+    }
+
+    if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Optimizer aufrufen.', 403);
+      return await optimizeThreshold(env, dataset, url);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);

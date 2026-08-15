@@ -1,5 +1,9 @@
 export type SegmentationMessage = { id?: string | number; [key: string]: unknown };
 
+export type SegmentationOptions = {
+  pauseBoundaryHours?: number;
+};
+
 export type SegmentationBoundary = {
   afterEventId: string;
   beforeEventId: string;
@@ -14,4 +18,4 @@ export type SegmentationResult = {
   decisions: unknown[];
 };
 
-export declare function segmentConversationWindow(messages: SegmentationMessage[]): SegmentationResult;
+export declare function segmentConversationWindow(messages: SegmentationMessage[], options?: SegmentationOptions): SegmentationResult;
