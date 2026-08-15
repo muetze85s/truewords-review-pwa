@@ -1350,7 +1350,11 @@ async function computeAnchorReport(env: Env): Promise<AnchorReport> {
   const failedRoundSet = new Set(failedRounds);
   const perRound = rounds.map((roundRow) => {
     const oldMarks = (marksByRound.get(roundRow.round) || []).length;
-    const oldResolutions = (resolutionsByRound.get(roundRow.round) || []).length;
+    // Rohe Zeilenzahl (wie targetResolutionCounts), NICHT die nach Auftrag-2-
+    // Regel deduplizierte resolutionsByRound — sonst vergleicht man Äpfel mit
+    // Birnen: seit Migration 0008 hat jede Naht bis zu zwei Zeilen (Philipp +
+    // Lena), was hier sonst wie ein "verdoppelt" aussehender Fehler wirkt.
+    const oldResolutions = (resolutionRowsByRound.get(roundRow.round) || []).length;
     const newMarks = targetMarksByRound.get(roundRow.round) ?? 0;
     const newResolutions = targetResolutionsByRound.get(roundRow.round) ?? 0;
     const newMessageCount = targetMessageCountByRound.get(roundRow.round) ?? 0;
