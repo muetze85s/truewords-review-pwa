@@ -1,4 +1,4 @@
-const CACHE = 'truewords-review-pwa-server-v38';
+const CACHE = 'truewords-review-pwa-server-v39';
 const FILES = [
   './manifest.webmanifest',
   './icon.svg',
@@ -46,6 +46,12 @@ const FILES = [
   './coordination.js',
   './server-sync.css',
   './server-sync.js',
+  './doppelpruefung.html',
+  './boundary-pairs.css',
+  './boundary-pairs.js',
+  './push-settings.html',
+  './push-settings.js',
+  './push-enable.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -74,17 +80,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Stale-while-revalidate: aus dem Cache sofort antworten (schnell, offline-
+  // tauglich), aber immer parallel im Hintergrund nachladen und den Cache
+  // aktualisieren. Reines Cache-first (wie zuvor) servierte CSS/JS nach einem
+  // Deploy sonst unbegrenzt lange aus einer alten, nie aktualisierten Kopie —
+  // sichtbar erst beim nächsten CACHE-Versionssprung, der leicht vergessen wird.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      });
-    }),
+    caches.open(CACHE).then((cache) =>
+      cache.match(request).then((cached) => {
+        const network = fetch(request).then((response) => {
+          if (response.ok) cache.put(request, response.clone());
+          return response;
+        }).catch(() => cached);
+        return cached || network;
+      }),
+    ),
   );
 });
 
