@@ -1746,6 +1746,89 @@ async function getF0Reconstruction(env: Env, url: URL): Promise<Response> {
 }
 
 /**
+ * Nur-Lese-Plan (kein Schreib-Endpunkt): zeigt, was nötig wäre, um
+ * review_boundary_marks in philena-4y für die Runden 1–17 exakt wieder auf
+ * den Stand des eingefrorenen Basis-Datensatzes philena-2026-pilot-v4-unseen
+ * zu bringen — unabhängig davon, OB die Abweichung durch den Marks-Nachtrag
+ * (cut- oder no_cut-Richtung, siehe applyMarksBackfill) oder durch den
+ * inzwischen behobenen Wettlauf beim Speichern (siehe saveMarks-Fix)
+ * entstanden ist: reiner Zeilenabgleich (dataset_id, round, reviewer,
+ * seam_message_id, mark), keine Neuberechnung nötig.
+ *
+ * review_boundary_resolutions bleibt in diesem Plan unangetastet — die
+ * gemeinsam geklärten Streitfälle bleiben geklärt (GT/F1 unverändert), nur
+ * die ROHEN Einzelmarkierungen (F0) würden auf den ursprünglichen,
+ * unabhängigen Stand zurückgesetzt.
+ */
+async function getMarksRestorePlan(env: Env): Promise<Response> {
+  const oldId = 'philena-2026-pilot-v4-unseen';
+  const newId = 'philena-4y';
+
+  const [oldDataset, newDataset] = await Promise.all([
+    env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(oldId).first<DatasetRow>(),
+    env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(newId).first<DatasetRow>(),
+  ]);
+  if (!oldDataset) return error(`Datensatz „${oldId}" nicht gefunden.`, 404);
+  if (!newDataset) return error(`Datensatz „${newId}" nicht gefunden.`, 404);
+
+  type Row = { round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' };
+  const [oldRoundRows, oldMarkRows, newMarkRows] = await Promise.all([
+    env.DB.prepare('SELECT round FROM review_rounds WHERE dataset_id = ?1 ORDER BY round').bind(oldId).all<{ round: number }>(),
+    env.DB.prepare('SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1').bind(oldId).all<Row>(),
+    env.DB.prepare('SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1').bind(newId).all<Row>(),
+  ]);
+
+  const oldRoundNums = new Set((oldRoundRows.results || []).map((r) => r.round));
+  const key = (r: Row) => `${r.round}|${r.reviewer}|${r.seam_message_id}`;
+
+  const oldMap = new Map((oldMarkRows.results || []).filter((r) => oldRoundNums.has(r.round)).map((r) => [key(r), r]));
+  const newMap = new Map((newMarkRows.results || []).filter((r) => oldRoundNums.has(r.round)).map((r) => [key(r), r]));
+
+  const perRound = new Map<number, { toAdd: Row[]; toRemove: Row[]; unchanged: number }>();
+  for (const round of oldRoundNums) perRound.set(round, { toAdd: [], toRemove: [], unchanged: 0 });
+
+  const seenKeys = new Set<string>();
+  for (const [k, oldRow] of oldMap) {
+    seenKeys.add(k);
+    const bucket = perRound.get(oldRow.round);
+    if (!bucket) continue;
+    const newRow = newMap.get(k);
+    if (!newRow) { bucket.toAdd.push(oldRow); continue; }
+    if (newRow.mark !== oldRow.mark) { bucket.toRemove.push(newRow); bucket.toAdd.push(oldRow); continue; }
+    bucket.unchanged += 1;
+  }
+  for (const [k, newRow] of newMap) {
+    if (seenKeys.has(k)) continue;
+    const bucket = perRound.get(newRow.round);
+    if (bucket) bucket.toRemove.push(newRow);
+  }
+
+  const rounds = [...perRound.entries()].sort((a, b) => a[0] - b[0]).map(([round, bucket]) => ({
+    round,
+    unchanged: bucket.unchanged,
+    toAdd: bucket.toAdd.map((r) => ({ reviewer: r.reviewer, seamMessageId: r.seam_message_id, mark: r.mark })),
+    toRemove: bucket.toRemove.map((r) => ({ reviewer: r.reviewer, seamMessageId: r.seam_message_id, mark: r.mark })),
+  }));
+
+  const totalToAdd = rounds.reduce((sum, r) => sum + r.toAdd.length, 0);
+  const totalToRemove = rounds.reduce((sum, r) => sum + r.toRemove.length, 0);
+
+  return json({
+    ok: true,
+    oldDatasetId: oldId,
+    newDatasetId: newId,
+    note: 'Reiner Plan, keine Schreiboperation. review_boundary_resolutions bleibt unberührt — nur review_boundary_marks würde für diese Runden auf den alten Stand zurückgesetzt.',
+    totals: {
+      toAdd: totalToAdd,
+      toRemove: totalToRemove,
+      roundsAffected: rounds.filter((r) => r.toAdd.length > 0 || r.toRemove.length > 0).length,
+      roundsChecked: rounds.length,
+    },
+    rounds,
+  });
+}
+
+/**
  * Additive Übertragung der Grenzdaten der Basis nach philena-4y. Reine
  * INSERT … SELECT: die Basis-id steht ausschließlich in der FROM-Zeile
  * (nur Lesen), geschrieben wird ausnahmslos mit 'philena-4y'. Vier Sicherungen:
@@ -2182,6 +2265,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/filter-check'
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/f0-reconstruction'
+    && url.pathname !== '/api/admin/marks-restore-plan'
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
     && url.pathname !== '/api/admin/optimizer-status'
@@ -2223,6 +2307,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/f0-reconstruction' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf die F0-Rekonstruktion sehen.', 403);
       return await getF0Reconstruction(env, url);
+    }
+
+    if (url.pathname === '/api/admin/marks-restore-plan' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Marks-Rückstell-Plan sehen.', 403);
+      return await getMarksRestorePlan(env);
     }
 
     if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
