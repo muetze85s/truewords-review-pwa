@@ -132,64 +132,45 @@ Ereignisstrom gespeichert wird.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-15 · 19:00_
+_Stand: 2026-08-16 · 03:35_
 
-**Stand heute:** Langer Tag, viele Deploys, alle erfolgreich. Letzter Commit
-`b5c9f34`, Branch `claude/segmentation-v5-migration-h0syxc`, kein PR offen,
-Arbeitsverzeichnis sauber (nichts uncommittet). Reihenfolge der heutigen
-Etappen:
+**Stand heute:** Zwei Etappen, beide deployed und grün. Letzter Commit
+`11db6f5`, Branch `claude/segmentation-v5-migration-h0syxc`, kein PR offen,
+Arbeitsverzeichnis sauber.
 
-1. **Master-Handoff** (`27f4f19`): Konsistenz-Bereinigung, mobiles
-   Div-Grid-Layout für die Übersicht, Settings-Seite in 4 Abschnitte
-   umgebaut, Schwellwert-Optimizer neu (Migrationen 0010+0011).
-2. **Titel/Nav-Polish + Bugfixes** (`a7ea94f`): Seitentitel zentriert,
-   Runden-Navigation neu angeordnet (44×44px Touch-Ziele), Tabellen-Spalten
-   ausgerichtet, iPhone-Safe-Area ergänzt. Dabei zwei echte Bugs gefunden und
-   gefixt: (a) `loadRoundWindow` blockierte das Anlegen **jeder** neuen Runde
-   (auch >18), sobald eine additiv übertragene Alt-Runde ihren Ankerpunkt
-   nicht mehr fand — jetzt werden solche Runden nur aus der Kollisionsprüfung
-   ausgenommen statt alles zu blockieren; (b) `.dp-top` war zusätzlich sticky
-   wie der nav.js-Balken und verschwand beim Scrollen dahinter.
-3. **Service-Worker-Cache-Bug** (`983255e`) — **wichtig, betraf alle
-   vorherigen Deploys**: Cache-Name war seit Ewigkeiten nicht mehr erhöht
-   worden und die Fetch-Strategie war reines Cache-first — CSS/JS wie
-   `boundary-pairs.js` wurden nach einem Deploy nie neu vom Server geholt.
-   Fix: Version gesprungen (jetzt v39) + Strategie auf
-   Stale-while-revalidate umgestellt, damit das künftig nicht mehr manuell
-   gepflegt werden muss.
-4. **Migrations-Diagnose** (`232e35f`, `22a2746`): neue Seite
-   `/migration-check.html` + erweiterter `/api/admin/anchor-check`-Endpunkt
-   zeigt für jede der additiv übertragenen Runden 1–17 Alt- vs. Neu-Zahlen.
-   Ergebnis: **alles grün**, 301/301 Marks, 32/32 Runden verankert, 50/50
-   Streitfälle — keine Daten verloren, keine Rekonstruktion nötig.
-5. **Marks-Nachtrag** (`aee92f4`): neue Seite `/marks-backfill.html` +
-   Endpunkte `/api/admin/marks-backfill-plan` (GET, Vorschau) und
-   `/api/admin/marks-backfill-apply` (POST, Admin-Token). Trägt bei
-   gemeinsam geklärten Streitfällen die Entscheidung auch in die rohen
-   Einzelmarkierungen beider Personen nach. Von Philipp ausgeführt.
-6. **`parseTolerance`-Bug** (`b5c9f34`) — **der eigentliche Grund für die
-   Zahlenverwirrung am Ende des Tages**: `Number(null) === 0` in JS, ein
-   fehlender `?tol=`-Parameter fiel dadurch auf Toleranz 0 statt des
-   beabsichtigten Standards 1 zurück. Betraf `/api/overview` (Übersicht) und
-   `/api/admin/optimize-threshold` (Optimizer) — beide liefen strikter als
-   gedacht. Rundendetail war nicht betroffen (schickt `?tol=1` explizit).
-   Jetzt gefixt.
+1. **F0/F1/GT-Nomenklatur + Übersicht-Redesign + Prüfstand-Link entfernt**
+   (`9e9b596`): Backend und Frontend einheitlich auf F0 (rohe Übereinstimmung
+   Philipp/Lena), GT (kombinierte Grenzenmenge aus F0 + geklärten
+   Streitfällen) und F1 (Algorithmus vs. GT) umgestellt. Übersichtsseite neu:
+   Spalten `Runde|Philipp|Lena|F0|Streitfälle|GT|F1` mit gepoolten Ø/Σ-
+   Aggregaten in den Köpfen, „öffnen"-Spalte weg — ganze Zeile/Karte ist
+   jetzt Desktop **und** Mobile klickbar. Dabei einen echten Bug gefunden:
+   das Live-F1-Panel in der Doppelprüfung war in einer früheren Session
+   komplett aus dem HTML gelöscht (nicht nur der Platzhaltertext) — der JS-
+   Code lief seither ins Leere. Wiederhergestellt mit den neuen Feldnamen.
+   „Prüfstand" aus `nav.js` entfernt (einzige Fundstelle im Repo);
+   `review.html` selbst bleibt voll funktionsfähig und ist weiterhin die
+   Redirect-Zielseite für Nutzer ohne Upload-Recht in `upload.js` — bewusst
+   nicht angetastet.
+2. **Eigenes Home-Screen-Icon für review.html** (`11db6f5`): echtes
+   TrueWords-Logo (Türkis/Rosa-Sprechblasen) aus `truewords-paaruebersetzer`
+   übernommen als `icon-pruefstand-192.png`/`-512.png`, `apple-touch-icon` +
+   neuer `apple-mobile-web-app-title`-Tag „TW - Prüfstand" in `review.html`.
+   Restliche Seiten/Manifest bewusst unverändert (bleiben „TW Prüfung").
 
-**Wichtige Klarstellung für morgen (falls die Frage nochmal aufkommt):**
-App-F1 vergleicht den Algorithmus schon immer gegen `combinedBoundary`
-(rohe Übereinstimmung **plus** geklärte Streitfälle), nie gegen die rohe
-Erstabgabe — das war nie anders und hat sich durch nichts Heutiges
-verändert. Der Marks-Nachtrag ändert nur die rohe „Übereinstimmung"-Zahl
-und die Streitfälle-Zählung, nicht App-F1. Die Zahlenverschiebungen, die
-Philipp gesehen hat, kamen vom `parseTolerance`-Bug (Punkt 6).
+**Noch unverifiziert (von Philipp/Lena):**
+- Übersicht-Redesign (F0/Streitfälle/GT/F1-Spalten, ganze Zeile klickbar) —
+  auf echten Geräten (Desktop + iPhone + iPad) noch nicht bestätigt.
+- Neues Prüfstand-Icon — noch nicht frisch zum Home-Bildschirm hinzugefügt
+  und gegen das bestehende „TW Prüfung"-Icon auf Konflikte geprüft.
 
 **Morgen zuerst:**
-1. **Optimizer neu trainieren** — auf der Settings-Seite „Neu trainieren"
+1. Rückmeldung von Philipp zu den beiden obigen Punkten einholen bzw.
+   nachfragen, falls noch nichts getestet wurde.
+2. **Optimizer neu trainieren** — auf der Settings-Seite „Neu trainieren"
    klicken. Alle bisherigen `segment_optimizer_runs`-Einträge liefen mit der
-   falschen Toleranz (0 statt 1) und sind damit nicht mehr aussagekräftig.
-2. Prüfen, ob nach dem `parseTolerance`-Fix die Übersicht (F1/Streitfälle je
-   Runde) jetzt mit der Rundendetail-Ansicht übereinstimmt (war vorher bei
-   Runde 10 nachweislich inkonsistent).
+   falschen Toleranz (0 statt 1, `parseTolerance`-Bug vom 15.08.) und sind
+   damit nicht mehr aussagekräftig. Steht seit gestern aus.
 3. Push-Opt-in beider Geräte + Zustell-Test steht weiterhin aus (siehe unten).
 
 **Offene Punkte:**
