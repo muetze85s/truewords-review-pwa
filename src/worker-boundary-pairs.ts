@@ -1505,6 +1505,145 @@ async function getAnchorCheck(env: Env): Promise<Response> {
 }
 
 /**
+ * Nur-Lese-Diagnose (Handoff Punkt 8): der Marks-Nachtrag (applyMarksBackfill,
+ * siehe unten) hat für gemeinsam geklärte Streitfälle die Entscheidung
+ * rückwirkend in review_boundary_marks BEIDER Reviewer geschrieben — dadurch
+ * zeigen die ersten 17 Runden in philena-4y künstlich F0=1 für genau diese
+ * Nähte. Der Nachtrag wirkte nur auf env.ACTIVE_DATASET_ID, das zum Zeitpunkt
+ * des Nachtrags bereits 'philena-4y' war — der eingefrorene alte Datensatz
+ * 'philena-2026-pilot-v4-unseen' blieb unangetastet und enthält daher noch
+ * die ursprünglichen, echten Einzelmarkierungen. Vergleicht beide Datensätze
+ * Naht für Naht: wo im alten Datensatz GENAU EIN Reviewer markiert hat
+ * (= ursprünglicher Streitfall) und im neuen BEIDE (= durch den Nachtrag
+ * überschrieben), lässt sich die echte rohe F0 vor dem Nachtrag aus den
+ * alten Rohdaten rekonstruieren.
+ */
+async function getF0Reconstruction(env: Env): Promise<Response> {
+  const oldId = 'philena-2026-pilot-v4-unseen';
+  const newId = 'philena-4y';
+
+  const [oldDataset, newDataset] = await Promise.all([
+    env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(oldId).first<DatasetRow>(),
+    env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(newId).first<DatasetRow>(),
+  ]);
+  if (!oldDataset) return error(`Datensatz „${oldId}" nicht gefunden.`, 404);
+  if (!newDataset) return error(`Datensatz „${newId}" nicht gefunden.`, 404);
+
+  const [oldRoundRows, oldMarkRows, newMarkRows] = await Promise.all([
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(oldId).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(oldId).all<{ round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(newId).all<{ round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' }>(),
+  ]);
+
+  type SeamVotes = { philipp?: 'cut' | 'doubt'; lena?: 'cut' | 'doubt' };
+  const byRoundAndKey = (rows: Array<{ round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' }>) => {
+    const map = new Map<number, Map<string, SeamVotes>>();
+    for (const row of rows) {
+      if (!map.has(row.round)) map.set(row.round, new Map());
+      const bySeam = map.get(row.round)!;
+      const entry = bySeam.get(row.seam_message_id) || {};
+      if (row.reviewer === 'Philipp') entry.philipp = row.mark;
+      else if (row.reviewer === 'Lena') entry.lena = row.mark;
+      bySeam.set(row.seam_message_id, entry);
+    }
+    return map;
+  };
+  const oldByRound = byRoundAndKey(oldMarkRows.results || []);
+  const newByRound = byRoundAndKey(newMarkRows.results || []);
+
+  const perRound: Array<{
+    round: number;
+    originalDisputes: number;
+    overwrittenByBackfill: number;
+    trueOldF0: number | null;
+    currentNewF0: number | null;
+    idMismatch: number;
+  }> = [];
+  let idChecked = 0;
+  let idMismatchTotal = 0;
+
+  for (const roundRow of oldRoundRows.results || []) {
+    const round = roundRow.round;
+    const { messages: oldMessages } = await loadRoundWindow(env, oldDataset, round);
+    const oldPositions = seamPositions(oldMessages);
+    const oldTotalSeams = Math.max(0, oldMessages.length - 1);
+
+    const oldSeamVotes = oldByRound.get(round) || new Map<string, SeamVotes>();
+    const newSeamVotes = newByRound.get(round) || new Map<string, SeamVotes>();
+
+    const philippOldMarks: MarkRow[] = [];
+    const lenaOldMarks: MarkRow[] = [];
+    let originalDisputes = 0;
+    let overwritten = 0;
+    let roundMismatch = 0;
+
+    for (const [seamId, votes] of oldSeamVotes) {
+      idChecked += 1;
+      // seam_message_id muss im Runden-Fenster des alten Datensatzes auffindbar
+      // sein — sonst ist der Naht-Abgleich zwischen den Datensätzen nicht möglich.
+      if (!oldPositions.has(seamId)) { roundMismatch += 1; idMismatchTotal += 1; continue; }
+      if (votes.philipp) philippOldMarks.push({ seam_message_id: seamId, mark: votes.philipp });
+      if (votes.lena) lenaOldMarks.push({ seam_message_id: seamId, mark: votes.lena });
+
+      const oldCount = (votes.philipp ? 1 : 0) + (votes.lena ? 1 : 0);
+      if (oldCount === 1) {
+        originalDisputes += 1;
+        const newVotes = newSeamVotes.get(seamId);
+        const newCount = newVotes ? (newVotes.philipp ? 1 : 0) + (newVotes.lena ? 1 : 0) : 0;
+        if (newCount === 2) overwritten += 1;
+      }
+    }
+
+    const philippNewMarks: MarkRow[] = [];
+    const lenaNewMarks: MarkRow[] = [];
+    for (const [seamId, votes] of newSeamVotes) {
+      if (!oldPositions.has(seamId)) continue;
+      if (votes.philipp) philippNewMarks.push({ seam_message_id: seamId, mark: votes.philipp });
+      if (votes.lena) lenaNewMarks.push({ seam_message_id: seamId, mark: votes.lena });
+    }
+
+    // Beide Vergleiche laufen bewusst über dieselben (alten) Positionen — der
+    // Datensatz-Transfer hat first_message_id/message_count unverändert
+    // übernommen, die Runden-Fenster sind also identisch.
+    const trueOld = compareReviewers(
+      toPositionalMarks(philippOldMarks, oldPositions),
+      toPositionalMarks(lenaOldMarks, oldPositions),
+      { totalSeams: oldTotalSeams, tolerance: 1, doubtMode: 'skip' },
+    );
+    const currentNew = compareReviewers(
+      toPositionalMarks(philippNewMarks, oldPositions),
+      toPositionalMarks(lenaNewMarks, oldPositions),
+      { totalSeams: oldTotalSeams, tolerance: 1, doubtMode: 'skip' },
+    );
+
+    perRound.push({
+      round,
+      originalDisputes,
+      overwrittenByBackfill: overwritten,
+      trueOldF0: trueOld.agreementF1,
+      currentNewF0: currentNew.agreementF1,
+      idMismatch: roundMismatch,
+    });
+  }
+
+  return json({
+    ok: true,
+    oldDatasetId: oldId,
+    newDatasetId: newId,
+    idChecked,
+    idMismatchTotal,
+    affectedRounds: perRound.filter((r) => r.overwrittenByBackfill > 0).length,
+    perRound,
+  });
+}
+
+/**
  * Additive Übertragung der Grenzdaten der Basis nach philena-4y. Reine
  * INSERT … SELECT: die Basis-id steht ausschließlich in der FROM-Zeile
  * (nur Lesen), geschrieben wird ausnahmslos mit 'philena-4y'. Vier Sicherungen:
@@ -1940,6 +2079,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/overview'
     && url.pathname !== '/api/admin/filter-check'
     && url.pathname !== '/api/admin/anchor-check'
+    && url.pathname !== '/api/admin/f0-reconstruction'
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
     && url.pathname !== '/api/admin/optimizer-status'
@@ -1976,6 +2116,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
 
     if (url.pathname === '/api/admin/anchor-check' && request.method === 'GET') {
       return await getAnchorCheck(env);
+    }
+
+    if (url.pathname === '/api/admin/f0-reconstruction' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die F0-Rekonstruktion sehen.', 403);
+      return await getF0Reconstruction(env);
     }
 
     if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
