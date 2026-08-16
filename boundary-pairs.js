@@ -460,18 +460,18 @@
       }).then(({ status, payload }) => {
         clearTimeout(timeout);
         if (status !== 200 || !payload.ok) { setLiveF1Message(node, 'F1: keine Daten', 'empty'); return; }
-        const hasHuman = payload.agreementF1 !== null && payload.agreementF1 !== undefined;
-        const hasAuto = payload.automaticVsCombined && payload.automaticVsCombined.agreementF1 !== null
-          && payload.automaticVsCombined.agreementF1 !== undefined;
+        const hasHuman = payload.f0 !== null && payload.f0 !== undefined;
+        const hasAuto = payload.automaticVsCombined && payload.automaticVsCombined.f1 !== null
+          && payload.automaticVsCombined.f1 !== undefined;
         // Keine beidseitig abgegebene Runde → nichts zu vergleichen, sauber melden.
         if (!payload.roundsReady || (!hasHuman && !hasAuto)) {
           setLiveF1Message(node, 'F1: keine Daten (noch keine beidseitig abgegebene Runde)', 'empty');
           return;
         }
-        const human = hasHuman ? payload.agreementF1.toFixed(2) : '–';
-        const auto = hasAuto ? payload.automaticVsCombined.agreementF1.toFixed(2) : '–';
+        const human = hasHuman ? payload.f0.toFixed(2) : '–';
+        const auto = hasAuto ? payload.automaticVsCombined.f1.toFixed(2) : '–';
         node.innerHTML = `<span class="dp-live-item">Übereinstimmung <b>${escapeHtml(human)}</b></span>`
-          + `<span class="dp-live-item">Automatik vs. gemeinsam <b>${escapeHtml(auto)}</b></span>`
+          + `<span class="dp-live-item">F1 (Automatik vs. GT) <b>${escapeHtml(auto)}</b></span>`
           + `<span class="dp-live-item muted">n=${payload.roundsReady} Runden · tol=${state.tolerance}</span>`;
         node.dataset.state = 'ready';
       }).catch((caught) => {
@@ -491,8 +491,19 @@
 
   function loadOverview() {
     $('dp-overview-body').innerHTML = '<p class="dp-hint">Wird geladen …</p>';
-    return fetchJson('overview').then(({ status, payload }) => {
+    return Promise.all([
+      fetchJson('overview'),
+      // Gepoolte F0-/F1-Aggregate + GT-Summe kommen aus demselben Endpunkt wie
+      // die Live-F1-Leiste — dieselbe Toleranz/Doubt-Behandlung wie überall sonst.
+      fetchJson(`agreement/summary${agreementQuery()}`).catch(() => ({ status: 0, payload: null })),
+    ]).then(([overviewResult, summaryResult]) => {
+      const { status, payload } = overviewResult;
       if (status !== 200 || !payload.ok) throw new Error(payload.error || `HTTP ${status}`);
+      if (summaryResult.status === 200 && summaryResult.payload && summaryResult.payload.ok) {
+        payload.f0Aggregate = summaryResult.payload.f0;
+        payload.f1Aggregate = summaryResult.payload.automaticVsCombined?.f1 ?? null;
+        payload.gtTotal = summaryResult.payload.gtTotal;
+      }
       cachedOverview = payload;
       renderOverview(payload);
     }).catch((caught) => {
@@ -529,12 +540,15 @@
       const lIcon = row.lenaSubmitted ? '✓' : 'offen';
       const both = row.philippSubmitted && row.lenaSubmitted;
       // Punkt 18/19: Startpunkt dieser Runde nicht in der aktuellen Folge auffindbar
-      // (z. B. additiv übertragene Runde aus einem anderen Datensatz) — F1/Streitfälle
+      // (z. B. additiv übertragene Runde aus einem anderen Datensatz) — F0/F1/GT
       // sind hier keine echten Nullen, sondern schlicht nicht berechenbar.
       const unresolvable = both && row.unresolvable;
-      const f1 = unresolvable ? '⚠' : (both ? fmtF1(row.f1) : '–');
-      // App-F1 nur zeigen, wenn beide abgegeben haben UND keine offenen Streitfälle bestehen.
-      const appF1 = unresolvable ? '⚠' : ((both && row.openDisputes === 0) ? fmtF1(row.appF1) : '–');
+      // F0 = Philipp vs. Lena roh. GT = combinedBoundary-Größe (F0-Paare + geklärte
+      // Streitfälle), keine Kennzahl sondern eine Mengengröße. F1 = Automatik vs. GT,
+      // nur final sobald keine offenen Streitfälle mehr bestehen.
+      const f0 = unresolvable ? '⚠' : (both ? fmtF1(row.f0) : '–');
+      const gt = unresolvable ? '⚠' : (both ? (row.gtSize ?? '–') : '–');
+      const f1 = unresolvable ? '⚠' : ((both && row.openDisputes === 0) ? fmtF1(row.f1) : '–');
       const disputes = unresolvable
         ? '<span class="ov-disputes-open" title="Startpunkt der Runde in der aktuellen Nachrichtenfolge nicht auffindbar — nicht berechenbar.">⚠ unklar</span>'
         : (both
@@ -544,16 +558,20 @@
         <div class="ov-cell ov-c-round" data-label="Runde">${row.round}</div>
         <div class="ov-cell ov-c-philipp" data-label="Philipp"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></div>
         <div class="ov-cell ov-c-lena" data-label="Lena"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></div>
-        <div class="ov-cell ov-c-f1" data-label="F1">${f1}</div>
+        <div class="ov-cell ov-c-f0" data-label="F0">${f0}</div>
         <div class="ov-cell ov-c-disputes" data-label="Streitfälle">${disputes}</div>
-        <div class="ov-cell ov-c-app" data-label="App">${appF1}</div>
-        <div class="ov-cell ov-c-open"><a href="#" class="ov-go" data-go="${row.round}">öffnen</a></div>
+        <div class="ov-cell ov-c-gt" data-label="GT">${gt}</div>
+        <div class="ov-cell ov-c-f1" data-label="F1">${f1}</div>
       </div>`;
     }).join('');
 
     const emptyRow = sorted.length
       ? ''
       : '<p class="ov-empty">Noch keine Runden angelegt.</p>';
+
+    const f0Agg = fmtF1(data.f0Aggregate);
+    const f1Agg = fmtF1(data.f1Aggregate);
+    const gtAgg = data.gtTotal ?? '–';
 
     $('dp-overview-body').innerHTML = `
       ${statsHtml}
@@ -563,19 +581,18 @@
             <div class="ov-cell ov-c-round">Runde</div>
             <div class="ov-cell ov-c-philipp">Philipp</div>
             <div class="ov-cell ov-c-lena">Lena</div>
-            <div class="ov-cell ov-c-f1">F1</div>
+            <div class="ov-cell ov-c-f0">F0 (Ø ${f0Agg})</div>
             <div class="ov-cell ov-c-disputes">Streitfälle</div>
-            <div class="ov-cell ov-c-app">App</div>
-            <div class="ov-cell ov-c-open"></div>
+            <div class="ov-cell ov-c-gt">GT (Σ ${gtAgg})</div>
+            <div class="ov-cell ov-c-f1">F1 (Ø ${f1Agg})</div>
           </div>
           ${rows || emptyRow}
         </div>
       </div>`;
 
-    $('dp-overview-body').querySelectorAll('.ov-go').forEach((link) => {
-      link.addEventListener('click', (event) => {
-        event.preventDefault();
-        const round = Number(link.dataset.go);
+    $('dp-overview-body').querySelectorAll('.ov-row:not(.ov-head)').forEach((rowEl) => {
+      rowEl.addEventListener('click', () => {
+        const round = Number(rowEl.dataset.round);
         state.round = round;
         $('dp-round-input').value = round;
         setTab('round');

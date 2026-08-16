@@ -12,7 +12,6 @@
   // zusammengeführt.
   const LINKS = [
     { href: '/doppelpruefung.html?tab=overview', label: 'Übersicht', match: '/doppelpruefung.html' },
-    { href: '/review.html', label: 'Prüfstand' },
     { href: '/doppelpruefung.html', label: 'Doppelprüfung', match: '/doppelpruefung.html' },
     { href: '/upload.html', label: 'Upload', admin: true },
     { href: '/push-settings.html', label: 'Settings', admin: true },

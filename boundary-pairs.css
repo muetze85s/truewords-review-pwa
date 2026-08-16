@@ -331,6 +331,7 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .dp-live-f1 {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 8px 16px;
   align-items: center;
   padding: 6px 16px 8px;
@@ -338,6 +339,7 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
   background: var(--tw-surface-raised);
   border-top: 1px solid var(--tw-border);
 }
+.dp-live-f1:empty { display: none; }
 .dp-live-item { white-space: nowrap; }
 .dp-live-item b { font-variant-numeric: tabular-nums; }
 .dp-live-item.muted { color: var(--tw-text-muted); }
@@ -432,11 +434,13 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .ov-table { width: 100%; font-size: 14px; }
 .ov-row {
   display: grid;
-  grid-template-columns: 56px 1fr 1fr 52px 96px 56px 56px;
+  grid-template-columns: 56px 1fr 1fr 52px 96px 52px 56px;
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
   border-bottom: 1px solid var(--tw-border);
+  /* Punkt 3: ganze Zeile ist der Tap-/Klick-Ziel, kein separater Link mehr. */
+  -webkit-tap-highlight-color: rgba(0, 0, 0, .06);
 }
 .ov-row:last-child { border-bottom: none; }
 .ov-row:not(.ov-head):hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); cursor: pointer; }
@@ -447,12 +451,12 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .ov-row.ov-head .ov-cell { white-space: normal; overflow: visible; text-overflow: unset; line-height: 1.25; }
 .ov-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-/* Punkt 15: Spalten-Alignment — Runde links, Philipp/Lena/Streitfälle/öffnen
-   zentriert, F1/App rechtsbündig (Zahlen). Zellen sind über align-items:center
-   im Grid bereits vertikal zentriert. */
+/* Punkt 15: Spalten-Alignment — Runde links, Philipp/Lena/Streitfälle
+   zentriert, F0/GT/F1 rechtsbündig (Zahlen). Zellen sind über
+   align-items:center im Grid bereits vertikal zentriert. */
 .ov-c-round { font-weight: 600; text-align: left; }
-.ov-c-philipp, .ov-c-lena, .ov-c-disputes, .ov-c-open { text-align: center; }
-.ov-c-f1, .ov-c-app { text-align: right; font-variant-numeric: tabular-nums; }
+.ov-c-philipp, .ov-c-lena, .ov-c-disputes { text-align: center; }
+.ov-c-f0, .ov-c-gt, .ov-c-f1 { text-align: right; font-variant-numeric: tabular-nums; }
 
 .ov-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
 .ov-badge.done { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
@@ -460,10 +464,7 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 
 .ov-disputes-open { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
 .ov-c-disputes { font-size: 13px; color: var(--tw-text-muted); }
-.ov-c-f1, .ov-c-app { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
-
-.ov-go { font-size: 13px; color: var(--tw-philipp-strong); text-decoration: none; font-weight: 500; padding: 4px; display: inline-block; }
-.ov-go:hover { text-decoration: underline; }
+.ov-c-f0, .ov-c-gt, .ov-c-f1 { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
 
 .ov-row.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
 .ov-row.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
@@ -472,30 +473,31 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 
 .ov-empty { text-align: center; padding: 24px; color: var(--tw-text-muted); }
 
-/* Mobile: zweizeiliges Karten-Layout je Runde statt 7 Spalten in einer Zeile.
-   Zeile 1: Runde · Philipp · Lena · öffnen — Zeile 2: F1 · Streitfälle · App
-   (mit Label-Präfix). Touch-Ziel bleibt die ganze Zeile. */
+/* Mobile: dreizeiliges Karten-Layout je Runde statt 7 Spalten in einer Zeile.
+   Zeile 1: Runde · Philipp · Lena — Zeile 2: F0 · Streitfälle · GT —
+   Zeile 3: F1 über volle Breite (Automatik vs. GT, die "Ziel"-Kennzahl).
+   Ganze Karte ist Tap-Ziel, kein separates "öffnen" mehr nötig. */
 @media (max-width: 560px) {
   .ov-row.ov-head { display: none; }
   .ov-row {
-    grid-template-columns: auto 1fr 1fr auto;
+    grid-template-columns: auto 1fr 1fr;
     grid-template-areas:
-      "round philipp lena open"
-      "f1 disputes disputes app";
+      "round philipp lena"
+      "f0 disputes gt"
+      "f1 f1 f1";
     row-gap: 6px;
     padding: 10px;
   }
   .ov-c-round { grid-area: round; }
   .ov-c-philipp { grid-area: philipp; }
   .ov-c-lena { grid-area: lena; }
-  .ov-c-open { grid-area: open; text-align: right; }
-  .ov-c-f1 { grid-area: f1; font-size: 12px; }
-  .ov-c-disputes { grid-area: disputes; font-size: 12px; }
-  .ov-c-app { grid-area: app; font-size: 12px; text-align: right; }
-  .ov-c-f1::before, .ov-c-disputes::before, .ov-c-app::before {
+  .ov-c-f0 { grid-area: f0; font-size: 11px; }
+  .ov-c-disputes { grid-area: disputes; font-size: 11px; text-align: center; }
+  .ov-c-gt { grid-area: gt; font-size: 11px; }
+  .ov-c-f1 { grid-area: f1; font-size: 11px; text-align: left; border-top: 1px dotted var(--tw-border); padding-top: 6px; margin-top: 2px; }
+  .ov-c-f0::before, .ov-c-disputes::before, .ov-c-gt::before, .ov-c-f1::before {
     content: attr(data-label) ": "; color: var(--tw-text-muted); font-weight: 400;
   }
-  .ov-go { padding: 8px 4px; }
 }
 
 .tw-push-install { padding: 10px 14px; font-size: 13.5px; line-height: 1.6; }

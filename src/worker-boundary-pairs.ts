@@ -770,6 +770,9 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
   let totalAutoOnlyCombined = 0;
   let openDisputes = 0;
   let resolvedDisputes = 0;
+  // GT (Ground Truth) = combinedBoundary-Menge (F0-Paare + geklärte Streitfälle).
+  // Keine Kennzahl, sondern eine Mengengröße — daher Summe, kein Mittelwert.
+  let gtTotal = 0;
   let totalAutomaticBoundaries = 0;
   const perRound: Array<{
     round: number;
@@ -819,6 +822,7 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalAutoOnlyAuto += vsCombined.onlyA.length;
     totalAutoOnlyCombined += vsCombined.onlyB.length;
     totalAutomaticBoundaries += automaticResult.boundaries.length;
+    gtTotal += combined.cuts.length;
 
     // Auftrag 2: geklärt = beide einig (resolved), nicht mehr „eine Entscheidung".
     const resolvedCount = agreed.filter((entry) => entry.resolved).length;
@@ -847,11 +851,15 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     tolerance,
     doubtMode,
     roundsReady: readyRounds.length,
+    // Historischer Name, zählt trotz der Bezeichnung nur rohe F0-Paare, nicht
+    // die volle GT-Menge (Paare + geklärte Streitfälle) — das ist gtTotal.
+    // Belassen für Rückwärtskompatibilität, nicht mit gtTotal verwechseln.
     combinedBoundaries: totalPairs,
     lowData: totalPairs < 40,
-    agreementF1: humanTotal ? (2 * totalPairs) / humanTotal : null,
+    f0: humanTotal ? (2 * totalPairs) / humanTotal : null,
+    gtTotal,
     automaticVsCombined: {
-      agreementF1: autoTotal ? (2 * totalAutoPairs) / autoTotal : null,
+      f1: autoTotal ? (2 * totalAutoPairs) / autoTotal : null,
     },
     automaticBoundariesTotal: totalAutomaticBoundaries,
     disputes: { open: openDisputes, resolved: resolvedDisputes },
@@ -926,8 +934,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     lenaSubmitted: boolean;
     openDisputes: number;
     resolvedDisputes: number;
+    f0: number | null;
     f1: number | null;
-    appF1: number | null;
+    gtSize: number | null;
     unresolvable: boolean;
   }> = [];
 
@@ -936,8 +945,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     const lSub = lenaSubmitted.has(roundRow.round);
     let open = 0;
     let resolved = 0;
+    let f0: number | null = null;
     let f1: number | null = null;
-    let appF1: number | null = null;
+    let gtSize: number | null = null;
     // Punkt 18/19: Runden, deren Startpunkt in der aktuellen Nachrichtenfolge
     // nicht auffindbar ist (z. B. additiv übertragene Runden aus einem
     // anderen Datensatz), zeigen sonst still F1/Streitfälle = 0/– vor, ohne
@@ -955,17 +965,18 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
         const marksP = toPositionalMarks(marks.philipp, positions);
         const marksL = toPositionalMarks(marks.lena, positions);
         const comparison = compareReviewers(marksP, marksL, { totalSeams, tolerance, doubtMode });
-        f1 = comparison.agreementF1;
+        f0 = comparison.agreementF1;
 
         const resolutions = resByRound.get(roundRow.round) || [];
         const agreed = agreeResolutions(resolutions);
         const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+        gtSize = combined.cuts.length;
         const autoResult = segmentConversationWindow(toSegmentationInput(messages));
         const autoPositions = autoResult.boundaries
           .map((b: { beforeEventId: string }) => positions.get(b.beforeEventId))
           .filter((p: number | undefined): p is number => p !== undefined);
         const vsCombined = pairSeams(autoPositions, combined.cuts, tolerance);
-        appF1 = agreementF1(vsCombined);
+        f1 = agreementF1(vsCombined);
 
         const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
         const positionToId = new Map<number, string>();
@@ -984,8 +995,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
       lenaSubmitted: lSub,
       openDisputes: open,
       resolvedDisputes: resolved,
+      f0,
       f1,
-      appF1,
+      gtSize,
       unresolvable,
     });
   }
