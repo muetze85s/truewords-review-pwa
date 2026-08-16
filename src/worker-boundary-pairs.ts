@@ -1518,9 +1518,30 @@ async function getAnchorCheck(env: Env): Promise<Response> {
  * überschrieben), lässt sich die echte rohe F0 vor dem Nachtrag aus den
  * alten Rohdaten rekonstruieren.
  */
-async function getF0Reconstruction(env: Env): Promise<Response> {
+/** Parst "11-17,3" zu einem Set { 3, 11, 12, ..., 17 }. Leer/ungültig → null (kein Detail). */
+function parseRoundsParam(url: URL): Set<number> | null {
+  const raw = url.searchParams.get('rounds');
+  if (!raw) return null;
+  const out = new Set<number>();
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    const rangeMatch = trimmed.match(/^(\d+)-(\d+)$/u);
+    if (rangeMatch) {
+      const from = Number(rangeMatch[1]);
+      const to = Number(rangeMatch[2]);
+      for (let round = Math.min(from, to); round <= Math.max(from, to); round += 1) out.add(round);
+      continue;
+    }
+    const single = Number(trimmed);
+    if (Number.isInteger(single) && single > 0) out.add(single);
+  }
+  return out.size ? out : null;
+}
+
+async function getF0Reconstruction(env: Env, url: URL): Promise<Response> {
   const oldId = 'philena-2026-pilot-v4-unseen';
   const newId = 'philena-4y';
+  const detailRounds = parseRoundsParam(url);
 
   const [oldDataset, newDataset] = await Promise.all([
     env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(oldId).first<DatasetRow>(),
@@ -1529,7 +1550,7 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
   if (!oldDataset) return error(`Datensatz „${oldId}" nicht gefunden.`, 404);
   if (!newDataset) return error(`Datensatz „${newId}" nicht gefunden.`, 404);
 
-  const [oldRoundRows, oldMarkRows, newMarkRows] = await Promise.all([
+  const [oldRoundRows, oldMarkRows, newMarkRows, newResolutionRows] = await Promise.all([
     env.DB.prepare(
       'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
     ).bind(oldId).all<RoundRow>(),
@@ -1539,6 +1560,12 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
     env.DB.prepare(
       'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
     ).bind(newId).all<{ round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' }>(),
+    // Nur für die Detailansicht (?rounds=) gebraucht: zeigt, ob eine im alten
+    // Datensatz strittige Naht im neuen inzwischen eine Resolution hat — auch
+    // wenn sie NICHT über das enge „genau einer → beide"-Muster erkannt wurde.
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(newId).all<{ round: number; seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>(),
   ]);
 
   type SeamVotes = { philipp?: 'cut' | 'doubt'; lena?: 'cut' | 'doubt' };
@@ -1557,6 +1584,12 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
   const oldByRound = byRoundAndKey(oldMarkRows.results || []);
   const newByRound = byRoundAndKey(newMarkRows.results || []);
 
+  const newResolutionsByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>>();
+  for (const row of newResolutionRows.results || []) {
+    if (!newResolutionsByRound.has(row.round)) newResolutionsByRound.set(row.round, []);
+    newResolutionsByRound.get(row.round)!.push(row);
+  }
+
   const perRound: Array<{
     round: number;
     originalDisputes: number;
@@ -1564,6 +1597,17 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
     trueOldF0: number | null;
     currentNewF0: number | null;
     idMismatch: number;
+    seams?: Array<{
+      seamMessageId: string;
+      originalSetter: string;
+      originalMark: string;
+      newPhilipp: string | null;
+      newLena: string | null;
+      newCount: number;
+      resolutionDecision: string | null;
+      resolutionResolved: boolean;
+      resolutionVotes: { philipp: string | null; lena: string | null };
+    }>;
   }> = [];
   let idChecked = 0;
   let idMismatchTotal = 0;
@@ -1576,12 +1620,16 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
 
     const oldSeamVotes = oldByRound.get(round) || new Map<string, SeamVotes>();
     const newSeamVotes = newByRound.get(round) || new Map<string, SeamVotes>();
+    const wantDetail = detailRounds?.has(round) ?? false;
+    const resolutionsForRound = wantDetail ? agreeResolutions(newResolutionsByRound.get(round) || []) : [];
+    const resolutionBySeam = new Map(resolutionsForRound.map((entry) => [entry.seam_message_id, entry]));
 
     const philippOldMarks: MarkRow[] = [];
     const lenaOldMarks: MarkRow[] = [];
     let originalDisputes = 0;
     let overwritten = 0;
     let roundMismatch = 0;
+    const seamDetails: NonNullable<(typeof perRound)[number]['seams']> = [];
 
     for (const [seamId, votes] of oldSeamVotes) {
       idChecked += 1;
@@ -1597,6 +1645,21 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
         const newVotes = newSeamVotes.get(seamId);
         const newCount = newVotes ? (newVotes.philipp ? 1 : 0) + (newVotes.lena ? 1 : 0) : 0;
         if (newCount === 2) overwritten += 1;
+
+        if (wantDetail) {
+          const resolution = resolutionBySeam.get(seamId);
+          seamDetails.push({
+            seamMessageId: seamId,
+            originalSetter: votes.philipp ? 'Philipp' : 'Lena',
+            originalMark: votes.philipp || votes.lena || '',
+            newPhilipp: newVotes?.philipp ?? null,
+            newLena: newVotes?.lena ?? null,
+            newCount,
+            resolutionDecision: resolution?.decision ?? null,
+            resolutionResolved: resolution?.resolved ?? false,
+            resolutionVotes: { philipp: resolution?.philipp ?? null, lena: resolution?.lena ?? null },
+          });
+        }
       }
     }
 
@@ -1629,6 +1692,7 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
       trueOldF0: trueOld.agreementF1,
       currentNewF0: currentNew.agreementF1,
       idMismatch: roundMismatch,
+      ...(wantDetail ? { seams: seamDetails } : {}),
     });
   }
 
@@ -1639,6 +1703,11 @@ async function getF0Reconstruction(env: Env): Promise<Response> {
     idChecked,
     idMismatchTotal,
     affectedRounds: perRound.filter((r) => r.overwrittenByBackfill > 0).length,
+    // ?rounds=11-17 (Komma-Liste/Bereiche) liefert für diese Runden zusätzlich
+    // eine Naht-für-Naht-Aufschlüsselung (perRound[].seams) statt nur der
+    // Rundenzahlen — u. a. um Fälle wie Runde 12 zu klären, wo currentNewF0
+    // von trueOldF0 abweicht, ohne dass overwrittenByBackfill das erklärt.
+    detailRounds: detailRounds ? [...detailRounds].sort((a, b) => a - b) : null,
     perRound,
   });
 }
@@ -2120,7 +2189,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
 
     if (url.pathname === '/api/admin/f0-reconstruction' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf die F0-Rekonstruktion sehen.', 403);
-      return await getF0Reconstruction(env);
+      return await getF0Reconstruction(env, url);
     }
 
     if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
