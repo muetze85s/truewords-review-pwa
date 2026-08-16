@@ -146,9 +146,26 @@
     $('dp-progress-text').textContent = `${cuts} Grenze${cuts === 1 ? '' : 'n'}, ${doubts} unsicher`;
   }
 
-  let saveTimer = null;
+  // putMarks() auf dem Server ersetzt bei jedem Aufruf ALLE Markierungen der
+  // Runde (DELETE + INSERT). Ohne Serialisierung können mehrere schnelle
+  // Klicks parallele Requests auslösen, deren Antworten in der falschen
+  // Reihenfolge ankommen — ein älterer (unvollständigerer) Request, der
+  // NACH einem neueren fertig wird, würde dann bereits gespeicherte
+  // Markierungen kommentarlos wieder löschen. Deshalb: nie mehr als ein
+  // Request gleichzeitig unterwegs; kommt während eines laufenden Saves ein
+  // weiterer Klick, wird nach dessen Ende einmal mit dem dann aktuellen
+  // Stand nachgesendet (kein Request pro Klick, sondern der jeweils letzte
+  // Stand gewinnt garantiert).
+  let saveInFlight = false;
+  let savePending = false;
   function saveMarks() {
-    clearTimeout(saveTimer);
+    savePending = true;
+    if (saveInFlight) return;
+    runSave();
+  }
+  function runSave() {
+    savePending = false;
+    saveInFlight = true;
     $('dp-save-status').textContent = 'Wird gespeichert …';
     $('dp-save-status').classList.remove('error');
     const marks = [...state.marks.entries()].map(([seamMessageId, mark]) => ({ seamMessageId, mark }));
@@ -162,6 +179,9 @@
     }).catch((caught) => {
       $('dp-save-status').textContent = `Nicht gespeichert — ${caught.message}`;
       $('dp-save-status').classList.add('error');
+    }).then(() => {
+      saveInFlight = false;
+      if (savePending) runSave();
     });
   }
 
