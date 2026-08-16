@@ -745,13 +745,38 @@ async function resolveDispute(request: Request, env: Env, dataset: DatasetRow, r
   return json({ ok: true, seamMessageId, decision, note, decidedBy: reviewer, decidedAt: now });
 }
 
+/**
+ * Wie getOverview(): lädt die gefilterte Nachrichtenfolge und alle
+ * Runden/Abgaben/Markierungen/Streitfälle EINMAL in Bulk-Queries statt pro
+ * Runde. Wird von refreshLiveF1() im Browser nach JEDER Markierung erneut
+ * aufgerufen (debounced) — die alte Schleife mit loadRoundWindow() +
+ * 2×loadMarks() + Streitfall-Query + vollem Algorithmus-Lauf pro Runde war
+ * hier besonders teuer, weil sie auf dem Tippweg lag, nicht nur beim Laden
+ * der Übersicht.
+ */
 async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: URL): Promise<Response> {
   const tolerance = parseTolerance(url);
   const doubtMode = parseDoubtMode(url);
 
-  const submissionRows = await env.DB.prepare(`
-    SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1
-  `).bind(dataset.id).all<{ round: number; reviewer: Role }>();
+  const [sequence, roundRows, submissionRows, allMarks, allResolutions] = await Promise.all([
+    filteredSequence(env, dataset.id),
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(dataset.id).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: Role }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: Role; seam_message_id: string; mark: string }>(),
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>(),
+  ]);
+
+  const seqIndex = new Map<string, number>();
+  for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
+
   const byRound = new Map<number, Set<Role>>();
   for (const row of submissionRows.results || []) {
     if (!byRound.has(row.round)) byRound.set(row.round, new Set());
@@ -761,6 +786,24 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     .filter(([, reviewers]) => reviewers.has('Philipp') && reviewers.has('Lena'))
     .map(([round]) => round)
     .sort((a, b) => a - b);
+
+  const roundMeta = new Map<number, RoundRow>();
+  for (const row of roundRows.results || []) roundMeta.set(row.round, row);
+
+  const marksByRound = new Map<number, { philipp: MarkRow[]; lena: MarkRow[] }>();
+  for (const row of allMarks.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, { philipp: [], lena: [] });
+    const entry = marksByRound.get(row.round)!;
+    const markRow: MarkRow = { seam_message_id: row.seam_message_id, mark: row.mark as 'cut' | 'doubt' };
+    if (row.reviewer === 'Philipp') entry.philipp.push(markRow);
+    else if (row.reviewer === 'Lena') entry.lena.push(markRow);
+  }
+
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>>();
+  for (const row of allResolutions.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
 
   let totalPairs = 0;
   let totalOnlyPhilipp = 0;
@@ -786,25 +829,26 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
   }> = [];
 
   for (const round of readyRounds) {
-    const { messages } = await loadRoundWindow(env, dataset, round);
+    const roundRow = roundMeta.get(round);
+    // Additiv aus einem anderen Datensatz übertragene Runden können ihren
+    // Startpunkt in der aktuellen Folge nicht wiederfinden — wie in
+    // getOverview() übersprungen statt die gesamte Anfrage scheitern zu lassen.
+    const startIdx = roundRow ? seqIndex.get(roundRow.first_message_id) : undefined;
+    if (!roundRow || startIdx === undefined) continue;
+
+    const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
     const positions = seamPositions(messages);
     const totalSeams = Math.max(0, messages.length - 1);
-    const [philippMarks, lenaMarks] = await Promise.all([
-      loadMarks(env, dataset.id, round, 'Philipp'),
-      loadMarks(env, dataset.id, round, 'Lena'),
-    ]);
+    const marks = marksByRound.get(round) || { philipp: [], lena: [] };
     const comparison = compareReviewers(
-      toPositionalMarks(philippMarks, positions),
-      toPositionalMarks(lenaMarks, positions),
+      toPositionalMarks(marks.philipp, positions),
+      toPositionalMarks(marks.lena, positions),
       { totalSeams, tolerance, doubtMode },
     );
-    // Vor der gemeinsamen Fassung geladen: die geklärten Streitfälle gehören
-    // hinein, sonst bliebe die Klärungsarbeit ohne Wirkung auf die Kennzahlen.
-    const resolutionRows = await env.DB.prepare(`
-      SELECT seam_message_id, decided_by, decision FROM review_boundary_resolutions
-      WHERE dataset_id = ?1 AND round = ?2
-    `).bind(dataset.id, round).all<{ seam_message_id: string; decided_by: string; decision: 'cut' | 'no_cut' | 'open' }>();
-    const agreed = agreeResolutions(resolutionRows.results || []);
+    // Die geklärten Streitfälle gehören in die gemeinsame Fassung, sonst
+    // bliebe die Klärungsarbeit ohne Wirkung auf die Kennzahlen.
+    const resolutions = resByRound.get(round) || [];
+    const agreed = agreeResolutions(resolutions);
     const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
 
     const automaticResult = segmentConversationWindow(
@@ -940,6 +984,18 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     unresolvable: boolean;
   }> = [];
 
+  // Gepoolte Aggregate (f0Aggregate/f1Aggregate/gtTotal) für die Übersicht-
+  // Kopfzeile — vormals ein zweiter Aufruf von getSummary() aus loadOverview()
+  // im Browser, jetzt aus denselben ohnehin schon bulk-geladenen Runden hier
+  // mitgezählt statt die komplette Berechnung ein zweites Mal anzustoßen.
+  let pooledPairs = 0;
+  let pooledOnlyPhilipp = 0;
+  let pooledOnlyLena = 0;
+  let pooledAutoPairs = 0;
+  let pooledAutoOnlyAuto = 0;
+  let pooledAutoOnlyCombined = 0;
+  let gtTotal = 0;
+
   for (const roundRow of existingRounds) {
     const pSub = philippSubmitted.has(roundRow.round);
     const lSub = lenaSubmitted.has(roundRow.round);
@@ -978,6 +1034,14 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
         const vsCombined = pairSeams(autoPositions, combined.cuts, tolerance);
         f1 = agreementF1(vsCombined);
 
+        pooledPairs += comparison.pairs.length;
+        pooledOnlyPhilipp += comparison.onlyA.length;
+        pooledOnlyLena += comparison.onlyB.length;
+        pooledAutoPairs += vsCombined.pairs.length;
+        pooledAutoOnlyAuto += vsCombined.onlyA.length;
+        pooledAutoOnlyCombined += vsCombined.onlyB.length;
+        gtTotal += gtSize;
+
         const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
         const positionToId = new Map<number, string>();
         for (const [id, pos] of positions) positionToId.set(pos, id);
@@ -1004,6 +1068,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
 
   const allRoundNums = existingRounds.map((row) => row.round);
 
+  const pooledHumanTotal = 2 * pooledPairs + pooledOnlyPhilipp + pooledOnlyLena;
+  const pooledAutoTotal = 2 * pooledAutoPairs + pooledAutoOnlyAuto + pooledAutoOnlyCombined;
+
   return json({
     ok: true,
     reviewer,
@@ -1012,6 +1079,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     doubtMode,
     totalRounds: allRoundNums.length,
     readyRounds: allRoundNums.filter((round) => philippSubmitted.has(round) && lenaSubmitted.has(round)).length,
+    f0Aggregate: pooledHumanTotal ? (2 * pooledPairs) / pooledHumanTotal : null,
+    f1Aggregate: pooledAutoTotal ? (2 * pooledAutoPairs) / pooledAutoTotal : null,
+    gtTotal,
     reviewers: {
       Philipp: {
         submitted: philippSubmitted.size,

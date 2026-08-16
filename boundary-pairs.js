@@ -491,19 +491,11 @@
 
   function loadOverview() {
     $('dp-overview-body').innerHTML = '<p class="dp-hint">Wird geladen …</p>';
-    return Promise.all([
-      fetchJson('overview'),
-      // Gepoolte F0-/F1-Aggregate + GT-Summe kommen aus demselben Endpunkt wie
-      // die Live-F1-Leiste — dieselbe Toleranz/Doubt-Behandlung wie überall sonst.
-      fetchJson(`agreement/summary${agreementQuery()}`).catch(() => ({ status: 0, payload: null })),
-    ]).then(([overviewResult, summaryResult]) => {
-      const { status, payload } = overviewResult;
+    // Gepoolte F0-/F1-Aggregate + GT-Summe kommen direkt aus /api/overview mit —
+    // kein zweiter Aufruf von agreement/summary mehr nötig, der dieselbe
+    // Berechnung ein zweites Mal angestoßen hätte.
+    return fetchJson(`overview${agreementQuery()}`).then(({ status, payload }) => {
       if (status !== 200 || !payload.ok) throw new Error(payload.error || `HTTP ${status}`);
-      if (summaryResult.status === 200 && summaryResult.payload && summaryResult.payload.ok) {
-        payload.f0Aggregate = summaryResult.payload.f0;
-        payload.f1Aggregate = summaryResult.payload.automaticVsCombined?.f1 ?? null;
-        payload.gtTotal = summaryResult.payload.gtTotal;
-      }
       cachedOverview = payload;
       renderOverview(payload);
     }).catch((caught) => {
