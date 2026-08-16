@@ -169,3 +169,31 @@ html[data-theme="dark"] .status[data-state="error"] { color: #efbdc8; }
   h1 { font-size: 2.2rem; }
   .page { padding: 8px; }
 }
+
+/* Punkt 4: Installationshinweis-Pop-up nach Login (iOS, nicht installiert) —
+   zentral statt als Balken unter jeder Runde/Übersicht. */
+.tw-install-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, #000 55%, transparent);
+}
+.tw-install-modal {
+  width: 100%;
+  max-width: 380px;
+  padding: 22px 20px;
+  border: 1px solid var(--portal-line);
+  border-radius: var(--portal-radius-small);
+  background: var(--portal-card);
+  box-shadow: var(--portal-shadow);
+}
+.tw-install-modal h2 { margin: 0 0 10px; font-size: 1.05rem; color: var(--portal-text); }
+.tw-install-modal p { margin: 0 0 12px; color: var(--portal-muted); font-size: .78rem; line-height: 1.5; }
+.tw-install-steps { margin: 0 0 16px; padding-left: 1.2rem; color: var(--portal-text); font-size: .78rem; line-height: 1.6; }
+.tw-install-steps li + li { margin-top: 4px; }
+.tw-install-dismiss { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: .74rem; color: var(--portal-muted); font-weight: 600; }
+.tw-install-modal button.primary { width: 100%; }

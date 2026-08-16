@@ -660,17 +660,28 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     };
   }
 
-  // Offene Streitfälle zuerst, geklärte ans Ende — serverseitig sortiert,
-  // damit beide Partner exakt dieselbe Reihenfolge sehen.
-  const disputes = [
+  const disputeEntries = [
     ...comparison.onlyA.map((position) => disputeEntry(position, 'Philipp')),
     ...comparison.onlyB.map((position) => disputeEntry(position, 'Lena')),
-  ].sort((a, b) => {
-    const aResolved = a.decision !== 'open' ? 1 : 0;
-    const bResolved = b.decision !== 'open' ? 1 : 0;
-    if (aResolved !== bResolved) return aResolved - bResolved;
-    return a.position - b.position;
-  });
+  ];
+
+  // Stabile Nummerierung nach Position (Konversationsreihenfolge), unabhängig
+  // vom Klärungsstatus — bleibt fix, auch wenn während der Sitzung ein
+  // Streitfall geklärt wird und in der Anzeige ans Ende rutscht.
+  const numberByPosition = new Map(
+    [...disputeEntries].sort((a, b) => a.position - b.position).map((entry, index) => [entry.position, index + 1]),
+  );
+
+  // Offene Streitfälle zuerst, geklärte ans Ende — serverseitig sortiert,
+  // damit beide Partner exakt dieselbe Reihenfolge sehen.
+  const disputes = disputeEntries
+    .map((entry) => ({ ...entry, number: numberByPosition.get(entry.position) }))
+    .sort((a, b) => {
+      const aResolved = a.decision !== 'open' ? 1 : 0;
+      const bResolved = b.decision !== 'open' ? 1 : 0;
+      if (aResolved !== bResolved) return aResolved - bResolved;
+      return a.position - b.position;
+    });
 
   return json({
     ok: true,
@@ -679,12 +690,14 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
     tolerance,
     doubtMode,
     n: comparison.n,
-    agreementF1: comparison.agreementF1,
+    // F0 = rohe Übereinstimmung Philipp/Lena dieser Runde (Konsistenz mit Übersicht/Aggregat).
+    f0: comparison.agreementF1,
     kappa: comparison.kappa,
     automatic: {
       vsPhilipp: { agreementF1: agreementF1(vsPhilipp), kappa: cohensKappa(vsPhilipp, totalSeams) },
       vsLena: { agreementF1: agreementF1(vsLena), kappa: cohensKappa(vsLena, totalSeams) },
-      vsCombined: { agreementF1: agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
+      // F1 = Automatik vs. GT (F0-Paare + geklärte Streitfälle) dieser Runde.
+      vsCombined: { f1: agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
     },
     // Roh-Diagnose: wie viele Grenzen die Automatik überhaupt gesetzt hat, unabhängig
     // vom Vergleich. 0 bei >0 menschlichen Grenzen erklärt sofort eine 0.00-Übereinstimmung.
@@ -982,6 +995,7 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     f1: number | null;
     gtSize: number | null;
     unresolvable: boolean;
+    done: boolean;
   }> = [];
 
   // Gepoolte Aggregate (f0Aggregate/f1Aggregate/gtTotal) für die Übersicht-
@@ -1063,6 +1077,10 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
       f1,
       gtSize,
       unresolvable,
+      // Punkt 3: verschwindet aus der Standardansicht der Übersicht — beide
+      // abgegeben UND keine offenen Streitfälle. Unresolvable Runden bleiben
+      // bewusst sichtbar, da ihr Streitfall-Status nicht berechenbar ist.
+      done: pSub && lSub && !unresolvable && open === 0,
     });
   }
 

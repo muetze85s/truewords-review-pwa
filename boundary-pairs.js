@@ -24,6 +24,10 @@
     doubtMode: 'skip',
     tab: 'round',
     dataset: readDataset(),
+    // Punkt 3: Übersicht zeigt standardmäßig nur unfertige Runden, Umschalter
+    // + Seite rein clientseitig auf den bereits geladenen Daten.
+    overviewShowAll: false,
+    overviewPage: 0,
   };
 
   function $(id) { return document.getElementById(id); }
@@ -155,7 +159,6 @@
     }).then(({ status, payload }) => {
       if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
       $('dp-save-status').textContent = 'Gespeichert';
-      refreshLiveF1();
     }).catch((caught) => {
       $('dp-save-status').textContent = `Nicht gespeichert — ${caught.message}`;
       $('dp-save-status').classList.add('error');
@@ -182,7 +185,6 @@
     fetchJson(`rounds/${state.round}/submit`, { method: 'POST' })
       .then(({ status, payload }) => {
         if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
-        refreshLiveF1();
         cachedOverview = null;
         return fetchJson('overview').then(({ status: oStatus, payload: oPayload }) => {
           if (oStatus === 200 && oPayload.ok) {
@@ -357,12 +359,16 @@
   }
 
   function renderAgreement(data) {
-    $('dp-agreement-number').textContent = data.agreementF1 === null ? '–' : data.agreementF1.toFixed(2);
-    $('dp-agreement-label').textContent = `Übereinstimmung · n=${data.n}`;
+    $('dp-agreement-number').textContent = data.f0 === null ? '–' : data.f0.toFixed(2);
+    $('dp-agreement-label').textContent = `F0 (Übereinstimmung) · n=${data.n}`;
     $('dp-kappa-label').textContent = `κ = ${data.kappa.toFixed(2)}`;
+    // Punkt 2: pro Runde statt Gesamt-Aggregat — F1 bezieht sich ausschließlich
+    // auf diese Runde (Automatik vs. GT dieser Runde), aktualisiert sich nach
+    // jeder Streitfall-Klärung, F0 bleibt davon unberührt.
+    const f1Value = data.automatic.vsCombined.f1;
+    $('dp-round-f1').innerHTML = `<span class="dp-live-item">F1 (Automatik vs. GT dieser Runde) <b>${f1Value === null ? '–' : f1Value.toFixed(2)}</b></span>`;
     $('dp-automatic-row').innerHTML = `Automatik gegen Philipp: <b>${data.automatic.vsPhilipp.agreementF1.toFixed(2)}</b>
       · gegen Lena: <b>${data.automatic.vsLena.agreementF1.toFixed(2)}</b>
-      · gegen gemeinsame Fassung: <b>${data.automatic.vsCombined.agreementF1.toFixed(2)}</b>
       <br><span class="dp-hint">Automatik hat roh ${data.automaticRaw.boundaryCount} von ${data.automaticRaw.totalSeams} Zwischenräumen als Grenze erkannt.</span>`;
 
     // Punkt 5: Zitat-Nachschlag für die Streitfall-Ansicht aus dem vollen
@@ -376,6 +382,7 @@
     }
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
       <div class="dp-dispute${dispute.resolved ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
+        <div class="dp-dispute-number">Streitfall ${escapeHtml(dispute.number)}</div>
         <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b> · ${votesMetaHtml(dispute)}</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
@@ -409,10 +416,10 @@
           });
           statusNode.textContent = 'Gespeichert — lädt gemeinsamen Stand …';
           // Auftrag 2: „geklärt" hängt jetzt an BEIDEN Stimmen. Den wahren
-          // gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig, Sortierung)
-          // liefert nur der Server — deshalb neu laden statt lokal raten.
+          // gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig, Sortierung,
+          // F0/F1 dieser Runde) liefert nur der Server — deshalb neu laden
+          // statt lokal raten.
           loadAgreement();
-          refreshLiveF1();
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
         });
@@ -431,56 +438,6 @@
         resolve(active ? active.dataset.decision : 'open');
       });
     });
-  }
-
-  // ----------------------------------------------------- Live-F1 (Aufgabe 4)
-  // Nach jeder Annotation (Markierung gespeichert, Runde abgegeben, Streitfall
-  // entschieden) wird der aktuelle F1 neu vom Server geholt und oben angezeigt.
-  // Rein informativ — es wird KEIN Parameter automatisch geändert; Toleranz &
-  // Umgang mit „unsicher" entscheidet weiterhin die Person von Hand.
-  let liveF1Timer = null;
-  function setLiveF1Message(node, text, state) {
-    node.innerHTML = `<span class="dp-live-item muted">${escapeHtml(text)}</span>`;
-    node.dataset.state = state;
-  }
-  function refreshLiveF1() {
-    const node = $('dp-live-f1');
-    if (!node) return;
-    // Kurzes Entprellen: mehrere schnelle Klicks lösen nur einen Abruf aus.
-    clearTimeout(liveF1Timer);
-    liveF1Timer = setTimeout(() => {
-      // Aufgabe 7: harter Timeout, damit der Spinner nie endlos hängt.
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      fetch(API + withDataset(`agreement/summary${agreementQuery()}`), {
-        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
-      }).then((response) => {
-        if (response.status === 401) { location.href = '/login.html'; throw new Error('abgemeldet'); }
-        return response.json().then((payload) => ({ status: response.status, payload }));
-      }).then(({ status, payload }) => {
-        clearTimeout(timeout);
-        if (status !== 200 || !payload.ok) { setLiveF1Message(node, 'F1: keine Daten', 'empty'); return; }
-        const hasHuman = payload.f0 !== null && payload.f0 !== undefined;
-        const hasAuto = payload.automaticVsCombined && payload.automaticVsCombined.f1 !== null
-          && payload.automaticVsCombined.f1 !== undefined;
-        // Keine beidseitig abgegebene Runde → nichts zu vergleichen, sauber melden.
-        if (!payload.roundsReady || (!hasHuman && !hasAuto)) {
-          setLiveF1Message(node, 'F1: keine Daten (noch keine beidseitig abgegebene Runde)', 'empty');
-          return;
-        }
-        const human = hasHuman ? payload.f0.toFixed(2) : '–';
-        const auto = hasAuto ? payload.automaticVsCombined.f1.toFixed(2) : '–';
-        node.innerHTML = `<span class="dp-live-item">Übereinstimmung <b>${escapeHtml(human)}</b></span>`
-          + `<span class="dp-live-item">F1 (Automatik vs. GT) <b>${escapeHtml(auto)}</b></span>`
-          + `<span class="dp-live-item muted">n=${payload.roundsReady} Runden · tol=${state.tolerance}</span>`;
-        node.dataset.state = 'ready';
-      }).catch((caught) => {
-        clearTimeout(timeout);
-        if (caught && caught.message === 'abgemeldet') return;
-        const reason = caught && caught.name === 'AbortError' ? 'Zeitüberschreitung' : 'Fehler';
-        setLiveF1Message(node, `F1: keine Daten (${reason})`, 'error');
-      });
-    }, 250);
   }
 
   // ------------------------------------------------------------- Übersicht
@@ -510,23 +467,38 @@
     return 'ov-both-open';
   }
 
+  const OVERVIEW_PAGE_SIZE = 25;
+
   function renderOverview(data) {
     const pStat = data.reviewers.Philipp;
     const lStat = data.reviewers.Lena;
     const totalOpen = data.rounds.reduce((sum, row) => sum + row.openDisputes, 0);
     const totalResolved = data.rounds.reduce((sum, row) => sum + row.resolvedDisputes, 0);
 
+    // Zähler-Kacheln beziehen sich weiterhin auf ALLE Runden, unabhängig vom
+    // Sichtbarkeits-Filter unten.
     const statsHtml = `<div class="ov-stats">
       <div class="ov-stat"><span class="ov-stat-num">${data.readyRounds}</span><span class="ov-stat-label">beidseitig abgegeben</span></div>
       <div class="ov-stat"><span class="ov-stat-num">${totalOpen}</span><span class="ov-stat-label">offene Streitfälle</span></div>
       <div class="ov-stat"><span class="ov-stat-num">${data.totalRounds}</span><span class="ov-stat-label">Runden gesamt</span></div>
     </div>`;
 
-    const sorted = [...data.rounds].sort((a, b) => b.round - a.round);
+    const allSorted = [...data.rounds].sort((a, b) => b.round - a.round);
+    // Standardansicht: nur unfertige Runden (nicht beide abgegeben, oder
+    // abgegeben mit noch offenen Streitfällen). Bleibt naturgemäß klein,
+    // daher unpaginiert. Umschalter zeigt die volle, paginierte Historie.
+    const visible = state.overviewShowAll ? allSorted : allSorted.filter((row) => !row.done);
+
+    const totalPages = Math.max(1, Math.ceil(visible.length / OVERVIEW_PAGE_SIZE));
+    if (state.overviewPage >= totalPages) state.overviewPage = totalPages - 1;
+    if (state.overviewPage < 0) state.overviewPage = 0;
+    const paged = state.overviewShowAll
+      ? visible.slice(state.overviewPage * OVERVIEW_PAGE_SIZE, (state.overviewPage + 1) * OVERVIEW_PAGE_SIZE)
+      : visible;
 
     const fmtF1 = (v) => v === null || v === undefined ? '–' : v.toFixed(2);
 
-    const rows = sorted.map((row) => {
+    const rows = paged.map((row) => {
       const cls = roundStatusClass(row);
       const pIcon = row.philippSubmitted ? '✓' : 'offen';
       const lIcon = row.lenaSubmitted ? '✓' : 'offen';
@@ -557,16 +529,29 @@
       </div>`;
     }).join('');
 
-    const emptyRow = sorted.length
+    const emptyRow = paged.length
       ? ''
-      : '<p class="ov-empty">Noch keine Runden angelegt.</p>';
+      : (state.overviewShowAll
+        ? '<p class="ov-empty">Noch keine Runden angelegt.</p>'
+        : '<p class="ov-empty">Keine offenen Runden — alles erledigt.</p>');
 
     const f0Agg = fmtF1(data.f0Aggregate);
     const f1Agg = fmtF1(data.f1Aggregate);
     const gtAgg = data.gtTotal ?? '–';
 
+    const toggleHtml = `<div class="ov-toggle-row">
+      <label class="ov-toggle"><input type="checkbox" id="ov-show-all" ${state.overviewShowAll ? 'checked' : ''}> Alle Runden anzeigen</label>
+    </div>`;
+
+    const paginationHtml = (state.overviewShowAll && totalPages > 1) ? `<div class="ov-pagination">
+      <button type="button" id="ov-page-prev" ${state.overviewPage === 0 ? 'disabled' : ''}>← Vorherige</button>
+      <span>Seite ${state.overviewPage + 1} / ${totalPages}</span>
+      <button type="button" id="ov-page-next" ${state.overviewPage >= totalPages - 1 ? 'disabled' : ''}>Nächste →</button>
+    </div>` : '';
+
     $('dp-overview-body').innerHTML = `
       ${statsHtml}
+      ${toggleHtml}
       <div class="ov-table-wrap">
         <div class="ov-table" role="table">
           <div class="ov-row ov-head" role="row" aria-hidden="true">
@@ -580,7 +565,18 @@
           </div>
           ${rows || emptyRow}
         </div>
-      </div>`;
+      </div>
+      ${paginationHtml}`;
+
+    $('ov-show-all').addEventListener('change', (event) => {
+      state.overviewShowAll = event.target.checked;
+      state.overviewPage = 0;
+      renderOverview(data);
+    });
+    const pagePrev = $('ov-page-prev');
+    const pageNext = $('ov-page-next');
+    if (pagePrev) pagePrev.addEventListener('click', () => { state.overviewPage -= 1; renderOverview(data); });
+    if (pageNext) pageNext.addEventListener('click', () => { state.overviewPage += 1; renderOverview(data); });
 
     $('dp-overview-body').querySelectorAll('.ov-row:not(.ov-head)').forEach((rowEl) => {
       rowEl.addEventListener('click', () => {
@@ -589,7 +585,6 @@
         $('dp-round-input').value = round;
         setTab('round');
         loadRound();
-        refreshLiveF1();
       });
     });
   }
@@ -601,7 +596,6 @@
       state.round = mine.nextRound;
       $('dp-round-input').value = state.round;
       loadRound();
-      refreshLiveF1();
       syncUrlAndNav();
     }
   }
@@ -658,7 +652,6 @@
     $('dp-doubt-mode').addEventListener('change', (event) => {
       state.doubtMode = event.target.value;
       loadAgreement();
-      refreshLiveF1();
     });
 
     startAtRightRound();
@@ -678,7 +671,6 @@
       state.round = requested;
       $('dp-round-input').value = state.round;
       loadRound();
-      refreshLiveF1();
       return;
     }
 
@@ -693,7 +685,6 @@
       }
     }).catch(() => { /* Fallback: bleibt bei Runde 1 */ }).then(() => {
       loadRound();
-      refreshLiveF1();
     });
   }
 

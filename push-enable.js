@@ -1,34 +1,10 @@
 (() => {
   'use strict';
 
-  function isIos() {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-
-  function isStandalone() {
-    return window.matchMedia('(display-mode: standalone)').matches ||
-      navigator.standalone === true;
-  }
-
-  function showInstallHint() {
-    const bar = document.createElement('div');
-    bar.className = 'tw-push-bar';
-    bar.innerHTML = '<div class="tw-push-install">'
-      + '<b>Push-Benachrichtigungen brauchen die installierte App.</b><br>'
-      + '<span class="tw-push-steps">'
-      + '1. Tippe auf <b>Teilen</b> (das Quadrat mit dem Pfeil unten).<br>'
-      + '2. Wähle <b>Zum Home-Bildschirm</b>.<br>'
-      + '3. Öffne die App vom Home-Bildschirm — dann erscheint hier der Erlauben-Knopf.'
-      + '</span></div>';
-    document.body.appendChild(bar);
-  }
-
-  if (isIos() && !isStandalone()) {
-    showInstallHint();
-    return;
-  }
-
+  // Der iOS-Installationshinweis lief früher hier als Balken unter jeder
+  // Runde/Übersicht (Punkt 4) — zeigt sich jetzt zentral als Pop-up direkt
+  // nach dem Login (login.js). Ohne installierte App fehlt auf iOS ohnehin
+  // die PushManager-Unterstützung, der folgende Guard fängt das weiterhin ab.
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
 
   function b64ToUint8(base64) {
