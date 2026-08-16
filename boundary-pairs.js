@@ -185,11 +185,29 @@
     });
   }
 
+  // Nur den angeklickten Zwischenraum-Button aktualisieren statt den ganzen
+  // Nachrichtenstrom (bis zu 100 Nachrichten) bei jedem Klick neu zu rendern.
+  // Farbe/Fettung kommen rein über CSS aus data-reviewer (Container) +
+  // data-mark (Button) — das Setzen von data-mark reicht deshalb bereits aus,
+  // ohne die Nachrichten-Bubbles neu zu bauen.
+  function updateSeamButton(seamId) {
+    const stream = $('dp-stream');
+    const button = stream && [...stream.querySelectorAll('.dp-seam')].find((el) => el.dataset.seam === seamId);
+    if (!button) return;
+    const index = state.messages.findIndex((message) => message.id === seamId);
+    if (index < 1) return;
+    const mark = state.marks.get(seamId) || '';
+    const label = mark ? seamLabel(mark) : pauseLabel(state.messages[index - 1], state.messages[index]);
+    button.dataset.mark = mark;
+    const labelEl = button.querySelector('.label');
+    if (labelEl) labelEl.textContent = label;
+  }
+
   function toggleSeam(seamId) {
     const current = state.marks.get(seamId) || '';
     const next = nextMark(current);
     if (next) state.marks.set(seamId, next); else state.marks.delete(seamId);
-    renderStream(false);
+    updateSeamButton(seamId);
     updateProgress();
     saveMarks();
   }
@@ -424,22 +442,22 @@
 
       function resolve(decision) {
         statusNode.textContent = 'Wird gespeichert …';
-        fetchJson(`rounds/${state.round}/resolve`, {
+        // agreementQuery() mitschicken, damit der Server denselben
+        // Vergleichsdatensatz (Toleranz/Umgang mit „unsicher") zurückgibt,
+        // den die Seite gerade zeigt.
+        fetchJson(`rounds/${state.round}/resolve${agreementQuery()}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ seamMessageId, decision, note: noteInput.value }),
         }).then(({ status, payload }) => {
           if (status !== 200 || !payload.ok) throw new Error(payload.error || 'Fehler');
-          // Eigene Stimme sofort sichtbar markieren.
-          card.querySelectorAll('[data-decision]').forEach((button) => {
-            button.classList.toggle('active', button.dataset.decision === decision);
-          });
-          statusNode.textContent = 'Gespeichert — lädt gemeinsamen Stand …';
-          // Auftrag 2: „geklärt" hängt jetzt an BEIDEN Stimmen. Den wahren
-          // gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig, Sortierung,
-          // F0/F1 dieser Runde) liefert nur der Server — deshalb neu laden
-          // statt lokal raten.
-          loadAgreement();
+          statusNode.textContent = 'Gespeichert';
+          // Auftrag 2: „geklärt" hängt an BEIDEN Stimmen. Der Server liefert
+          // den wahren gemeinsamen Stand (Stimmen-Anzeige, geklärt/uneinig,
+          // Sortierung, F0/F1 dieser Runde) direkt in derselben Antwort mit —
+          // kein zweiter Request/kein zweites Laden des Runden-Fensters mehr
+          // nötig, das war der spürbar langsame Teil beim Klären.
+          renderAgreement(payload.agreement);
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
         });

@@ -553,25 +553,25 @@ async function submitRound(env: Env, dataset: DatasetRow, round: number, reviewe
   return json({ ok: true, submitted: true, submittedAt: now });
 }
 
-async function getAgreement(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
-  const url = new URL(request.url);
-  const tolerance = parseTolerance(url);
-  const doubtMode = parseDoubtMode(url);
-
-  const [philippSubmitted, lenaSubmitted] = await Promise.all([
-    submittedAt(env, dataset.id, round, 'Philipp'),
-    submittedAt(env, dataset.id, round, 'Lena'),
-  ]);
-  const gate = agreementGate({ reviewer, philippSubmittedAt: philippSubmitted, lenaSubmittedAt: lenaSubmitted });
-  if (gate) {
-    return json({
-      ok: false,
-      error: 'Der Vergleich wird erst freigeschaltet, wenn beide Prüfer abgegeben haben.',
-      waitingFor: gate.waitingFor,
-    }, 403);
-  }
-
-  const { messages } = await loadRoundWindow(env, dataset, round);
+/**
+ * Baut den vollständigen Vergleichs-/Streitfall-Datensatz aus einem bereits
+ * geladenen Runden-Fenster. Ausgelagert aus getAgreement(), damit
+ * resolveDispute() nach dem Speichern einer Entscheidung denselben Datensatz
+ * zurückgeben kann, OHNE das Runden-Fenster (loadRoundWindow → filteredSequence,
+ * liest den kompletten gefilterten Chat neu ein) ein zweites Mal zu laden —
+ * das war bei jedem einzelnen Streitfall-Klick spürbar langsam, weil vorher
+ * sowohl resolveDispute() als auch der anschließende getAgreement()-Aufruf
+ * vom Browser je einmal filteredSequence() ausgelöst haben.
+ */
+async function buildAgreementPayload(
+  env: Env,
+  dataset: DatasetRow,
+  round: number,
+  reviewer: Role,
+  tolerance: number,
+  doubtMode: DoubtMode,
+  messages: ViewMessage[],
+): Promise<Record<string, unknown>> {
   const positions = seamPositions(messages);
   const positionToId = new Map<number, string>();
   for (const [id, position] of positions) positionToId.set(position, id);
@@ -683,7 +683,7 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
       return a.position - b.position;
     });
 
-  return json({
+  return {
     ok: true,
     round,
     reviewer,
@@ -708,7 +708,30 @@ async function getAgreement(request: Request, env: Env, dataset: DatasetRow, rou
       uncertain: combined.uncertain.map((position) => positionToId.get(position)).filter(Boolean),
     },
     disputes,
-  });
+  };
+}
+
+async function getAgreement(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
+  const url = new URL(request.url);
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+
+  const [philippSubmitted, lenaSubmitted] = await Promise.all([
+    submittedAt(env, dataset.id, round, 'Philipp'),
+    submittedAt(env, dataset.id, round, 'Lena'),
+  ]);
+  const gate = agreementGate({ reviewer, philippSubmittedAt: philippSubmitted, lenaSubmittedAt: lenaSubmitted });
+  if (gate) {
+    return json({
+      ok: false,
+      error: 'Der Vergleich wird erst freigeschaltet, wenn beide Prüfer abgegeben haben.',
+      waitingFor: gate.waitingFor,
+    }, 403);
+  }
+
+  const { messages } = await loadRoundWindow(env, dataset, round);
+  const payload = await buildAgreementPayload(env, dataset, round, reviewer, tolerance, doubtMode, messages);
+  return json(payload);
 }
 
 async function resolveDispute(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
@@ -755,7 +778,17 @@ async function resolveDispute(request: Request, env: Env, dataset: DatasetRow, r
       decided_at = excluded.decided_at
   `).bind(dataset.id, round, seamMessageId, decision, note, reviewer, now).run();
 
-  return json({ ok: true, seamMessageId, decision, note, decidedBy: reviewer, decidedAt: now });
+  // Punkt: liefert den aktualisierten Vergleichsdatensatz direkt mit zurück,
+  // statt dass der Browser danach noch einmal komplett neu laden muss — spart
+  // sowohl den zweiten filteredSequence()-Lauf als auch einen ganzen
+  // Request/Response-Umlauf, genau an der Stelle, die sich beim Klären eines
+  // Streitfalls spürbar langsam angefühlt hat.
+  const url = new URL(request.url);
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+  const agreement = await buildAgreementPayload(env, dataset, round, reviewer, tolerance, doubtMode, messages);
+
+  return json({ ok: true, seamMessageId, decision, note, decidedBy: reviewer, decidedAt: now, agreement });
 }
 
 /**
