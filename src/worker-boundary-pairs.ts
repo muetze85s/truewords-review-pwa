@@ -1760,7 +1760,16 @@ async function getF0Reconstruction(env: Env, url: URL): Promise<Response> {
  * die ROHEN Einzelmarkierungen (F0) würden auf den ursprünglichen,
  * unabhängigen Stand zurückgesetzt.
  */
-async function getMarksRestorePlan(env: Env): Promise<Response> {
+type MarksRestoreRow = { reviewer: Role; seamMessageId: string; mark: 'cut' | 'doubt' };
+type MarksRestoreRound = { round: number; unchanged: number; toAdd: MarksRestoreRow[]; toRemove: MarksRestoreRow[] };
+type MarksRestorePlan = {
+  oldDatasetId: string;
+  newDatasetId: string;
+  totals: { toAdd: number; toRemove: number; roundsAffected: number; roundsChecked: number };
+  rounds: MarksRestoreRound[];
+};
+
+async function computeMarksRestorePlan(env: Env): Promise<MarksRestorePlan | { notFound: string }> {
   const oldId = 'philena-2026-pilot-v4-unseen';
   const newId = 'philena-4y';
 
@@ -1768,8 +1777,8 @@ async function getMarksRestorePlan(env: Env): Promise<Response> {
     env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(oldId).first<DatasetRow>(),
     env.DB.prepare('SELECT id, year FROM review_datasets WHERE id = ?1 LIMIT 1').bind(newId).first<DatasetRow>(),
   ]);
-  if (!oldDataset) return error(`Datensatz „${oldId}" nicht gefunden.`, 404);
-  if (!newDataset) return error(`Datensatz „${newId}" nicht gefunden.`, 404);
+  if (!oldDataset) return { notFound: oldId };
+  if (!newDataset) return { notFound: newId };
 
   type Row = { round: number; reviewer: Role; seam_message_id: string; mark: 'cut' | 'doubt' };
   const [oldRoundRows, oldMarkRows, newMarkRows] = await Promise.all([
@@ -1803,7 +1812,7 @@ async function getMarksRestorePlan(env: Env): Promise<Response> {
     if (bucket) bucket.toRemove.push(newRow);
   }
 
-  const rounds = [...perRound.entries()].sort((a, b) => a[0] - b[0]).map(([round, bucket]) => ({
+  const rounds: MarksRestoreRound[] = [...perRound.entries()].sort((a, b) => a[0] - b[0]).map(([round, bucket]) => ({
     round,
     unchanged: bucket.unchanged,
     toAdd: bucket.toAdd.map((r) => ({ reviewer: r.reviewer, seamMessageId: r.seam_message_id, mark: r.mark })),
@@ -1813,11 +1822,9 @@ async function getMarksRestorePlan(env: Env): Promise<Response> {
   const totalToAdd = rounds.reduce((sum, r) => sum + r.toAdd.length, 0);
   const totalToRemove = rounds.reduce((sum, r) => sum + r.toRemove.length, 0);
 
-  return json({
-    ok: true,
+  return {
     oldDatasetId: oldId,
     newDatasetId: newId,
-    note: 'Reiner Plan, keine Schreiboperation. review_boundary_resolutions bleibt unberührt — nur review_boundary_marks würde für diese Runden auf den alten Stand zurückgesetzt.',
     totals: {
       toAdd: totalToAdd,
       toRemove: totalToRemove,
@@ -1825,6 +1832,71 @@ async function getMarksRestorePlan(env: Env): Promise<Response> {
       roundsChecked: rounds.length,
     },
     rounds,
+  };
+}
+
+async function getMarksRestorePlan(env: Env): Promise<Response> {
+  const plan = await computeMarksRestorePlan(env);
+  if ('notFound' in plan) return error(`Datensatz „${plan.notFound}" nicht gefunden.`, 404);
+  return json({
+    ok: true,
+    ...plan,
+    note: 'Reiner Plan, keine Schreiboperation. review_boundary_resolutions bleibt unberührt — nur review_boundary_marks würde für diese Runden auf den alten Stand zurückgesetzt.',
+  });
+}
+
+/**
+ * Wendet den Marks-Rückstell-Plan tatsächlich an: review_boundary_marks für
+ * die Runden 1–17 in philena-4y wird zeilenweise auf den Stand des
+ * eingefrorenen Basis-Datensatzes zurückgesetzt (DELETE der abweichenden/
+ * überzähligen Zeilen, INSERT/UPSERT der fehlenden). review_boundary_resolutions
+ * bleibt unangetastet. Der Plan wird bei jedem Aufruf frisch neu berechnet
+ * (keine gecachten Daten vom Client übernommen), damit die Anwendung nicht
+ * auf einem veralteten Stand basiert.
+ */
+async function applyMarksRestore(request: Request, env: Env): Promise<Response> {
+  if (!(await adminAuthorized(request, env))) {
+    return error('Nur der Admin darf die Marks-Rückstellung auslösen.', 403);
+  }
+  let body: { confirm?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return error('Ungültige Anfrage.');
+  }
+  if (body.confirm !== 'restore-rounds-1-17') {
+    return error("Bestätigung fehlt: confirm muss 'restore-rounds-1-17' sein.", 400);
+  }
+
+  const plan = await computeMarksRestorePlan(env);
+  if ('notFound' in plan) return error(`Datensatz „${plan.notFound}" nicht gefunden.`, 404);
+
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const round of plan.rounds) {
+    for (const row of round.toRemove) {
+      statements.push(env.DB.prepare(`
+        DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3 AND seam_message_id = ?4
+      `).bind(plan.newDatasetId, round.round, row.reviewer, row.seamMessageId));
+    }
+    for (const row of round.toAdd) {
+      statements.push(env.DB.prepare(`
+        INSERT INTO review_boundary_marks (dataset_id, round, reviewer, seam_message_id, mark, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+        ON CONFLICT(dataset_id, round, reviewer, seam_message_id) DO UPDATE SET mark = ?5, updated_at = ?6
+      `).bind(plan.newDatasetId, round.round, row.reviewer, row.seamMessageId, row.mark, now));
+    }
+  }
+
+  if (statements.length > 0) await env.DB.batch(statements);
+
+  return json({
+    ok: true,
+    applied: statements.length,
+    oldDatasetId: plan.oldDatasetId,
+    newDatasetId: plan.newDatasetId,
+    totals: plan.totals,
+    rounds: plan.rounds,
   });
 }
 
@@ -2266,6 +2338,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/f0-reconstruction'
     && url.pathname !== '/api/admin/marks-restore-plan'
+    && url.pathname !== '/api/admin/marks-restore-apply'
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
     && url.pathname !== '/api/admin/optimizer-status'
@@ -2279,6 +2352,9 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   }
   if (url.pathname === '/api/admin/marks-backfill-apply' && request.method === 'POST') {
     return await applyMarksBackfill(request, env);
+  }
+  if (url.pathname === '/api/admin/marks-restore-apply' && request.method === 'POST') {
+    return await applyMarksRestore(request, env);
   }
 
   const user = await sessionUser(request, env);
