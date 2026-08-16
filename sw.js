@@ -4,6 +4,8 @@ const FILES = [
   './icon.svg',
   './icon-192.png',
   './icon-512.png',
+  './icon-pruefstand-192.png',
+  './icon-pruefstand-512.png',
   './nav.css',
   './nav.js',
   './dashboard.css',
