@@ -80,8 +80,6 @@ const files = [
   'icon.svg',
   'icon-192.png',
   'icon-512.png',
-  'icon-pruefstand-192.png',
-  'icon-pruefstand-512.png',
   'sw.js',
   'enhancements.css',
   'enhancements.js',

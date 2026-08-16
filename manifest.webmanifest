@@ -1,6 +1,6 @@
 {
-  "name": "TrueWords Situationsprüfung 2026",
-  "short_name": "TW Prüfung",
+  "name": "TrueWords Prüfstand",
+  "short_name": "TW Prüfstand",
   "description": "Lokale Prüfung und Zuordnung von Gesprächssituationen aus dem Jahr 2026.",
   "lang": "de",
   "start_url": "/doppelpruefung.html?tab=overview",
