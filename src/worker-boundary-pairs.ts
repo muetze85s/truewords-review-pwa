@@ -1150,6 +1150,124 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
 }
 
 /**
+ * Nur-Lese-Diagnose: zeigt für ausgewählte Runden (Default: alle) die aktuell
+ * OFFENEN Streitfälle im Detail — Naht-ID plus Philipps und Lenas jeweilige
+ * Markierung. Anlass: nach der Marks-Rückstellung (Runden 1–17 auf den
+ * eingefrorenen Basis-Stand) könnten Nähte, die vorher wegen des inzwischen
+ * behobenen Speicher-Race unmarkiert wirkten (und daher gar nicht als
+ * Streitfall auftauchten), jetzt echte neue Abweichungen zeigen — Philipp und
+ * Lena hatten diese also nie zu Gesicht bekommen, obwohl sie „ihre" Runde
+ * bereits als komplett geklärt in Erinnerung haben. Rein lesend, gleiche
+ * Bulk-Lade-Technik wie getOverview (ein filteredSequence-Aufruf statt einer
+ * pro Runde).
+ */
+async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+  const roundsFilter = parseRoundsParam(url);
+
+  const [sequence, roundRows, submissionRows, allMarks, allResolutions] = await Promise.all([
+    filteredSequence(env, dataset.id),
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(dataset.id).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string; seam_message_id: string; mark: string }>(),
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
+  ]);
+
+  const seqIndex = new Map<string, number>();
+  for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
+
+  const philippSubmitted = new Set<number>();
+  const lenaSubmitted = new Set<number>();
+  for (const row of submissionRows.results || []) {
+    if (row.reviewer === 'Philipp') philippSubmitted.add(row.round);
+    else if (row.reviewer === 'Lena') lenaSubmitted.add(row.round);
+  }
+
+  const marksByRound = new Map<number, { philipp: MarkRow[]; lena: MarkRow[] }>();
+  for (const row of allMarks.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, { philipp: [], lena: [] });
+    const entry = marksByRound.get(row.round)!;
+    const markRow: MarkRow = { seam_message_id: row.seam_message_id, mark: row.mark as 'cut' | 'doubt' };
+    if (row.reviewer === 'Philipp') entry.philipp.push(markRow);
+    else if (row.reviewer === 'Lena') entry.lena.push(markRow);
+  }
+
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  for (const row of allResolutions.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
+
+  const existingRounds = (roundRows.results || [])
+    .filter((row) => !roundsFilter || roundsFilter.has(row.round))
+    .sort((a, b) => a.round - b.round);
+
+  const rounds = existingRounds.map((roundRow) => {
+    const pSub = philippSubmitted.has(roundRow.round);
+    const lSub = lenaSubmitted.has(roundRow.round);
+    const openSeams: Array<{ seamMessageId: string; philipp: string | null; lena: string | null }> = [];
+    let resolvedCount = 0;
+    let f0: number | null = null;
+    let unresolvable = false;
+
+    const startIdx = seqIndex.get(roundRow.first_message_id);
+    if (startIdx === undefined) unresolvable = true;
+    if (pSub && lSub && startIdx !== undefined) {
+      const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
+      const positions = seamPositions(messages);
+      const totalSeams = Math.max(0, messages.length - 1);
+      const marks = marksByRound.get(roundRow.round) || { philipp: [], lena: [] };
+      const marksP = toPositionalMarks(marks.philipp, positions);
+      const marksL = toPositionalMarks(marks.lena, positions);
+      const comparison = compareReviewers(marksP, marksL, { totalSeams, tolerance, doubtMode });
+      f0 = comparison.agreementF1;
+
+      const resolutions = resByRound.get(roundRow.round) || [];
+      const agreed = agreeResolutions(resolutions);
+      const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
+
+      const positionToId = new Map<number, string>();
+      for (const [id, pos] of positions) positionToId.set(pos, id);
+      const philippBySeam = new Map(marks.philipp.map((m) => [m.seam_message_id, m.mark]));
+      const lenaBySeam = new Map(marks.lena.map((m) => [m.seam_message_id, m.mark]));
+
+      for (const pos of [...comparison.onlyA, ...comparison.onlyB]) {
+        const seamId = positionToId.get(pos);
+        if (!seamId) continue;
+        if (resolvedSeams.has(seamId)) { resolvedCount += 1; continue; }
+        openSeams.push({
+          seamMessageId: seamId,
+          philipp: philippBySeam.get(seamId) || null,
+          lena: lenaBySeam.get(seamId) || null,
+        });
+      }
+    }
+
+    return {
+      round: roundRow.round,
+      philippSubmitted: pSub,
+      lenaSubmitted: lSub,
+      unresolvable,
+      f0,
+      openCount: openSeams.length,
+      resolvedCount,
+      openSeams,
+    };
+  });
+
+  return json({ ok: true, datasetId: dataset.id, tolerance, doubtMode, rounds });
+}
+
+/**
  * Nur-Lese-Kennzahlen zur Filter-Migration (`isReviewable` → `isReviewableBroad`):
  * ausschließlich Zählungen. Kein Nachrichtentext, kein Name — auch nicht, um ihn
  * intern zu lesen und wegzulassen; die Runden-Fenster werden nur über IDs und
@@ -2338,6 +2456,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/anchor-check'
     && url.pathname !== '/api/admin/f0-reconstruction'
     && url.pathname !== '/api/admin/marks-restore-plan'
+    && url.pathname !== '/api/admin/dispute-check'
     && url.pathname !== '/api/admin/marks-restore-apply'
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
@@ -2388,6 +2507,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/marks-restore-plan' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf den Marks-Rückstell-Plan sehen.', 403);
       return await getMarksRestorePlan(env);
+    }
+
+    if (url.pathname === '/api/admin/dispute-check' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Streitfall-Prüfung sehen.', 403);
+      return await getDisputeCheck(env, dataset, url);
     }
 
     if (url.pathname === '/api/admin/optimize-threshold' && request.method === 'GET') {
