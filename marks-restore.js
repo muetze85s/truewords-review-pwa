@@ -22,9 +22,11 @@
 
       const changed = data.rounds.filter((r) => r.toAdd.length > 0 || r.toRemove.length > 0);
       if (changed.length === 0) {
+        // apply-box bleibt sichtbar (nicht ausblenden!) — sonst verschwindet nach
+        // einem erfolgreichen Apply die Bestätigungsmeldung mitsamt Ergebnis-JSON,
+        // weil der anschließende loadPlan()-Aufruf jetzt 0 Änderungen findet.
         $('changes-empty').hidden = false;
         $('changes-table-wrap').hidden = true;
-        $('apply-box').hidden = true;
       } else {
         $('changes-body').innerHTML = data.rounds.map((r) => `
           <tr>
