@@ -1214,7 +1214,12 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
   const rounds = existingRounds.map((roundRow) => {
     const pSub = philippSubmitted.has(roundRow.round);
     const lSub = lenaSubmitted.has(roundRow.round);
-    const openSeams: Array<{ seamMessageId: string; philipp: string | null; lena: string | null }> = [];
+    const openSeams: Array<{
+      seamMessageId: string;
+      philipp: string | null;
+      lena: string | null;
+      votes: Array<{ decidedBy: string; decision: string }>;
+    }> = [];
     let resolvedCount = 0;
     let f0: number | null = null;
     let unresolvable = false;
@@ -1235,6 +1240,16 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
       const agreed = agreeResolutions(resolutions);
       const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
 
+      // Für offene Nähte zusätzlich zeigen, OB überhaupt schon eine Entscheidung
+      // gespeichert ist (nur einer von beiden, oder beide aber uneins) statt
+      // pauschal "offen" — das unterscheidet "nie angeschaut" von "angeschaut,
+      // aber (noch) nicht deckungsgleich entschieden".
+      const votesBySeam = new Map<string, Array<{ decidedBy: string; decision: string }>>();
+      for (const row of resolutions) {
+        if (!votesBySeam.has(row.seam_message_id)) votesBySeam.set(row.seam_message_id, []);
+        votesBySeam.get(row.seam_message_id)!.push({ decidedBy: row.decided_by, decision: row.decision });
+      }
+
       const positionToId = new Map<number, string>();
       for (const [id, pos] of positions) positionToId.set(pos, id);
       const philippBySeam = new Map(marks.philipp.map((m) => [m.seam_message_id, m.mark]));
@@ -1248,6 +1263,7 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
           seamMessageId: seamId,
           philipp: philippBySeam.get(seamId) || null,
           lena: lenaBySeam.get(seamId) || null,
+          votes: votesBySeam.get(seamId) || [],
         });
       }
     }
