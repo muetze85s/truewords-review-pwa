@@ -69,6 +69,8 @@ const files = [
   'migration-check.js',
   'marks-backfill.html',
   'marks-backfill.js',
+  'marks-restore.html',
+  'marks-restore.js',
   'nav.css',
   'nav.js',
   'dashboard.html',

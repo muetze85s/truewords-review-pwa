@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TW Prüfstand">
+<link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="theme-color" content="#f3f2ef">
+  <meta name="robots" content="noindex,nofollow">
+  <title>TrueWords · Marks-Rückstellung</title>
+  <link rel="stylesheet" href="./truewords-theme.css">
+  <link rel="stylesheet" href="./truewords-ui-theme.css">
+  <link rel="stylesheet" href="./boundary-pairs.css">
+  <link rel="stylesheet" href="./nav.css">
+  <script src="./truewords-user-theme.js" defer></script>
+  <script src="./nav.js" defer></script>
+</head>
+<body class="dp">
+  <main class="dp-wrap">
+    <div class="tw-page-head">
+      <div class="tw-page-eyebrow">Nur für Philipp · Schreiboperation</div>
+      <h1>Marks-Rückstellung Runden 1–17</h1>
+      <p class="dp-status">Setzt die rohen Einzelmarkierungen (review_boundary_marks) für die Runden 1–17 in philena-4y exakt auf den Stand des eingefrorenen Basis-Datensatzes philena-2026-pilot-v4-unseen zurück. review_boundary_resolutions (die gemeinsam geklärten Streitfälle) bleibt unangetastet — GT und F1 ändern sich dadurch nicht, nur F0 (die rohe Übereinstimmung) geht auf die echten ursprünglichen Werte zurück.</p>
+    </div>
+
+    <div id="plan-status" class="dp-status">Plan wird geladen …</div>
+
+    <div id="plan-wrap" hidden>
+      <div class="ov-stats" id="plan-stats"></div>
+
+      <div class="tw-set" id="changes-box">
+        <legend>Geplante Änderungen je Runde</legend>
+        <div id="changes-empty" hidden style="font-size:14px">Keine Änderungen nötig — der neue Datensatz stimmt für diese Runden bereits mit dem alten überein.</div>
+        <div id="changes-table-wrap" style="overflow-x:auto">
+          <table class="tw-optimizer-log-table">
+            <thead><tr><th>Runde</th><th>Unverändert</th><th>Hinzufügen</th><th>Entfernen</th></tr></thead>
+            <tbody id="changes-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tw-set" id="apply-box">
+        <legend>Jetzt anwenden</legend>
+        <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Schreibt die obigen Änderungen in <code id="dataset-name"></code>. Berechnet den Plan beim Anwenden noch einmal frisch aus der Datenbank. Erfordert den Admin-Zugangscode.</p>
+        <form id="apply-form">
+          <label>
+            <span>Admin-Zugangscode</span>
+            <input id="admin-token" type="password" autocomplete="off" required>
+          </label>
+          <button id="apply-submit" class="primary" type="submit">Änderungen anwenden</button>
+        </form>
+        <div id="apply-status" class="dp-status" style="margin-top:10px"></div>
+        <pre id="apply-result" style="margin-top:8px;font-size:12px;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+    </div>
+  </main>
+  <script src="./marks-restore.js" defer></script>
+</body>
+</html>
