@@ -1,4 +1,5 @@
-import baseWorker, {
+import baseWorker from './worker-classification';
+import {
   activeDatasetRow,
   reviewerSubmissionTimes,
   openDisputeTotal,

@@ -51,18 +51,19 @@ alles, was sie nicht selbst behandelt, per `baseWorker.fetch(request, env)`.
 
 ```
 worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-Hinweis, scheduled()-Cron
-  └ worker-boundary-pairs Doppelprüfung: Runden, Markierungen, Vergleich/F1, Streitfälle, ?dataset=, Transfer
-    └ worker-source-integrity-v4  Integritätsprüfung des 4-Jahres-Rohchats
-      └ worker-situation-quiz     Situations-Quiz
-        └ worker-review-precision Präzisions-/Merge-Ansicht
-          └ worker-source-integrity  Integritätsprüfung des Rohchats (Test 3)
-            └ worker-review          Prüfstand-Auslieferung
-              └ worker-chat-stream   Chat-Stream/Verarbeitung
-                └ worker-auth-fast   Login/Setup/Passwort-Reset (schneller Pfad)
-                  └ worker-portal    Sessions, /api/auth/* (me, login, logout, setup)
-                    └ worker-analysis  Analyse-Import/-Versionen
-                      └ worker-chunked D1-Chunk-Upload großer Chats
-                        └ worker-d1    unterste Schicht: D1-Zugriff, Datensätze
+  └ worker-classification Klassifizierung: Situationen, 20 Musterklassen + 3 Zuschnitt-Flags, blinde Doppelklassifizierung, Kappa, Lena-Freischaltung (/api/classification/*, /klassifizierung*.html)
+    └ worker-boundary-pairs Doppelprüfung: Runden, Markierungen, Vergleich/F1, Streitfälle, ?dataset=, Transfer
+      └ worker-source-integrity-v4  Integritätsprüfung des 4-Jahres-Rohchats
+        └ worker-situation-quiz     Situations-Quiz
+          └ worker-review-precision Präzisions-/Merge-Ansicht
+            └ worker-source-integrity  Integritätsprüfung des Rohchats (Test 3)
+              └ worker-review          Prüfstand-Auslieferung
+                └ worker-chat-stream   Chat-Stream/Verarbeitung
+                  └ worker-auth-fast   Login/Setup/Passwort-Reset (schneller Pfad)
+                    └ worker-portal    Sessions, /api/auth/* (me, login, logout, setup)
+                      └ worker-analysis  Analyse-Import/-Versionen
+                        └ worker-chunked D1-Chunk-Upload großer Chats
+                          └ worker-d1    unterste Schicht: D1-Zugriff, Datensätze
 ```
 
 ### D1-Schema (Migrationen `migrations/000X_*.sql`)
@@ -78,6 +79,8 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 - `0009` Web-Push (`push_subscriptions`, `push_settings` (Singleton id=1), `push_state` für Dedup)
 - `0010` Push-Einstellungen symmetrisch: `notify_lena_on_philipp_submit`, `dispute_alert_philipp_enabled`, `dispute_alert_lena_enabled` (je Person einzeln abschaltbar statt ein geteilter Schalter)
 - `0011` `segment_optimizer_runs` — Verlauf der Schwellwert-Optimierung (rein informativ, ändert nicht die laufende Segmentierung)
+- `0012` `segment_validation_runs` — Verlauf des Validierungs-Splits (70/30 Overfitting-Test, rein informativ)
+- `0013` Klassifizierung: `review_situations` (+`in_validation_sample`), `review_classification_marks` (+`is_correction_of_llm`, `codebook_version`, reviewer inkl. `'llm'`), `review_classification_submissions` (Blind-Gate je Situation), `review_classification_resolutions` (beide-müssen-zustimmen wie 0008), `review_situation_quality_flags`/`_resolutions` (3 Zuschnitt-Flags), `app_settings` (Key-Value, u. a. `lena_classification_enabled`)
 
 ### PWA (Browser)
 

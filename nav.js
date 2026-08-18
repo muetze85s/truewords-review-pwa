@@ -13,6 +13,8 @@
   const LINKS = [
     { href: '/doppelpruefung.html?tab=overview', label: 'Übersicht', match: '/doppelpruefung.html' },
     { href: '/doppelpruefung.html', label: 'Doppelprüfung', match: '/doppelpruefung.html' },
+    // Klassifizierung: Philipp immer, Lena nur bei Freischaltung (classification-Flag).
+    { href: '/klassifizierung.html', label: 'Klassifizierung', match: '/klassifizierung.html', classification: true },
     { href: '/upload.html', label: 'Upload', admin: true },
     { href: '/push-settings.html', label: 'Settings', admin: true },
   ];
@@ -29,7 +31,7 @@
     return pathMatch;
   }
 
-  function build(user) {
+  function build(user, classificationEnabled) {
     const canUpload = Boolean(user && user.canUpload);
     const here = location.pathname.replace(/\/index\.html$/, '/');
 
@@ -47,6 +49,8 @@
     const entries = [];
     LINKS.forEach((item) => {
       if (item.admin && !canUpload) return;
+      // Klassifizierung: Philipp (canUpload) immer, Lena nur bei Freischaltung.
+      if (item.classification && !canUpload && !classificationEnabled) return;
       const a = document.createElement('a');
       a.href = item.href;
       a.textContent = item.label;
@@ -93,7 +97,20 @@
         if (data && data.ok) user = data.user;
       }
     } catch (_) { /* nicht angemeldet → schlanker Balken ohne Abmelden */ }
-    build(user);
+
+    // Freischaltung der Klassifizierung für Lena — bestimmt, ob der Menüpunkt
+    // bei ihr erscheint. Fehler/nicht angemeldet → aus.
+    let classificationEnabled = false;
+    if (user) {
+      try {
+        const access = await fetch('/api/classification/access', { credentials: 'same-origin', cache: 'no-store' });
+        if (access.ok) {
+          const data = await access.json();
+          if (data && data.ok) classificationEnabled = Boolean(data.enabled);
+        }
+      } catch (_) { /* aus */ }
+    }
+    build(user, classificationEnabled);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

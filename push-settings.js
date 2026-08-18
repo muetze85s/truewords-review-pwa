@@ -444,7 +444,37 @@
     });
   }
 
+  // --- Abschnitt 5: Klassifizierung (Lena-Freischaltung) ---------------------
+
+  function setupClassificationToggle() {
+    const toggle = $('lena_classification_enabled');
+    const statusNode = $('classification-status');
+    if (!toggle) return;
+
+    fetch('/api/classification/access', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => { if (data && data.ok) toggle.checked = Boolean(data.enabled); })
+      .catch(() => {});
+
+    toggle.addEventListener('change', () => {
+      statusNode.textContent = 'Wird gespeichert …';
+      fetch('/api/classification/access', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled: toggle.checked }),
+      }).then((response) => response.json()).then((data) => {
+        if (!data || !data.ok) throw new Error((data && data.error) || 'Fehler');
+        statusNode.textContent = data.enabled ? 'Lena ist freigeschaltet.' : 'Lena ist gesperrt.';
+      }).catch((caught) => {
+        statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
+        toggle.checked = !toggle.checked;
+      });
+    });
+  }
+
   setupDatasetSelect();
+  setupClassificationToggle();
   loadOptimizerStatus();
   loadValidationStatus();
   load();

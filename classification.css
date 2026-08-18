@@ -1,0 +1,202 @@
+/* Klassifizierung — baut auf boundary-pairs.css (dp-*, ov-*) und den
+   Theme-Tokens auf. Nur das Zusätzliche (Checkbox-Panel, Kappa-Anzeige,
+   Streitfall-Karten je Klasse, Übersicht-Spalten) lebt hier. Farben/Rollen
+   (Philipp Türkis, Lena Rosa) kommen unverändert aus truewords-ui-theme.css. */
+
+.cl-weg { display: none !important; }
+
+/* ------------------------------------------------------- Situationsansicht */
+
+.cl-position { font-size: 13px; color: var(--tw-text-muted); min-width: 120px; text-align: center; }
+.cl-section-heading { font-size: 15px; margin: 20px 0 10px; color: var(--tw-text); }
+
+.cl-panel {
+  margin-top: 14px;
+  background: var(--tw-surface);
+  border: 1px solid var(--tw-border);
+  border-radius: 12px;
+  padding: 14px 14px 16px;
+}
+.cl-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cl-panel-title { font-weight: 700; color: var(--tw-text); }
+
+.cl-group { margin: 12px 0 6px; }
+.cl-group-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--tw-text-muted); margin: 10px 0 4px; font-weight: 700;
+}
+
+.cl-check-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "check info" "hint hint";
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--tw-border);
+}
+.cl-check-row:last-child { border-bottom: none; }
+.cl-check { grid-area: check; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.cl-check input { width: 20px; height: 20px; flex: 0 0 auto; cursor: pointer; accent-color: var(--tw-philipp); }
+.dp-message[data-speaker] ~ * .cl-check input { accent-color: inherit; }
+body.cl[data-reviewer="Lena"] .cl-check input { accent-color: var(--tw-lena); }
+.cl-check-label { font-size: 14.5px; color: var(--tw-text); line-height: 1.3; }
+
+.cl-info-dot {
+  grid-area: info;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--tw-button-border);
+  background: var(--tw-button-bg); color: var(--tw-button-text);
+  font-size: 12px; font-style: italic; font-weight: 700; line-height: 1;
+  cursor: pointer;
+}
+.cl-info-dot:hover { background: var(--tw-button-hover); }
+.cl-info-dot.cl-info-dot-inline { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+span.cl-info-dot { display: inline-flex; align-items: center; justify-content: center; }
+
+.cl-hint {
+  grid-area: hint;
+  font-size: 13px; color: var(--tw-text-muted); line-height: 1.4;
+  background: var(--tw-surface-secondary, rgba(0,0,0,.03));
+  border-radius: 8px; padding: 8px 10px; margin: 2px 0 4px;
+}
+
+.cl-flags-divider {
+  display: flex; align-items: center; gap: 10px; margin: 18px 0 6px;
+  color: var(--tw-text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
+}
+.cl-flags-divider::before, .cl-flags-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--tw-border);
+}
+
+/* ------------------------------------------------------- Abgegeben / eigene Auswahl */
+
+.cl-own-summary { margin-top: 12px; }
+.cl-own-list { margin: 4px 0 0; padding-left: 20px; color: var(--tw-text); font-size: 14px; }
+.cl-own-list li { margin: 2px 0; }
+
+/* ------------------------------------------------------- Vergleich / Streitfälle */
+
+.cl-dispute {
+  background: var(--tw-surface);
+  border: 1px solid var(--tw-status-unclear);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 0 0 10px;
+}
+.cl-dispute.geklaert { border-color: var(--tw-status-confirmed); background: var(--tw-status-confirmed-surface); }
+.cl-dispute-label { font-size: 14.5px; font-weight: 700; color: var(--tw-text); margin-bottom: 3px; }
+.cl-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
+
+.cl-vote-badge { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.cl-vote-badge.einig { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cl-vote-badge.uneinig { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+.cl-vote-badge.offen { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+
+.cl-dispute-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-dispute-actions button {
+  border: 1px solid var(--tw-button-border);
+  background: var(--tw-button-bg);
+  color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.cl-dispute-actions button:hover { background: var(--tw-button-hover); }
+.cl-dispute-actions button.active {
+  background: var(--tw-philipp); color: #fff; border-color: transparent; font-weight: 700;
+}
+body.cl[data-reviewer="Lena"] .cl-dispute-actions button.active { background: var(--tw-lena); }
+.cl-dispute-status { font-size: 12px; color: var(--tw-text-muted); margin-top: 6px; min-height: 1em; }
+
+.cl-agree-yes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.cl-agree-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed);
+}
+
+/* ------------------------------------------------------- Übersicht */
+
+.cl-overview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.cl-overview-head h2 { margin: 0; font-size: 20px; }
+.cl-info-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 999px; padding: 7px 14px; font-size: 13.5px; text-decoration: none; font-weight: 600;
+}
+.cl-info-btn:hover { background: var(--tw-button-hover); }
+
+.cl-progress-line { font-size: 13.5px; color: var(--tw-text-muted); margin: 4px 0 14px; }
+
+.cl-prepare {
+  margin-top: 16px; padding: 12px; border: 1px dashed var(--tw-border); border-radius: 10px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.cl-prepare label { font-size: 13px; color: var(--tw-text-muted); display: flex; align-items: center; gap: 6px; }
+.cl-prepare input { width: 84px; padding: 6px 8px; border: 1px solid var(--tw-border); border-radius: 8px; background: var(--tw-surface-raised); color: var(--tw-text); }
+.cl-prepare button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 14px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+}
+.cl-prepare button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-prepare button:disabled { opacity: .5; cursor: default; }
+
+/* Kappa-Zusammenfassung */
+.cl-kappa {
+  border: 1px solid var(--tw-border); border-radius: 12px; background: var(--tw-surface-raised, var(--tw-surface));
+  padding: 12px 14px; margin: 0 0 16px;
+}
+.cl-kappa-head { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 8px; }
+.cl-kappa-group { margin: 10px 0; }
+.cl-kappa-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tw-text-muted); font-weight: 700; margin-bottom: 2px; }
+.cl-kappa-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--tw-border); }
+.cl-kappa-row:last-child { border-bottom: none; }
+.cl-kappa-label { font-size: 13.5px; color: var(--tw-text); }
+.cl-kappa-value { font-size: 13px; color: var(--tw-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-kappa-muted { font-size: 12.5px; color: var(--tw-text-muted); }
+.cl-kappa-n { color: var(--tw-text-muted); font-size: 12px; }
+
+.cl-ampel { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.cl-ampel-green { background: var(--tw-status-confirmed); }
+.cl-ampel-yellow { background: var(--tw-status-open); }
+.cl-ampel-red { background: var(--tw-status-unclear); }
+.cl-ampel-insufficient, .cl-ampel-none { background: var(--tw-border); }
+
+.cl-broken { display: inline-block; font-size: 12px; font-weight: 700; color: var(--tw-status-open); }
+
+/* Nachschlage-Seite (Kodierhandbuch) */
+.cl-codebook { line-height: 1.55; color: var(--tw-text); }
+.cl-codebook h1 { font-size: 22px; margin: 18px 0 8px; }
+.cl-codebook h2 { font-size: 18px; margin: 22px 0 8px; padding-top: 8px; border-top: 1px solid var(--tw-border); }
+.cl-codebook h3 { font-size: 15.5px; margin: 18px 0 4px; color: var(--tw-philipp-text); }
+.cl-codebook p { margin: 6px 0; }
+.cl-codebook ul { margin: 6px 0; padding-left: 20px; }
+.cl-codebook li { margin: 3px 0; }
+.cl-codebook hr { border: none; border-top: 1px solid var(--tw-border); margin: 18px 0; }
+.cl-codebook code {
+  background: var(--tw-surface-secondary, rgba(0,0,0,.05)); border-radius: 5px;
+  padding: 1px 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--tw-philipp-text);
+}
+.cl-codebook strong { color: var(--tw-text); }
+
+/* Übersicht-Tabelle: 5 Spalten (Situation · Philipp · Lena · Streitfälle · Zuschnitt).
+   Überschreibt die 7-Spalten-Vorlage aus boundary-pairs.css. */
+body.cl .ov-row { grid-template-columns: 72px 1fr 1fr 76px 96px; }
+.ov-c-broken { text-align: center; font-size: 13px; }
+
+@media (max-width: 560px) {
+  body.cl .ov-row {
+    grid-template-columns: auto 1fr 1fr;
+    grid-template-areas:
+      "round philipp lena"
+      "disputes disputes broken";
+    row-gap: 6px;
+  }
+  body.cl .ov-c-round { grid-area: round; }
+  body.cl .ov-c-philipp { grid-area: philipp; }
+  body.cl .ov-c-lena { grid-area: lena; }
+  body.cl .ov-c-disputes { grid-area: disputes; font-size: 11px; text-align: left; }
+  body.cl .ov-c-broken { grid-area: broken; font-size: 11px; text-align: right; }
+  body.cl .ov-c-disputes::before, body.cl .ov-c-broken::before {
+    content: attr(data-label) ": "; color: var(--tw-text-muted); font-weight: 400;
+  }
+}

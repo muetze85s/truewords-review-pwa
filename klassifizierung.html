@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TW Klassifizierung">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="robots" content="noindex,nofollow">
+<title>Klassifizierung · TrueWords</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./truewords-theme.css">
+<link rel="stylesheet" href="./truewords-ui-theme.css">
+<link rel="stylesheet" href="./boundary-pairs.css">
+<link rel="stylesheet" href="./classification.css">
+<link rel="stylesheet" href="./nav.css">
+<script src="./truewords-user-theme.js" defer></script>
+<script src="./nav.js" defer></script>
+</head>
+<body class="dp cl">
+
+<header class="dp-top">
+  <div class="dp-top-inner">
+    <div class="dp-brand"><strong>Klassifizierung</strong><span id="cl-sub">Wird geladen …</span></div>
+  </div>
+</header>
+
+<main class="dp-wrap">
+
+  <!-- ============================== Situationsansicht ============================== -->
+  <section id="cl-situation-picker" class="dp-card cl-weg">
+    <div class="dp-round-nav">
+      <button type="button" id="cl-prev" class="dp-round-step" aria-label="Vorherige Situation">←</button>
+      <span class="cl-position" id="cl-position">Situation</span>
+      <button type="button" id="cl-next" class="dp-round-step" aria-label="Nächste Situation">→</button>
+    </div>
+    <button type="button" id="cl-to-overview" class="dp-round-open">Zur Übersicht</button>
+  </section>
+
+  <section id="cl-situation-view" class="cl-weg">
+    <p class="dp-status" id="cl-status"></p>
+
+    <!-- Markieren -->
+    <div id="cl-state-mark" class="dp-state">
+      <div id="cl-stream" class="dp-stream dp-readonly"></div>
+
+      <div class="cl-panel">
+        <div class="cl-panel-head">
+          <span class="cl-panel-title">Welche Muster enthält diese Situation?</span>
+          <span class="dp-save-status" id="cl-save-status"></span>
+        </div>
+        <p class="dp-hint">Mehrere gleichzeitig möglich. Tippe auf <span class="cl-info-dot">i</span> für die Definition. Nichts zutreffend ist auch eine Antwort — dann einfach nichts ankreuzen.</p>
+        <div id="cl-classes"></div>
+
+        <div class="cl-flags-divider"><span>Zuschnitt dieser Situation</span></div>
+        <p class="dp-hint">Nur ankreuzen, wenn mit der <em>Grenze</em> etwas nicht stimmt — nicht mit dem Inhalt.</p>
+        <div id="cl-flags"></div>
+
+        <div class="dp-submit-row">
+          <p class="dp-hint">Nach der Abgabe lässt sich diese Situation nicht mehr ändern.</p>
+          <button type="button" id="cl-submit" class="primary">Situation abgeben</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Abgegeben, wartet -->
+    <div id="cl-state-waiting" class="dp-state dp-weg">
+      <div class="dp-card dp-waiting-card">
+        <h2 id="cl-waiting-title">Abgegeben — wartet auf die andere Person</h2>
+        <p id="cl-waiting-text">Deine Einordnung ist gespeichert und gesperrt. Der Vergleich erscheint hier, sobald
+          <strong id="cl-waiting-for">die andere Person</strong> ebenfalls abgegeben hat.</p>
+      </div>
+      <div id="cl-waiting-stream" class="dp-stream dp-readonly"></div>
+      <div id="cl-waiting-summary" class="cl-own-summary"></div>
+    </div>
+
+    <!-- Vergleich -->
+    <div id="cl-state-compare" class="dp-state dp-weg">
+      <div id="cl-compare-stream" class="dp-stream dp-readonly"></div>
+      <h2 class="cl-section-heading">Übereinstimmung dieser Situation</h2>
+      <div id="cl-compare-classes"></div>
+      <h2 class="cl-section-heading">Zuschnitt dieser Situation</h2>
+      <div id="cl-compare-flags"></div>
+    </div>
+  </section>
+
+  <!-- ============================== Übersicht ============================== -->
+  <section id="cl-overview-view" class="cl-weg">
+    <div id="cl-overview-body"></div>
+  </section>
+
+</main>
+
+<script src="./push-enable.js" defer></script>
+<script src="./classification.js" type="module"></script>
+</body>
+</html>

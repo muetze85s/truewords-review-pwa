@@ -2880,6 +2880,94 @@ export async function openDisputeTotal(
   return open;
 }
 
+// ---- Geteilt mit der Klassifizierungs-Schicht (worker-classification.ts) ---
+
+/** Anzeigenachricht einer Runde — wie sie die Klassifizierung zum Rendern braucht. */
+export type ClassificationViewMessage = ViewMessage;
+
+export interface RoundCombinedResult {
+  /** Nachrichten des Rundenfensters, in Reihenfolge. */
+  messages: ViewMessage[];
+  /** IDs in Reihenfolge (Bequemlichkeit für deriveSituations). */
+  messageIds: string[];
+  /** Gemeinsame Grenzpositionen (combinedBoundary.cuts) — Start jeder neuen Situation. */
+  cutPositions: number[];
+  /** Haben beide Prüfer diese Runde (Grenzen) abgegeben? */
+  bothSubmitted: boolean;
+  /** Offene Grenz-Streitfälle dieser Runde (nach 0008-Regel). 0 = vollständig geklärt. */
+  openDisputes: number;
+}
+
+/**
+ * Die gemeinsame Grenzfassung einer Runde plus Klärungsstand — exakt die
+ * Pipeline aus buildAgreementPayload (compareReviewers → agreeResolutions →
+ * combinedBoundary), aber ohne Automatik-Vergleich und Streitfall-Aufbereitung.
+ * Genutzt von worker-classification.ts, um Situationen (Spannen zwischen zwei
+ * Grenzen) abzuleiten und zu prüfen, ob eine Runde für die Klassifizierung
+ * freigegeben ist (beide abgegeben UND keine offenen Grenz-Streitfälle).
+ */
+export async function combinedBoundaryForRound(
+  env: Env,
+  dataset: DatasetRow,
+  round: number,
+  tolerance = 1,
+  doubtMode: DoubtMode = 'skip',
+): Promise<RoundCombinedResult> {
+  const { messages } = await loadRoundWindow(env, dataset, round);
+  const positions = seamPositions(messages);
+  const totalSeams = Math.max(0, messages.length - 1);
+
+  const [philippMarks, lenaMarks, philippSubmitted, lenaSubmitted, resolutionRows] = await Promise.all([
+    loadMarks(env, dataset.id, round, 'Philipp'),
+    loadMarks(env, dataset.id, round, 'Lena'),
+    submittedAt(env, dataset.id, round, 'Philipp'),
+    submittedAt(env, dataset.id, round, 'Lena'),
+    env.DB.prepare(`
+      SELECT seam_message_id, decision, note, decided_by, decided_at
+      FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, round).all<ResolutionRow>(),
+  ]);
+
+  const comparison = compareReviewers(
+    toPositionalMarks(philippMarks, positions),
+    toPositionalMarks(lenaMarks, positions),
+    { totalSeams, tolerance, doubtMode },
+  );
+  const agreed = agreeResolutions(resolutionRows.results || []);
+  const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+  const resolvedCount = agreed.filter((entry) => entry.resolved).length;
+  const disputeCount = comparison.onlyA.length + comparison.onlyB.length;
+
+  return {
+    messages,
+    messageIds: messages.map((message) => message.id),
+    cutPositions: combined.cuts,
+    bothSubmitted: Boolean(philippSubmitted && lenaSubmitted),
+    openDisputes: Math.max(0, disputeCount - resolvedCount),
+  };
+}
+
+/** Aktiver bzw. per ?dataset= gewählter Datenbestand — für die Klassifizierungs-Schicht. */
+export async function resolveDatasetRow(env: Env, requestedId?: string | null): Promise<DatasetRow | null> {
+  return activeDataset(env, requestedId);
+}
+
+/** Alle Runden, die (Grenzen) beidseitig abgegeben wurden — Kandidaten für die Klassifizierung. */
+export async function bothSubmittedRounds(env: Env, datasetId: string): Promise<number[]> {
+  const rows = await env.DB.prepare(`
+    SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1
+  `).bind(datasetId).all<{ round: number; reviewer: Role }>();
+  const byRound = new Map<number, Set<Role>>();
+  for (const row of rows.results || []) {
+    if (!byRound.has(row.round)) byRound.set(row.round, new Set());
+    byRound.get(row.round)?.add(row.reviewer);
+  }
+  return [...byRound.entries()]
+    .filter(([, reviewers]) => reviewers.has('Philipp') && reviewers.has('Lena'))
+    .map(([round]) => round)
+    .sort((a, b) => a - b);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {

@@ -166,6 +166,17 @@
       <button id="save" class="primary" type="submit">Speichern</button>
     </form>
 
+    <!-- Abschnitt 5: Klassifizierung (unabhängig von den Push-Einstellungen) -->
+    <section class="tw-settings-section" id="classification-section">
+      <h2 class="tw-settings-heading">5. Klassifizierung</h2>
+      <div class="tw-set">
+        <legend>Zugang Lena</legend>
+        <label class="tw-switch"><input type="checkbox" id="lena_classification_enabled"> Klassifizierung für Lena freischalten</label>
+        <p class="tw-device">Standardmäßig aus. Solange aus, sieht Lena den Menüpunkt nicht und ihre Anfragen an die Klassifizierung werden serverseitig abgewiesen. Die Kappa-Auswertung zeigt dann nur „noch keine Mensch–Mensch-Vergleichsdaten".</p>
+        <p id="classification-status" class="tw-device"></p>
+      </div>
+    </section>
+
     <div id="status" class="dp-status" role="status" aria-live="polite" style="margin-top:12px">Wird geladen …</div>
   </main>
   <script src="./push-settings.js" defer></script>
