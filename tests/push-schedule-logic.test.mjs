@@ -148,6 +148,33 @@ const BANGKOK = 'Asia/Bangkok';
   assert.equal(disputeAlertDue({ enabled: true, openCount: 4, threshold: 5, sentToday: false }), false, 'unter der Schwelle');
   assert.equal(disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: true }), false, 'heute schon gesendet');
   assert.equal(disputeAlertDue({ enabled: false, openCount: 9, threshold: 5, sentToday: false }), false, 'Schalter aus');
+
+  // Zeit-Gate: nicht vor der frühesten Uhrzeit (verhindert den Mitternachtsversand).
+  assert.equal(
+    disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: false, nowMinutesOfDay: 1, earliestMinutes: 540 }),
+    false,
+    'kurz nach Mitternacht (00:01) noch nicht fällig',
+  );
+  assert.equal(
+    disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: false, nowMinutesOfDay: 539, earliestMinutes: 540 }),
+    false,
+    'eine Minute vor der frühesten Zeit noch nicht fällig',
+  );
+  assert.equal(
+    disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: false, nowMinutesOfDay: 540, earliestMinutes: 540 }),
+    true,
+    'genau ab der frühesten Zeit fällig',
+  );
+  assert.equal(
+    disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: false, nowMinutesOfDay: 1200, earliestMinutes: 540 }),
+    true,
+    'später am Tag fällig',
+  );
+  assert.equal(
+    disputeAlertDue({ enabled: true, openCount: 9, threshold: 5, sentToday: false, nowMinutesOfDay: 1 }),
+    true,
+    'ohne earliestMinutes wie früher (kein Gate)',
+  );
 }
 
 console.log('push-schedule-logic tests: PASS');

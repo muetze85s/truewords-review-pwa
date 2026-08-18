@@ -69,13 +69,21 @@ export function dueReminderSlots({ now, timeZone, times, enabled, submittedToday
 
 /**
  * Tägliche Streitfall-Warnung fällig? Schalter an, offene Fälle >= Schwelle, und
- * heute (Ortstag der Person) noch nicht gesendet. Nicht an eine Uhrzeit gebunden —
- * greift am ersten Cron-Tick des Tages, an dem die Bedingung erfüllt ist.
+ * heute (Ortstag der Person) noch nicht gesendet. Zusätzlich an eine früheste
+ * Ortszeit gebunden (`earliestMinutes`, Minuten seit Mitternacht) — damit die
+ * Warnung nicht direkt nach dem Tageswechsel um Mitternacht rausgeht, sondern
+ * erst ab dieser Uhrzeit (in der Praxis die erste Erinnerungszeit der Person).
+ * `nowMinutesOfDay` ist die aktuelle Ortszeit der Person. Fehlt einer der beiden
+ * Zeitwerte, greift sie wie früher am ersten Tick, an dem die Bedingung stimmt.
  */
-export function disputeAlertDue({ enabled, openCount, threshold, sentToday }) {
+export function disputeAlertDue({ enabled, openCount, threshold, sentToday, nowMinutesOfDay, earliestMinutes }) {
   if (!enabled || sentToday) return false;
   const count = Number(openCount);
   const limit = Number(threshold);
   if (!Number.isFinite(count) || !Number.isFinite(limit)) return false;
-  return count >= limit;
+  if (count < limit) return false;
+  const nowMin = Number(nowMinutesOfDay);
+  const earliest = Number(earliestMinutes);
+  if (Number.isFinite(nowMin) && Number.isFinite(earliest) && nowMin < earliest) return false;
+  return true;
 }

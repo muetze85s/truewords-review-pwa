@@ -16,4 +16,6 @@ export declare function disputeAlertDue(input: {
   openCount: number;
   threshold: number;
   sentToday: boolean;
+  nowMinutesOfDay?: number;
+  earliestMinutes?: number;
 }): boolean;

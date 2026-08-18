@@ -4,7 +4,7 @@ import baseWorker, {
   openDisputeTotal,
 } from './worker-boundary-pairs';
 import { sendPush } from '../push-send.mjs';
-import { localYmd, dueReminderSlots, disputeAlertDue, parseHhmm } from '../push-schedule-logic.mjs';
+import { localYmd, localParts, dueReminderSlots, disputeAlertDue, parseHhmm } from '../push-schedule-logic.mjs';
 
 /**
  * Oberste Worker-Schicht: Web-Push. Fängt ausschließlich /api/push/* und die
@@ -366,7 +366,16 @@ async function runScheduled(env: Env): Promise<void> {
   ];
 
   for (const config of roleConfig) {
-    const ymd = localYmd(now, config.tz);
+    const nowLocal = localParts(now, config.tz);
+    const ymd = nowLocal.ymd;
+
+    // Früheste Uhrzeit für die Streitfall-Warnung = erste konfigurierte
+    // Erinnerungszeit der Person (Fallback 09:00), damit sie nicht direkt nach
+    // Mitternacht kommt, wenn der Tagesschlüssel wechselt.
+    const reminderMinutes = config.times
+      .map((hhmm) => parseHhmm(hhmm))
+      .filter((min): min is number => min !== null);
+    const earliestDisputeMinutes = reminderMinutes.length ? Math.min(...reminderMinutes) : 9 * 60;
 
     // Erinnerungen — nur wenn an dem Ortstag noch keine Runde abgegeben.
     const submissionTimes = await reviewerSubmissionTimes(env, dataset.id, config.reviewer);
@@ -394,6 +403,8 @@ async function runScheduled(env: Env): Promise<void> {
       openCount: openDisputes,
       threshold: settings.dispute_threshold,
       sentToday: disputeSent,
+      nowMinutesOfDay: nowLocal.minutesOfDay,
+      earliestMinutes: earliestDisputeMinutes,
     })) {
       await markSent(env, config.reviewer, 'dispute', ymd);
       await notifyReviewer(env, config.reviewer, 'TrueWords', `${openDisputes} offene Streitfälle warten auf euch.`);
