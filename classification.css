@@ -154,6 +154,50 @@ body.cl[data-reviewer="Lena"] .cl-dispute-actions button.active { background: va
 .cl-kappa-muted { font-size: 12.5px; color: var(--tw-text-muted); }
 .cl-kappa-n { color: var(--tw-text-muted); font-size: 12px; }
 
+.cl-kappa-sub { font-size: 12px; color: var(--tw-text-muted); margin-bottom: 8px; }
+/* Erweiterte Kappa-Zeile mit LLM- und Alpha-Spalten (PR 2). */
+.cl-kappa-row-llm { grid-template-columns: minmax(0, 1.6fr) auto auto auto auto; gap: 6px 12px; }
+.cl-kappa-hl, .cl-kappa-alpha { font-size: 12.5px; color: var(--tw-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-kappa-auto { min-width: 46px; text-align: right; }
+.cl-self { color: var(--tw-lena); font-size: 11px; }
+.cl-auto { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+.cl-auto-on { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cl-auto-elig { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+.cl-auto-off { background: var(--tw-surface-secondary, rgba(0,0,0,.05)); color: var(--tw-text-muted); }
+button.cl-auto-toggle { border: 1px solid var(--tw-border); cursor: pointer; font-family: inherit; }
+button.cl-auto-toggle:hover:not(:disabled) { filter: brightness(0.97); }
+button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
+
+/* LLM-Rating als Datenpunkt in der Streitfall-Karte. */
+.cl-llm-badge { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: var(--tw-status-corrected-surface); color: var(--tw-status-corrected); }
+
+/* LLM-Steuerung auf der Übersicht. */
+.cl-llm-control { border: 1px solid var(--tw-border); border-radius: 12px; padding: 10px 12px; margin: 0 0 14px; background: var(--tw-surface-raised, var(--tw-surface)); }
+.cl-llm-status { font-size: 13px; color: var(--tw-text-muted); margin-bottom: 8px; }
+.cl-llm-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.cl-llm-actions button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 14px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+}
+.cl-llm-actions button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-llm-actions button:disabled { opacity: .5; cursor: default; }
+
+/* Abweichungskarten. */
+.cl-dev { border: 1px solid var(--tw-border); border-radius: 10px; padding: 12px; margin: 0 0 10px; background: var(--tw-surface); }
+.cl-dev.self { border-left: 3px solid var(--tw-lena); }
+.cl-dev.corrected { opacity: .6; }
+.cl-dev-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cl-dev-class { font-weight: 700; color: var(--tw-text); }
+.cl-dev-loc { font-size: 12px; color: var(--tw-text-muted); font-variant-numeric: tabular-nums; }
+.cl-dev-values { font-size: 13px; color: var(--tw-text-muted); margin: 4px 0 8px; }
+.cl-dev-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-dev-actions button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.cl-dev-actions button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-dev-actions button:disabled { opacity: .5; cursor: default; }
+
 .cl-ampel { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
 .cl-ampel-green { background: var(--tw-status-confirmed); }
 .cl-ampel-yellow { background: var(--tw-status-open); }

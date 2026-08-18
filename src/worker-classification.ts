@@ -9,12 +9,19 @@ import {
   agreementByKey,
   agreeClassificationResolutions,
   disputesForSituation,
+  cohenKappaBinary,
+  kappaAmpel,
+  isReliable,
+  krippendorffAlphaBinary,
+  selfImplicationSplit,
+  autoEnableDecision,
 } from '../classification-logic.mjs';
 import {
   CLASSIFICATION_CLASSES,
   CLASSIFICATION_KEYS,
   isValidPatternKey,
   CODEBOOK_VERSION,
+  SELF_IMPLICATING_KEYS,
 } from '../classification-classes.mjs';
 import {
   QUALITY_FLAGS,
@@ -22,6 +29,17 @@ import {
   isValidQualityFlag,
   SEGMENTATION_BROKEN_FLAG_KEYS,
 } from '../quality-flags.mjs';
+import {
+  anonymizeSituation,
+  buildClassificationPrompt,
+  parseClassificationJson,
+} from '../classification-llm.mjs';
+import {
+  rateWithAnthropic,
+  isConfigured as anthropicConfigured,
+  readModel as anthropicModel,
+  llmBudgetStatus,
+} from './anthropic-gateway';
 
 /**
  * Klassifizierungs-Schicht: inhaltliche Ja/Nein-Klassifizierung von Situationen
@@ -45,6 +63,10 @@ interface Env {
   PHILIPP_REVIEW_TOKEN?: string;
   LENA_REVIEW_TOKEN?: string;
   ADMIN_REVIEW_TOKEN?: string;
+  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_MODEL?: string;
+  ANTHROPIC_MAX_TOTAL_USD?: string;
+  ANTHROPIC_MAX_COST_PER_REQUEST_USD?: string;
 }
 
 type Role = 'Philipp' | 'Lena';
@@ -431,12 +453,18 @@ async function getSituationDetail(env: Env, dataset: { id: string; year: number 
     return json(base);
   }
 
-  const [otherClass, otherFlags, classRes, flagRes] = await Promise.all([
+  const [otherClass, otherFlags, classRes, flagRes, llmClassRows] = await Promise.all([
     loadClassMarks(env, id, other),
     loadFlagMarks(env, id, other),
     env.DB.prepare(`SELECT situation_id, pattern_key, decided_by, resolved_present FROM review_classification_resolutions WHERE situation_id = ?1`).bind(id).all<{ situation_id: number; pattern_key: string; decided_by: string; resolved_present: number }>(),
     env.DB.prepare(`SELECT situation_id, flag_key, decided_by, resolved_present FROM review_situation_quality_resolutions WHERE situation_id = ?1`).bind(id).all<{ situation_id: number; flag_key: string; decided_by: string; resolved_present: number }>(),
+    // LLM-Rating dieser Situation — als zusätzlicher Datenpunkt in der Streitfall-Karte
+    // (Tie-Breaker-Hinweis, NICHT Autorität — fließt nie automatisch in die Auflösung ein).
+    env.DB.prepare(`SELECT pattern_key, present FROM review_classification_marks WHERE situation_id = ?1 AND reviewer = 'LLM'`).bind(id).all<{ pattern_key: string; present: number }>(),
   ]);
+  const llmClasses: Record<string, number> = {};
+  for (const row of llmClassRows.results || []) llmClasses[row.pattern_key] = row.present ? 1 : 0;
+  const llmRated = (llmClassRows.results || []).length > 0;
 
   const philippClass = user.role === 'Philipp' ? ownClass : otherClass;
   const lenaClass = user.role === 'Philipp' ? otherClass : ownClass;
@@ -455,6 +483,8 @@ async function getSituationDetail(env: Env, dataset: { id: string; year: number 
     compare: true,
     otherClasses: marksToMap(otherClass, 'pattern_key'),
     otherFlags: marksToMap(otherFlags, 'flag_key'),
+    llmClasses,
+    llmRated,
     classDisputes,
     flagDisputes,
   });
@@ -591,56 +621,410 @@ async function resolveClassificationDispute(request: Request, env: Env, dataset:
 }
 
 /** Kappa je Klasse (Inhalt) und je Flag (Zuschnitt) über beidseitig abgegebene Validierungssituationen. */
+const labelOf = (key: string) => CLASSIFICATION_CLASSES.find((entry) => entry.key === key);
+const flagLabelOf = (key: string) => QUALITY_FLAGS.find((entry) => entry.key === key);
+
+/**
+ * Kappa Mensch-Mensch (2 Kodierer), Kappa Mensch-LLM (Konsens vs. LLM),
+ * Krippendorffs Alpha (3 Kodierer) je Klasse — plus Auto-Freigabe-Status und
+ * Budget. Rechnet ausschließlich aus den Mark-Tabellen (kein Nachrichten-Laden),
+ * damit die (von der Übersicht gepollte) Auswertung schnell bleibt. Die teure
+ * Selbstimplikations-Auswertung liegt in einem eigenen On-Demand-Endpunkt.
+ */
 async function getSummary(env: Env, dataset: { id: string }): Promise<Response> {
   const partnerActive = await lenaEnabled(env);
+  const configured = anthropicConfigured(env);
+  const model = anthropicModel(env);
+  const budget = await llmBudgetStatus(env);
 
-  // Situationen, die BEIDE Menschen abgegeben haben (nur Validierungsstichprobe).
+  const autoRows = await env.DB.prepare(`SELECT pattern_key, enabled FROM review_classification_auto`).all<{ pattern_key: string; enabled: number }>();
+  const autoEnabledMap = new Map((autoRows.results || []).map((row) => [row.pattern_key, Number(row.enabled) === 1]));
+
+  const valRows = await env.DB.prepare(
+    `SELECT id FROM review_situations WHERE dataset_id = ?1 AND in_validation_sample = 1`,
+  ).bind(dataset.id).all<{ id: number }>();
+  const valIds = (valRows.results || []).map((row) => row.id);
+
+  const emptyContent = () => CLASSIFICATION_CLASSES.map((entry) => ({
+    key: entry.key, label: entry.label, group: entry.group, selfImplicating: entry.selfImplicating,
+    n: 0, kappa: null, ampel: 'insufficient', agreementPercent: null,
+    humanLlm: { n: 0, kappa: null, ampel: 'insufficient' }, alpha: null, alphaN: 0,
+    autoEnabled: autoEnabledMap.get(entry.key) || false, autoEligible: false,
+  }));
+
+  if (!valIds.length) {
+    return json({
+      ok: true, partnerActive, configured, model, budget,
+      bothSubmittedCount: 0, llmRatedCount: 0, humanHuman: false, llmPresent: false,
+      content: emptyContent(),
+      quality: QUALITY_FLAGS.map((entry) => ({ key: entry.key, label: entry.label, n: 0, kappa: null, ampel: 'insufficient', agreementPercent: null })),
+    });
+  }
+
+  const ph = valIds.map((_, index) => `?${index + 1}`).join(',');
+  const [subRows, classRows, flagRows, llmRows] = await Promise.all([
+    env.DB.prepare(`SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role }>(),
+    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
+    env.DB.prepare(`SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(),
+    env.DB.prepare(`SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer = 'LLM'`).bind(...valIds).all<{ situation_id: number; pattern_key: string; present: number }>(),
+  ]);
+
+  const submittedBy = new Map<number, Set<Role>>();
+  for (const row of subRows.results || []) {
+    if (!submittedBy.has(row.situation_id)) submittedBy.set(row.situation_id, new Set());
+    submittedBy.get(row.situation_id)?.add(row.reviewer);
+  }
+  const bothIds = valIds.filter((id) => { const s = submittedBy.get(id); return Boolean(s && s.has('Philipp') && s.has('Lena')); });
+
+  const pMark = new Map<string, number>();
+  const lMark = new Map<string, number>();
+  const classA: MarkRow[] = []; const classB: MarkRow[] = [];
+  for (const row of classRows.results || []) {
+    (row.reviewer === 'Philipp' ? pMark : lMark).set(`${row.situation_id}|${row.pattern_key}`, row.present ? 1 : 0);
+    (row.reviewer === 'Philipp' ? classA : classB).push({ situation_id: row.situation_id, pattern_key: row.pattern_key, present: row.present });
+  }
+  const llmMark = new Map<string, number>();
+  const llmSituations = new Set<number>();
+  for (const row of llmRows.results || []) { llmMark.set(`${row.situation_id}|${row.pattern_key}`, row.present ? 1 : 0); llmSituations.add(row.situation_id); }
+
+  const flagA: MarkRow[] = []; const flagB: MarkRow[] = [];
+  for (const row of flagRows.results || []) (row.reviewer === 'Philipp' ? flagA : flagB).push({ situation_id: row.situation_id, flag_key: row.flag_key, present: row.present });
+
+  const hhStats = new Map(agreementByKey({ situationIds: bothIds, marksA: classA, marksB: classB, keys: CLASSIFICATION_KEYS }).map((stat) => [stat.key, stat]));
+  const qualityStats = agreementByKey({ situationIds: bothIds, marksA: flagA, marksB: flagB, keys: QUALITY_FLAG_KEYS, keyField: 'flag_key' });
+
+  const content = CLASSIFICATION_KEYS.map((key) => {
+    const hh = hhStats.get(key)!;
+    // Mensch-LLM: menschliche Referenz vs. LLM über alle vom LLM bewerteten
+    // Validierungssituationen. Referenz = Konsens, wenn beide einig sind;
+    // bei nur einem abgebenden Menschen (z. B. Lena nicht freigeschaltet) dessen
+    // Wert; bei beidseitiger Uneinigkeit ausgeschlossen (das sind die Abweichungen).
+    const hlPairs: Array<[number, number]> = [];
+    for (const id of valIds) {
+      if (!llmSituations.has(id)) continue;
+      const submitted = submittedBy.get(id);
+      const hasP = Boolean(submitted?.has('Philipp'));
+      const hasL = Boolean(submitted?.has('Lena'));
+      const p = pMark.get(`${id}|${key}`) ?? 0;
+      const l = lMark.get(`${id}|${key}`) ?? 0;
+      let humanVal: number | null = null;
+      if (hasP && hasL) { if (p === l) humanVal = p; }
+      else if (hasP) humanVal = p;
+      else if (hasL) humanVal = l;
+      if (humanVal === null) continue;
+      hlPairs.push([humanVal, llmMark.get(`${id}|${key}`) ?? 0]);
+    }
+    const hl = cohenKappaBinary(hlPairs);
+    const hlReliable = isReliable(hl.n);
+    // Alpha (3 Kodierer) über alle Validierungssituationen mit ≥2 Ratings.
+    const units: Array<Array<number | null>> = valIds.map((id) => {
+      const hasHuman = submittedBy.get(id)?.has('Philipp') && submittedBy.get(id)?.has('Lena');
+      return [
+        hasHuman ? (pMark.get(`${id}|${key}`) ?? 0) : null,
+        hasHuman ? (lMark.get(`${id}|${key}`) ?? 0) : null,
+        llmSituations.has(id) ? (llmMark.get(`${id}|${key}`) ?? 0) : null,
+      ];
+    });
+    const alpha = krippendorffAlphaBinary(units);
+    const decision = autoEnableDecision(hh.kappa, hl.kappa);
+    // „bereit" nur, wenn die Kappa-Werte auch belastbar sind (n ≥ 20) — sonst
+    // täuschte die Freigabe-Empfehlung bei winziger Stichprobe Sicherheit vor.
+    const eligible = decision.eligible && isReliable(hh.n) && isReliable(hl.n);
+    const info = labelOf(key);
+    return {
+      key,
+      label: info?.label || key,
+      group: info?.group || 'risk',
+      selfImplicating: Boolean(info?.selfImplicating),
+      n: hh.n,
+      kappa: hh.kappa,
+      ampel: hh.ampel,
+      agreementPercent: hh.agreementPercent,
+      humanLlm: { n: hl.n, kappa: hl.kappa, ampel: hlReliable ? kappaAmpel(hl.kappa) : 'insufficient' },
+      alpha: alpha.alpha,
+      alphaN: alpha.n,
+      autoEnabled: autoEnabledMap.get(key) || false,
+      autoEligible: eligible,
+    };
+  });
+
+  return json({
+    ok: true,
+    partnerActive,
+    configured,
+    model,
+    budget,
+    humanHuman: bothIds.length > 0,
+    llmPresent: llmSituations.size > 0,
+    bothSubmittedCount: bothIds.length,
+    llmRatedCount: llmSituations.size,
+    content,
+    quality: qualityStats.map((stat) => ({ ...stat, label: flagLabelOf(stat.key)?.label || stat.key })),
+  });
+}
+
+// ------------------------------------------------------- LLM-Dritt-Rater (PR 2)
+
+/** Kodierhandbuch-Abschnitt der Inhaltsklassen (ohne die Zuschnitt-Flags). Einzige Quelle. */
+async function codebookContentSection(request: Request, env: Env): Promise<string> {
+  const response = await asset(request, env, '/CODEBOOK.md');
+  const markdown = await response.text();
+  const cut = markdown.indexOf('## Zuschnitt-Flags');
+  return cut >= 0 ? markdown.slice(0, cut) : markdown;
+}
+
+/** Schreibt die 20 LLM-Klassenmarkierungen einer Situation (upsert), inkl. Modellname. */
+async function writeLlmMarks(env: Env, situationId: number, classes: Record<string, number>, model: string): Promise<void> {
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const key of CLASSIFICATION_KEYS) {
+    const present = classes[key] ? 1 : 0;
+    statements.push(env.DB.prepare(`
+      INSERT INTO review_classification_marks
+        (situation_id, reviewer, pattern_key, present, is_correction_of_llm, codebook_version, rater_model, submitted_at)
+      VALUES (?1, 'LLM', ?2, ?3, 0, ?4, ?5, ?6)
+      ON CONFLICT(situation_id, reviewer, pattern_key) DO UPDATE SET
+        present = excluded.present, codebook_version = excluded.codebook_version,
+        rater_model = excluded.rater_model, submitted_at = excluded.submitted_at
+    `).bind(situationId, key, present, CODEBOOK_VERSION, model, now));
+  }
+  await env.DB.batch(statements);
+}
+
+/** Rät eine Menge Situationen durch den LLM. Idempotent auf Aufruferseite: der
+ *  Aufrufer wählt nur Situationen OHNE bestehende LLM-Marks. */
+async function rateSituations(
+  request: Request,
+  env: Env,
+  dataset: { id: string; year: number },
+  situations: SituationRow[],
+  operation: string,
+): Promise<{ rated: number; failed: number; errors: string[] }> {
+  const section = await codebookContentSection(request, env);
+  const model = anthropicModel(env);
+  let rated = 0; let failed = 0; const errors: string[] = [];
+  for (const situation of situations) {
+    try {
+      const messages = await situationMessages(env, dataset, situation);
+      if (!messages.length) { failed += 1; continue; }
+      const { text: situationText } = anonymizeSituation(messages);
+      const { system, user } = buildClassificationPrompt({ situationText, codebookSection: section, keys: CLASSIFICATION_KEYS });
+      const result = await rateWithAnthropic(env, { system, user, operation, situationId: situation.id, now: Date.now() });
+      const parsed = parseClassificationJson(result.text, CLASSIFICATION_KEYS);
+      if (!parsed) { failed += 1; errors.push(`Situation ${situation.id}: unparsbare Antwort`); continue; }
+      await writeLlmMarks(env, situation.id, parsed.classes, result.model);
+      rated += 1;
+    } catch (caught) {
+      failed += 1;
+      const message = caught instanceof Error ? caught.message : 'Fehler';
+      errors.push(`Situation ${situation.id}: ${message}`);
+      // Budget-/Konfigurationsfehler brechen den Lauf ab (sonst 200× derselbe Fehler).
+      if (/ANTHROPIC_(NOT_CONFIGURED|BUDGET_EXCEEDED|PER_REQUEST)/u.test(message)) break;
+    }
+  }
+  return { rated, failed, errors: errors.slice(0, 10) };
+}
+
+/** POST /api/classification/llm-rate — bewertet Validierungssituationen ohne LLM-Mark. */
+async function llmRate(request: Request, env: Env, dataset: { id: string; year: number }): Promise<Response> {
+  if (!anthropicConfigured(env)) return error('ANTHROPIC_API_KEY ist nicht gesetzt — LLM-Rating nicht möglich.', 400);
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 10));
+  const rows = await env.DB.prepare(`
+    SELECT id, dataset_id, round, situation_index, start_message_id, end_message_id, in_validation_sample
+    FROM review_situations
+    WHERE dataset_id = ?1 AND in_validation_sample = 1
+      AND id NOT IN (SELECT DISTINCT situation_id FROM review_classification_marks WHERE reviewer = 'LLM')
+    ORDER BY round, situation_index
+    LIMIT ?2
+  `).bind(dataset.id, limit).all<SituationRow>();
+  const situations = rows.results || [];
+  const outcome = await rateSituations(request, env, dataset, situations, 'classify-validation');
+  const remaining = await env.DB.prepare(`
+    SELECT COUNT(*) AS c FROM review_situations
+    WHERE dataset_id = ?1 AND in_validation_sample = 1
+      AND id NOT IN (SELECT DISTINCT situation_id FROM review_classification_marks WHERE reviewer = 'LLM')
+  `).bind(dataset.id).first<{ c: number }>();
+  return json({ ok: true, ...outcome, remaining: Number(remaining?.c || 0), model: anthropicModel(env), budget: await llmBudgetStatus(env) });
+}
+
+/** POST /api/classification/auto-classify — Dauerbetrieb: LLM auf Nicht-Stichprobe für freigegebene Klassen. */
+async function autoClassify(request: Request, env: Env, dataset: { id: string; year: number }): Promise<Response> {
+  if (!anthropicConfigured(env)) return error('ANTHROPIC_API_KEY ist nicht gesetzt.', 400);
+  const enabledRows = await env.DB.prepare(`SELECT pattern_key FROM review_classification_auto WHERE enabled = 1`).all<{ pattern_key: string }>();
+  if (!(enabledRows.results || []).length) {
+    return error('Keine Klasse für den Dauerbetrieb freigegeben — erst die Schwellenauswertung bestehen.', 409);
+  }
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit')) || 10));
+  const rows = await env.DB.prepare(`
+    SELECT id, dataset_id, round, situation_index, start_message_id, end_message_id, in_validation_sample
+    FROM review_situations
+    WHERE dataset_id = ?1 AND in_validation_sample = 0
+      AND id NOT IN (SELECT DISTINCT situation_id FROM review_classification_marks WHERE reviewer = 'LLM')
+    ORDER BY round, situation_index
+    LIMIT ?2
+  `).bind(dataset.id, limit).all<SituationRow>();
+  const situations = rows.results || [];
+  const outcome = await rateSituations(request, env, dataset, situations, 'classify-auto');
+  const remaining = await env.DB.prepare(`
+    SELECT COUNT(*) AS c FROM review_situations
+    WHERE dataset_id = ?1 AND in_validation_sample = 0
+      AND id NOT IN (SELECT DISTINCT situation_id FROM review_classification_marks WHERE reviewer = 'LLM')
+  `).bind(dataset.id).first<{ c: number }>();
+  return json({ ok: true, ...outcome, remaining: Number(remaining?.c || 0), model: anthropicModel(env), budget: await llmBudgetStatus(env) });
+}
+
+/** POST /api/classification/auto-enable — Freigabe-Flag je Klasse setzen (Betreiber-Entscheidung). */
+async function setAutoEnable(request: Request, env: Env): Promise<Response> {
+  let body: { patternKey?: unknown; enabled?: unknown; kappaHh?: unknown; kappaHl?: unknown };
+  try { body = await request.json(); } catch { return error('Ungültige Anfrage.'); }
+  const key = String(body.patternKey || '');
+  if (!isValidPatternKey(key)) return error('Unbekannte Klasse.', 422);
+  const enabled = body.enabled ? 1 : 0;
+  const kappaHh = typeof body.kappaHh === 'number' ? body.kappaHh : null;
+  const kappaHl = typeof body.kappaHl === 'number' ? body.kappaHl : null;
+  await env.DB.prepare(`
+    INSERT INTO review_classification_auto (pattern_key, enabled, kappa_hh, kappa_hl, decided_at)
+    VALUES (?1, ?2, ?3, ?4, ?5)
+    ON CONFLICT(pattern_key) DO UPDATE SET enabled = excluded.enabled, kappa_hh = excluded.kappa_hh, kappa_hl = excluded.kappa_hl, decided_at = excluded.decided_at
+  `).bind(key, enabled, kappaHh, kappaHl, new Date().toISOString()).run();
+  return json({ ok: true, patternKey: key, enabled: enabled === 1 });
+}
+
+/**
+ * GET /api/classification/deviations — Situationen, in denen Philipp und Lena
+ * (aus blinden, unabhängigen Eingaben) EINIG sind, der LLM aber abweicht.
+ * Selbstimplizierende Klassen zuerst.
+ */
+async function getDeviations(env: Env, dataset: { id: string }): Promise<Response> {
+  const valRows = await env.DB.prepare(
+    `SELECT id, round, situation_index FROM review_situations WHERE dataset_id = ?1 AND in_validation_sample = 1`,
+  ).bind(dataset.id).all<{ id: number; round: number; situation_index: number }>();
+  const meta = new Map((valRows.results || []).map((row) => [row.id, row]));
+  const valIds = [...meta.keys()];
+  if (!valIds.length) return json({ ok: true, deviations: [], count: 0 });
+
+  const ph = valIds.map((_, index) => `?${index + 1}`).join(',');
+  const [subRows, classRows, llmRows, corrRows] = await Promise.all([
+    env.DB.prepare(`SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role }>(),
+    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
+    env.DB.prepare(`SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer = 'LLM'`).bind(...valIds).all<{ situation_id: number; pattern_key: string; present: number }>(),
+    env.DB.prepare(`SELECT DISTINCT situation_id, pattern_key FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena') AND is_correction_of_llm = 1`).bind(...valIds).all<{ situation_id: number; pattern_key: string }>(),
+  ]);
+  const submittedBy = new Map<number, Set<Role>>();
+  for (const row of subRows.results || []) { if (!submittedBy.has(row.situation_id)) submittedBy.set(row.situation_id, new Set()); submittedBy.get(row.situation_id)?.add(row.reviewer); }
+  const pMark = new Map<string, number>(); const lMark = new Map<string, number>();
+  for (const row of classRows.results || []) (row.reviewer === 'Philipp' ? pMark : lMark).set(`${row.situation_id}|${row.pattern_key}`, row.present ? 1 : 0);
+  const llmMark = new Map<string, number>(); const llmSituations = new Set<number>();
+  for (const row of llmRows.results || []) { llmMark.set(`${row.situation_id}|${row.pattern_key}`, row.present ? 1 : 0); llmSituations.add(row.situation_id); }
+  const corrected = new Set((corrRows.results || []).map((row) => `${row.situation_id}|${row.pattern_key}`));
+
+  const deviations: Array<Record<string, unknown>> = [];
+  for (const id of valIds) {
+    const s = submittedBy.get(id);
+    if (!(s && s.has('Philipp') && s.has('Lena') && llmSituations.has(id))) continue;
+    for (const key of CLASSIFICATION_KEYS) {
+      const p = pMark.get(`${id}|${key}`) ?? 0;
+      const l = lMark.get(`${id}|${key}`) ?? 0;
+      if (p !== l) continue; // nur wo die Menschen einig sind
+      const llm = llmMark.get(`${id}|${key}`) ?? 0;
+      if (llm === p) continue; // LLM stimmt zu → keine Abweichung
+      const info = labelOf(key);
+      deviations.push({
+        situationId: id,
+        round: meta.get(id)?.round,
+        situationIndex: meta.get(id)?.situation_index,
+        key,
+        label: info?.label || key,
+        humanValue: p,
+        llmValue: llm,
+        selfImplicating: SELF_IMPLICATING_KEYS.includes(key),
+        corrected: corrected.has(`${id}|${key}`),
+      });
+    }
+  }
+  // Selbstimplizierende Klassen zuerst, dann Runde/Position.
+  deviations.sort((a, b) => {
+    const sa = a.selfImplicating ? 0 : 1; const sb = b.selfImplicating ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return (Number(a.round) - Number(b.round)) || (Number(a.situationIndex) - Number(b.situationIndex));
+  });
+  const open = deviations.filter((d) => !d.corrected).length;
+  return json({ ok: true, deviations, count: deviations.length, open });
+}
+
+/** POST /api/classification/deviations/confirm — „LLM irrt": menschliche Marks als Korrektur markieren. */
+async function confirmDeviation(request: Request, env: Env, dataset: { id: string }): Promise<Response> {
+  let body: { situationId?: unknown; key?: unknown };
+  try { body = await request.json(); } catch { return error('Ungültige Anfrage.'); }
+  const situationId = Number(body.situationId);
+  const key = String(body.key || '');
+  if (!Number.isInteger(situationId) || !isValidPatternKey(key)) return error('Ungültige Angaben.', 422);
+  // Absichern, dass die Situation zu diesem Datensatz gehört.
+  const situation = await env.DB.prepare(`SELECT id FROM review_situations WHERE id = ?1 AND dataset_id = ?2`).bind(situationId, dataset.id).first<{ id: number }>();
+  if (!situation) return error('Situation nicht gefunden.', 404);
+  await env.DB.prepare(`
+    UPDATE review_classification_marks SET is_correction_of_llm = 1
+    WHERE situation_id = ?1 AND pattern_key = ?2 AND reviewer IN ('Philipp','Lena')
+  `).bind(situationId, key).run();
+  return json({ ok: true, situationId, key });
+}
+
+/** Grobe Trägerschafts-Heuristik: wer hat in der Situation die meisten Nachrichten gesendet. */
+function bearerOf(messages: ViewMessage[]): Role | null {
+  let philipp = 0; let lena = 0;
+  for (const message of messages) {
+    const first = String(message.from || '').trim().split(/\s+/u)[0];
+    if (first === 'Philipp') philipp += 1; else if (first === 'Lena') lena += 1;
+  }
+  if (philipp > lena) return 'Philipp';
+  if (lena > philipp) return 'Lena';
+  return null;
+}
+
+/**
+ * GET /api/classification/self-implication — getrennte Kappa-Auswertung je nach
+ * wahrscheinlichem Träger des Musters. On-Demand (lädt Nachrichten je Situation),
+ * daher NICHT von der Übersicht gepollt. Grobe Heuristik (Mehrheitssender).
+ */
+async function getSelfImplication(env: Env, dataset: { id: string; year: number }): Promise<Response> {
   const bothRows = await env.DB.prepare(`
     SELECT s.situation_id AS id, COUNT(DISTINCT s.reviewer) AS c
     FROM review_classification_submissions s
     JOIN review_situations r ON r.id = s.situation_id
     WHERE r.dataset_id = ?1 AND r.in_validation_sample = 1 AND s.reviewer IN ('Philipp','Lena')
-    GROUP BY s.situation_id
-    HAVING c = 2
-  `).bind(dataset.id).all<{ id: number; c: number }>();
-  const situationIds = (bothRows.results || []).map((row) => row.id);
+    GROUP BY s.situation_id HAVING c = 2
+  `).bind(dataset.id).all<{ id: number }>();
+  const ids = (bothRows.results || []).map((row) => row.id);
+  if (!ids.length) return json({ ok: true, situations: 0, content: [] });
 
-  if (!situationIds.length) {
-    return json({
-      ok: true,
-      partnerActive,
-      bothSubmittedCount: 0,
-      humanHuman: false,
-      content: CLASSIFICATION_CLASSES.map((entry) => ({ key: entry.key, label: entry.label, group: entry.group, n: 0, kappa: null, ampel: 'insufficient', agreementPercent: null })),
-      quality: QUALITY_FLAGS.map((entry) => ({ key: entry.key, label: entry.label, n: 0, kappa: null, ampel: 'insufficient', agreementPercent: null })),
-    });
+  const situationRows = await env.DB.prepare(`
+    SELECT id, dataset_id, round, situation_index, start_message_id, end_message_id, in_validation_sample
+    FROM review_situations WHERE id IN (${ids.map((_, i) => `?${i + 1}`).join(',')})
+  `).bind(...ids).all<SituationRow>();
+
+  const situationsWithBearer: Array<{ id: number; bearer: Role | null }> = [];
+  for (const situation of situationRows.results || []) {
+    try {
+      const messages = await situationMessages(env, dataset, situation);
+      situationsWithBearer.push({ id: situation.id, bearer: bearerOf(messages) });
+    } catch { situationsWithBearer.push({ id: situation.id, bearer: null }); }
   }
 
-  const placeholders = situationIds.map((_, index) => `?${index + 1}`).join(',');
-  const [classRows, flagRows] = await Promise.all([
-    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${placeholders}) AND reviewer IN ('Philipp','Lena')`).bind(...situationIds).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${placeholders}) AND reviewer IN ('Philipp','Lena')`).bind(...situationIds).all<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(),
-  ]);
+  const ph = ids.map((_, i) => `?${i + 1}`).join(',');
+  const classRows = await env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...ids).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>();
+  const marksP: MarkRow[] = []; const marksL: MarkRow[] = [];
+  for (const row of classRows.results || []) (row.reviewer === 'Philipp' ? marksP : marksL).push({ situation_id: row.situation_id, pattern_key: row.pattern_key, present: row.present });
 
-  const classA: MarkRow[] = []; const classB: MarkRow[] = [];
-  for (const row of classRows.results || []) (row.reviewer === 'Philipp' ? classA : classB).push({ situation_id: row.situation_id, pattern_key: row.pattern_key, present: row.present });
-  const flagA: MarkRow[] = []; const flagB: MarkRow[] = [];
-  for (const row of flagRows.results || []) (row.reviewer === 'Philipp' ? flagA : flagB).push({ situation_id: row.situation_id, flag_key: row.flag_key, present: row.present });
+  const split = selfImplicationSplit({ situations: situationsWithBearer, marksP, marksL, keys: CLASSIFICATION_KEYS });
+  const content = split.map((entry) => ({ ...entry, label: labelOf(entry.key)?.label || entry.key, selfImplicating: SELF_IMPLICATING_KEYS.includes(entry.key) }));
+  return json({ ok: true, situations: ids.length, content });
+}
 
-  const contentStats = agreementByKey({ situationIds, marksA: classA, marksB: classB, keys: CLASSIFICATION_KEYS });
-  const qualityStats = agreementByKey({ situationIds, marksA: flagA, marksB: flagB, keys: QUALITY_FLAG_KEYS, keyField: 'flag_key' });
-
-  const labelOf = (key: string) => CLASSIFICATION_CLASSES.find((entry) => entry.key === key);
-  const flagLabelOf = (key: string) => QUALITY_FLAGS.find((entry) => entry.key === key);
-
-  return json({
-    ok: true,
-    partnerActive,
-    humanHuman: true,
-    bothSubmittedCount: situationIds.length,
-    content: contentStats.map((stat) => ({ ...stat, label: labelOf(stat.key)?.label || stat.key, group: labelOf(stat.key)?.group || 'risk' })),
-    quality: qualityStats.map((stat) => ({ ...stat, label: flagLabelOf(stat.key)?.label || stat.key })),
-  });
+/** GET /api/classification/llm-status — Konfiguration + Budget (für die Übersicht). */
+async function getLlmStatus(env: Env): Promise<Response> {
+  return json({ ok: true, configured: anthropicConfigured(env), model: anthropicModel(env), budget: await llmBudgetStatus(env) });
 }
 
 // ------------------------------------------------------------- Verdrahtung
@@ -686,6 +1070,33 @@ async function classificationApi(request: Request, env: Env): Promise<Response |
     }
     if (url.pathname === '/api/classification/summary' && request.method === 'GET') {
       return await getSummary(env, dataset);
+    }
+
+    // --- LLM-Dritt-Rater (PR 2) ---
+    if (url.pathname === '/api/classification/llm-status' && request.method === 'GET') {
+      return await getLlmStatus(env);
+    }
+    if (url.pathname === '/api/classification/deviations' && request.method === 'GET') {
+      return await getDeviations(env, dataset);
+    }
+    if (url.pathname === '/api/classification/deviations/confirm' && request.method === 'POST') {
+      return await confirmDeviation(request, env, dataset);
+    }
+    if (url.pathname === '/api/classification/self-implication' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Selbstimplikations-Auswertung sehen.', 403);
+      return await getSelfImplication(env, dataset);
+    }
+    if (url.pathname === '/api/classification/llm-rate' && request.method === 'POST') {
+      if (!user.canUpload) return error('Nur der Admin darf das LLM-Rating auslösen.', 403);
+      return await llmRate(request, env, dataset);
+    }
+    if (url.pathname === '/api/classification/auto-classify' && request.method === 'POST') {
+      if (!user.canUpload) return error('Nur der Admin darf den Dauerbetrieb auslösen.', 403);
+      return await autoClassify(request, env, dataset);
+    }
+    if (url.pathname === '/api/classification/auto-enable' && request.method === 'POST') {
+      if (!user.canUpload) return error('Nur der Admin darf Klassen freigeben.', 403);
+      return await setAutoEnable(request, env);
     }
 
     const match = url.pathname.match(/^\/api\/classification\/situations\/(\d+)(\/marks|\/submit|\/resolve)?$/u);

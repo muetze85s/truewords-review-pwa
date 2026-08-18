@@ -194,6 +194,88 @@ export function agreeClassificationResolutions(rows, keyField = 'pattern_key') {
 }
 
 /**
+ * Krippendorffs Alpha (nominal, binär) über beliebig viele Kodierer — das für
+ * >2 Kodierer vorgesehene Maß (Prüfprotokoll), sobald der LLM als dritter Rater
+ * dazukommt. `units` ist je Situation ein Array der Ratings (0/1; fehlende Rater
+ * als null/undefined). Einheiten mit weniger als zwei vorhandenen Ratings zählen
+ * nicht.
+ *
+ *   α = 1 − D_o / D_e,   D_o = (o01+o10)/n,   D_e = 2·n0·n1 / (n·(n−1))
+ *
+ * Ohne Varianz (alle gleich) ist α nicht definiert → 1 zurück, degenerate=true.
+ */
+export function krippendorffAlphaBinary(units) {
+  const o = [[0, 0], [0, 0]];
+  let n = 0;
+  for (const unit of units || []) {
+    const values = (unit || []).filter((value) => value === 0 || value === 1);
+    const m = values.length;
+    if (m < 2) continue;
+    for (let i = 0; i < m; i += 1) {
+      for (let j = 0; j < m; j += 1) {
+        if (i === j) continue;
+        o[values[i]][values[j]] += 1 / (m - 1);
+      }
+    }
+    n += m;
+  }
+  if (n < 2) return { alpha: null, n, degenerate: true };
+  const n0 = o[0][0] + o[0][1];
+  const n1 = o[1][0] + o[1][1];
+  const observedDisagreement = o[0][1] + o[1][0]; // = Do·n
+  if (n0 === 0 || n1 === 0) return { alpha: 1, n, degenerate: true };
+  const expectedDisagreement = (2 * n0 * n1) / (n - 1); // = De·n
+  if (expectedDisagreement === 0) return { alpha: 1, n, degenerate: true };
+  return { alpha: 1 - observedDisagreement / expectedDisagreement, n, degenerate: false };
+}
+
+/**
+ * Selbstimplikations-Auswertung: je Klasse getrennt Kappa berechnen für die
+ * Situationen, in denen Philipp der wahrscheinliche Träger des Musters ist,
+ * versus die, in denen Lena es ist. Ein deutlicher Abfall bei genau einer
+ * Trägerschaft ist der objektive Bias-Beleg (Handoff 8.2).
+ *
+ * @param {{ situations: Array<{id:number|string, bearer:'Philipp'|'Lena'|null}>,
+ *           marksP: MarkRowLike[], marksL: MarkRowLike[], keys: string[], keyField?: string }} input
+ */
+export function selfImplicationSplit({ situations, marksP, marksL, keys, keyField = 'pattern_key' }) {
+  const philippIds = (situations || []).filter((s) => s.bearer === 'Philipp').map((s) => Number(s.id));
+  const lenaIds = (situations || []).filter((s) => s.bearer === 'Lena').map((s) => Number(s.id));
+  const byPhilipp = agreementByKey({ situationIds: philippIds, marksA: marksP, marksB: marksL, keys, keyField });
+  const byLena = agreementByKey({ situationIds: lenaIds, marksA: marksP, marksB: marksL, keys, keyField });
+  const lenaMap = new Map(byLena.map((entry) => [entry.key, entry]));
+  return byPhilipp.map((p) => {
+    const l = lenaMap.get(p.key);
+    const pk = p.kappa;
+    const lk = l ? l.kappa : null;
+    return {
+      key: p.key,
+      philippBearer: { n: p.n, kappa: pk },
+      lenaBearer: { n: l ? l.n : 0, kappa: lk },
+      // Betrag des Abfalls, falls beide belastbar (informativ, kein Automatismus).
+      gap: (pk === null || lk === null) ? null : Math.abs(pk - lk),
+    };
+  });
+}
+
+/**
+ * Freigabe-Entscheidung je Klasse für den automatischen Dauerbetrieb:
+ * Kappa Mensch-Mensch ≥ hhMin UND Kappa Mensch-LLM ≥ hlMin (Handoff 3, Punkt 3).
+ * Rein rechnerisch — die tatsächliche Freischaltung setzt der Betreiber.
+ */
+export function autoEnableDecision(kappaHH, kappaHL, { hhMin = 0.60, hlMin = 0.60 } = {}) {
+  const hhOk = typeof kappaHH === 'number' && kappaHH >= hhMin;
+  const hlOk = typeof kappaHL === 'number' && kappaHL >= hlMin;
+  return {
+    eligible: hhOk && hlOk,
+    humanHumanOk: hhOk,
+    humanLlmOk: hlOk,
+    hhMin,
+    hlMin,
+  };
+}
+
+/**
  * Findet die Streitfälle einer Situation: Klassen, bei denen sich die beiden
  * abgegebenen Markierungen unterscheiden, mit ihrem Klärungsstand aus den
  * Auflösungen. Reine Verrechnung — der Worker liefert die Rohdaten.

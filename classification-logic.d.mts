@@ -89,6 +89,31 @@ export interface SituationDispute {
   votes: { philipp: number | null; lena: number | null };
 }
 
+export declare function krippendorffAlphaBinary(
+  units: Array<Array<number | null | undefined>>,
+): { alpha: number | null; n: number; degenerate: boolean };
+
+export interface SelfImplicationEntry {
+  key: string;
+  philippBearer: { n: number; kappa: number | null };
+  lenaBearer: { n: number; kappa: number | null };
+  gap: number | null;
+}
+
+export declare function selfImplicationSplit(input: {
+  situations: Array<{ id: number | string; bearer: 'Philipp' | 'Lena' | null }>;
+  marksP: MarkRowLike[];
+  marksL: MarkRowLike[];
+  keys: string[];
+  keyField?: string;
+}): SelfImplicationEntry[];
+
+export declare function autoEnableDecision(
+  kappaHH: number | null,
+  kappaHL: number | null,
+  opts?: { hhMin?: number; hlMin?: number },
+): { eligible: boolean; humanHumanOk: boolean; humanLlmOk: boolean; hhMin: number; hlMin: number };
+
 export declare function disputesForSituation(options: {
   situationId: number | string;
   marksA: MarkRowLike[];

@@ -315,9 +315,12 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
 
   function presentLabel(value) { return value ? 'ja' : 'nein'; }
 
-  function renderDisputeCards(disputes, kind, containerLabel) {
+  function renderDisputeCards(disputes, kind, containerLabel, llmMap) {
     const other = state.reviewer === 'Philipp' ? 'Lena' : 'Philipp';
     return disputes.map((dispute) => {
+      // LLM-Rating als zusätzlicher Datenpunkt (nur Anzeige, keine Autorität).
+      const llmHint = (llmMap && Object.prototype.hasOwnProperty.call(llmMap, dispute.key))
+        ? `<span class="cl-llm-badge">LLM: ${escapeHtml(presentLabel(llmMap[dispute.key]))}</span>` : '';
       const mineOriginal = state.reviewer === 'Philipp' ? dispute.philipp : dispute.lena;
       const theirsOriginal = state.reviewer === 'Philipp' ? dispute.lena : dispute.philipp;
       const myVote = state.reviewer === 'Philipp' ? dispute.votes.philipp : dispute.votes.lena;
@@ -336,7 +339,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
       }
 
       return `<div class="cl-dispute${dispute.resolved ? ' geklaert' : ''}" data-kind="${kind}" data-key="${escapeHtml(dispute.key)}">
-        <div class="cl-dispute-label">${escapeHtml(labelFor(dispute.key))}</div>
+        <div class="cl-dispute-label">${escapeHtml(labelFor(dispute.key))} ${llmHint}</div>
         <div class="cl-dispute-meta">Blind — Du: <b>${escapeHtml(presentLabel(mineOriginal))}</b> · ${escapeHtml(other)}: <b>${escapeHtml(presentLabel(theirsOriginal))}</b> · ${statusHtml}</div>
         <div class="cl-dispute-actions">
           <button type="button" data-present="1" class="${myVote === 1 ? 'active' : ''}">ist zutreffend</button>
@@ -390,7 +393,9 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
 
   function renderCompare(payload) {
     const classContainer = $('cl-compare-classes');
-    classContainer.innerHTML = renderDisputeCards(payload.classDisputes || [], 'class', 'den Klassen')
+    const llmNote = payload.llmRated ? '' : '<p class="dp-hint">Für diese Situation liegt noch kein LLM-Rating vor.</p>';
+    classContainer.innerHTML = llmNote
+      + renderDisputeCards(payload.classDisputes || [], 'class', 'den Klassen', payload.llmClasses || null)
       + renderAgreements(CLASSIFICATION_KEYS, payload.ownClasses || {}, payload.otherClasses || {}, 'Klassen');
     bindDisputeHandlers(classContainer);
 
@@ -424,20 +429,51 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     return `<span class="cl-ampel cl-ampel-${escapeHtml(ampel)}" title="${escapeHtml(map[ampel] || ampel)}"></span>`;
   }
 
-  function kappaCell(stat) {
-    if (stat.ampel === 'insufficient' || stat.kappa === null || stat.kappa === undefined) {
-      return `<span class="cl-kappa-muted">n=${stat.n}${stat.n < 20 ? ' · noch nicht belastbar' : ''}</span>`;
+  function kappaValue(kappa, n, ampel) {
+    if (ampel === 'insufficient' || kappa === null || kappa === undefined) {
+      return `<span class="cl-kappa-muted">n=${n}</span>`;
     }
-    return `${ampelDot(stat.ampel)} κ=${stat.kappa.toFixed(2)} <span class="cl-kappa-n">(n=${stat.n})</span>`;
+    return `${ampelDot(ampel)} ${kappa.toFixed(2)}`;
   }
 
-  function renderKappaGroup(title, stats) {
+  function autoBadge(stat) {
+    if (!state.canUpload) {
+      if (stat.autoEnabled) return '<span class="cl-auto cl-auto-on" title="für Dauerbetrieb freigegeben">auto ✓</span>';
+      if (stat.autoEligible) return '<span class="cl-auto cl-auto-elig" title="Schwellen erfüllt">bereit</span>';
+      return '';
+    }
+    // Philipp: klickbarer Umschalter. Freigabe ist eine bewusste Entscheidung,
+    // informiert durch die Schwellen (bereit = beide Kappa erfüllt).
+    const cls = stat.autoEnabled ? 'cl-auto-on' : (stat.autoEligible ? 'cl-auto-elig' : 'cl-auto-off');
+    const label = stat.autoEnabled ? 'auto ✓' : (stat.autoEligible ? 'freigeben?' : 'sperren');
+    const hh = (stat.kappa === null || stat.kappa === undefined) ? '' : stat.kappa;
+    const hl = (stat.humanLlm && stat.humanLlm.kappa !== null && stat.humanLlm.kappa !== undefined) ? stat.humanLlm.kappa : '';
+    return `<button type="button" class="cl-auto cl-auto-toggle ${cls}" data-key="${escapeHtml(stat.key)}" data-enabled="${stat.autoEnabled ? 1 : 0}" data-hh="${hh}" data-hl="${hl}" title="Für den automatischen Dauerbetrieb freigeben/sperren">${label}</button>`;
+  }
+
+  function renderKappaGroup(title, stats, withLlm) {
     if (!stats.length) return '';
-    const rows = stats.map((stat) => `<div class="cl-kappa-row">
-      <div class="cl-kappa-label">${escapeHtml(stat.label || stat.key)}</div>
-      <div class="cl-kappa-value">${kappaCell(stat)}</div>
-    </div>`).join('');
+    const rows = stats.map((stat) => {
+      const self = stat.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : '';
+      const hh = kappaValue(stat.kappa, stat.n, stat.ampel);
+      const extra = withLlm
+        ? `<div class="cl-kappa-hl">LLM ${stat.humanLlm ? kappaValue(stat.humanLlm.kappa, stat.humanLlm.n, stat.humanLlm.ampel) : '–'}</div>
+           <div class="cl-kappa-alpha">α ${(stat.alpha === null || stat.alpha === undefined) ? '–' : stat.alpha.toFixed(2)}</div>
+           <div class="cl-kappa-auto">${autoBadge(stat)}</div>`
+        : '';
+      return `<div class="cl-kappa-row${withLlm ? ' cl-kappa-row-llm' : ''}">
+        <div class="cl-kappa-label">${escapeHtml(stat.label || stat.key)} ${self}</div>
+        <div class="cl-kappa-value">MM ${hh}</div>
+        ${extra}
+      </div>`;
+    }).join('');
     return `<div class="cl-kappa-group"><div class="cl-kappa-group-title">${escapeHtml(title)}</div>${rows}</div>`;
+  }
+
+  function budgetLine(summary) {
+    if (!summary || !summary.budget) return '';
+    const usd = (micro) => `$${(Number(micro) / 1e6).toFixed(4)}`;
+    return `${usd(summary.budget.spentMicro)} von ${usd(summary.budget.limitMicro)} verbraucht`;
   }
 
   function renderOverview(situations, summary) {
@@ -462,25 +498,40 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     const mineKey = state.reviewer === 'Philipp' ? 'philippSubmitted' : 'lenaSubmitted';
     const mineDone = situations.situations.filter((row) => row[mineKey]).length;
 
-    // Kappa-Zusammenfassung (Mensch–Mensch). Bei fehlender Freischaltung/Daten:
-    // klarer Hinweis statt Nullwerten.
+    // Kappa je Klasse: Mensch–Mensch (MM), Mensch–LLM (LLM), Alpha (3 Kodierer).
     let kappaHtml = '';
-    if (summary && summary.humanHuman) {
+    if (summary) {
       const risk = summary.content.filter((s) => s.group === 'risk');
       const positive = summary.content.filter((s) => s.group === 'positive');
       const apology = summary.content.filter((s) => s.group === 'apology');
+      const hhNote = summary.humanHuman
+        ? `${summary.bothSubmittedCount} beidseitig klassifiziert`
+        : (summary.partnerActive ? 'noch keine beidseitigen Abgaben' : 'Lena nicht freigeschaltet — Mensch–Mensch entfällt');
+      const llmNote = summary.llmPresent ? `${summary.llmRatedCount} vom LLM bewertet` : 'noch kein LLM-Rating';
       kappaHtml = `<div class="cl-kappa">
-        <div class="cl-kappa-head">Übereinstimmung Mensch–Mensch (Cohens κ, ${summary.bothSubmittedCount} beidseitig klassifiziert)</div>
-        ${renderKappaGroup(GROUP_LABELS.risk, risk)}
-        ${renderKappaGroup(GROUP_LABELS.positive, positive)}
-        ${renderKappaGroup(GROUP_LABELS.apology, apology)}
-        ${renderKappaGroup('Zuschnitt', summary.quality)}
+        <div class="cl-kappa-head">Übereinstimmung je Klasse — MM = Mensch–Mensch (Cohens κ) · LLM = Mensch–LLM · α = Krippendorff (3 Kodierer)</div>
+        <div class="cl-kappa-sub">${escapeHtml(hhNote)} · ${escapeHtml(llmNote)} · ◆ = selbstimplizierend</div>
+        ${renderKappaGroup(GROUP_LABELS.risk, risk, true)}
+        ${renderKappaGroup(GROUP_LABELS.positive, positive, true)}
+        ${renderKappaGroup(GROUP_LABELS.apology, apology, true)}
+        ${renderKappaGroup('Zuschnitt', summary.quality, false)}
       </div>`;
-    } else {
-      const reason = (summary && !summary.partnerActive)
-        ? 'Lena ist für die Klassifizierung noch nicht freigeschaltet.'
-        : 'Es liegen noch keine beidseitig klassifizierten Situationen vor.';
-      kappaHtml = `<div class="cl-kappa"><p class="dp-hint">Noch keine Mensch–Mensch-Vergleichsdaten: ${escapeHtml(reason)}</p></div>`;
+    }
+
+    // LLM-Dritt-Rater-Steuerung (Modell/Budget/Start) — nur Philipp. Der
+    // Abweichungslink steht allen offen (bei Lena i. d. R. leer).
+    let llmControl = '';
+    if (summary) {
+      const admin = state.canUpload
+        ? `<div class="cl-llm-status">LLM-Rater: <b>${summary.configured ? escapeHtml(summary.model) : 'nicht konfiguriert'}</b>${summary.configured ? ` · ${escapeHtml(budgetLine(summary))}` : ' — ANTHROPIC_API_KEY setzen'}</div>
+           <div class="cl-llm-actions">
+             <button type="button" id="cl-llm-rate" ${summary.configured ? '' : 'disabled'}>LLM-Rating (Stichprobe)</button>
+             <button type="button" id="cl-auto-classify" ${summary.configured ? '' : 'disabled'} title="Freigegebene Klassen automatisch auf dem Rest">Dauerbetrieb (Rest)</button>
+             <button type="button" id="cl-deviations-btn">Abweichungen ansehen</button>
+             <span id="cl-llm-progress" class="dp-hint"></span>
+           </div>`
+        : '<div class="cl-llm-actions"><button type="button" id="cl-deviations-btn">Abweichungen ansehen</button></div>';
+      llmControl = `<div class="cl-llm-control">${admin}</div>`;
     }
 
     const rows = situations.situations.map((row) => {
@@ -510,6 +561,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
         <div class="ov-stat"><span class="ov-stat-num">${progress.sampleSize}</span><span class="ov-stat-label">Situationen in der Stichprobe</span></div>
       </div>
       <p class="cl-progress-line">${mineDone} von ${progress.sampleSize} Validierungssituationen klassifiziert.</p>
+      ${llmControl}
       ${kappaHtml}
       <div class="ov-table-wrap">
         <div class="ov-table" role="table">
@@ -529,6 +581,115 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
       rowEl.addEventListener('click', () => openSituation(Number(rowEl.dataset.id)));
     });
     bindPrepare();
+
+    const devBtn = $('cl-deviations-btn');
+    if (devBtn) devBtn.addEventListener('click', () => setView('deviations'));
+    const rateBtn = $('cl-llm-rate');
+    if (rateBtn) rateBtn.addEventListener('click', () => runLlmBatch(rateBtn, 'classification/llm-rate?limit=10'));
+    const autoBtn = $('cl-auto-classify');
+    if (autoBtn) autoBtn.addEventListener('click', () => runLlmBatch(autoBtn, 'classification/auto-classify?limit=10'));
+
+    body.querySelectorAll('.cl-auto-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const enabled = btn.dataset.enabled !== '1'; // umschalten
+        const payload = { patternKey: btn.dataset.key, enabled };
+        if (btn.dataset.hh !== '') payload.kappaHh = Number(btn.dataset.hh);
+        if (btn.dataset.hl !== '') payload.kappaHl = Number(btn.dataset.hl);
+        btn.disabled = true;
+        fetchJson('classification/auto-enable', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+        }).then(({ status, payload: p }) => {
+          if (status !== 200 || !p.ok) throw new Error(p.error || 'Fehler');
+          loadOverview();
+        }).catch((caught) => { btn.disabled = false; btn.textContent = `Fehler: ${caught.message}`; });
+      });
+    });
+  }
+
+  // Startet ein LLM-Rating batchweise, bis nichts mehr offen ist (oder ein Fehler
+  // auftritt). Zeigt Fortschritt; lädt am Ende die Übersicht neu. Genutzt für die
+  // Validierungsstichprobe wie für den Dauerbetrieb (unterschiedlicher Endpunkt).
+  function runLlmBatch(btn, path) {
+    const progress = $('cl-llm-progress');
+    btn.disabled = true;
+    let total = 0;
+    function step() {
+      progress.textContent = `Bewerte … (${total} fertig)`;
+      return fetchJson(path, { method: 'POST' }).then(({ status, payload }) => {
+        if (status !== 200 || !payload.ok) throw new Error(payload.error || `HTTP ${status}`);
+        total += payload.rated;
+        if (payload.failed > 0 && payload.errors && payload.errors.length) {
+          progress.textContent = `${total} bewertet, ${payload.failed} Fehler (${escapeHtml(payload.errors[0])})`;
+        }
+        if (payload.remaining > 0 && payload.rated > 0) return step();
+        progress.textContent = `Fertig — ${total} bewertet, noch ${payload.remaining} offen.`;
+        return loadOverview();
+      });
+    }
+    step().catch((caught) => { progress.textContent = `Abgebrochen: ${caught.message}`; })
+      .then(() => { btn.disabled = false; });
+  }
+
+  // --------------------------------------------------- Abweichungsliste
+
+  function renderDeviations(payload) {
+    const body = $('cl-overview-body');
+    const back = '<a class="cl-info-btn" href="#" id="cl-dev-back">← Zurück zur Übersicht</a>';
+    if (!payload.deviations.length) {
+      body.innerHTML = `<div class="cl-overview-head"><h2>Abweichungen (LLM ≠ ihr)</h2>${back}</div>
+        <p class="dp-hint">Keine Abweichungen: Wo ihr beide einig seid, stimmt das LLM bislang zu (oder es liegt noch kein LLM-Rating vor).</p>`;
+      bindDeviationsBack();
+      return;
+    }
+    const cards = payload.deviations.map((dev) => `
+      <div class="cl-dev${dev.corrected ? ' corrected' : ''}${dev.selfImplicating ? ' self' : ''}" data-id="${dev.situationId}" data-key="${escapeHtml(dev.key)}">
+        <div class="cl-dev-head">
+          <span class="cl-dev-class">${escapeHtml(dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : ''}</span>
+          <span class="cl-dev-loc">R${dev.round}·${dev.situationIndex + 1}</span>
+        </div>
+        <div class="cl-dev-values">Ihr (einig): <b>${dev.humanValue ? 'ja' : 'nein'}</b> · LLM: <b>${dev.llmValue ? 'ja' : 'nein'}</b></div>
+        <div class="cl-dev-actions">
+          <button type="button" data-act="confirm" ${dev.corrected ? 'disabled' : ''}>${dev.corrected ? 'Bestätigt' : 'Bestätigen (LLM irrt)'}</button>
+          <button type="button" data-act="review">Nochmal ansehen</button>
+        </div>
+      </div>`).join('');
+    body.innerHTML = `<div class="cl-overview-head"><h2>Abweichungen (LLM ≠ ihr)</h2>${back}</div>
+      <p class="dp-hint">${payload.open} offen von ${payload.count}. Selbstimplizierende Klassen (◆) zuerst — dort ist die Bias-Frage am relevantesten. Kein Zwang, jede zu bearbeiten.</p>
+      ${cards}`;
+    bindDeviationsBack();
+    body.querySelectorAll('.cl-dev').forEach((card) => {
+      const id = Number(card.dataset.id);
+      const key = card.dataset.key;
+      card.querySelector('[data-act="review"]').addEventListener('click', () => openSituation(id));
+      card.querySelector('[data-act="confirm"]').addEventListener('click', (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        fetchJson('classification/deviations/confirm', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ situationId: id, key }),
+        }).then(({ status, payload: p }) => {
+          if (status !== 200 || !p.ok) throw new Error(p.error || 'Fehler');
+          button.textContent = 'Bestätigt';
+          card.classList.add('corrected');
+        }).catch((caught) => { button.disabled = false; button.textContent = `Fehler: ${caught.message}`; });
+      });
+    });
+  }
+
+  function bindDeviationsBack() {
+    const back = $('cl-dev-back');
+    if (back) back.addEventListener('click', (event) => { event.preventDefault(); setView('overview'); });
+  }
+
+  function loadDeviations() {
+    $('cl-sub').textContent = 'Abweichungen';
+    $('cl-overview-body').innerHTML = '<p class="dp-hint">Wird geladen …</p>';
+    return fetchJson('classification/deviations').then(({ status, payload }) => {
+      if (status !== 200 || !payload.ok) throw new Error(payload.error || `HTTP ${status}`);
+      renderDeviations(payload);
+    }).catch((caught) => {
+      $('cl-overview-body').innerHTML = `<p class="dp-status error">Konnte Abweichungen nicht laden: ${escapeHtml(caught.message)}</p>`;
+    });
   }
 
   function bindPrepare() {
@@ -574,9 +735,10 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
   // --------------------------------------------------- Ansichten / Nav
 
   function syncUrlAndNav() {
-    const search = state.view === 'overview'
-      ? '?tab=overview'
-      : (state.situationId ? `?situation=${state.situationId}` : '');
+    let search = '';
+    if (state.view === 'overview') search = '?tab=overview';
+    else if (state.view === 'deviations') search = '?tab=deviations';
+    else if (state.situationId) search = `?situation=${state.situationId}`;
     const url = `${location.pathname}${search}`;
     if (`${location.pathname}${location.search}` !== url) history.replaceState(null, '', url);
     if (window.TW_NAV) window.TW_NAV.setActive(search);
@@ -584,10 +746,12 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
 
   function setView(view) {
     state.view = view;
+    // Die Abweichungsliste nutzt denselben Container wie die Übersicht.
     $('cl-situation-picker').classList.toggle('cl-weg', view !== 'situation');
     $('cl-situation-view').classList.toggle('cl-weg', view !== 'situation');
-    $('cl-overview-view').classList.toggle('cl-weg', view !== 'overview');
+    $('cl-overview-view').classList.toggle('cl-weg', view === 'situation');
     if (view === 'overview') loadOverview();
+    else if (view === 'deviations') loadDeviations();
     syncUrlAndNav();
   }
 
@@ -618,8 +782,10 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
 
   function startAtRightView() {
     const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
     const situation = Number(params.get('situation'));
-    if (params.get('tab') !== 'overview' && Number.isInteger(situation) && situation > 0) {
+    if (tab === 'deviations') { setView('deviations'); return; }
+    if (tab !== 'overview' && Number.isInteger(situation) && situation > 0) {
       // Direkt eine Situation öffnen — Sample im Hintergrund nachladen für die Navigation.
       refreshSampleThen(() => {});
       openSituation(situation);

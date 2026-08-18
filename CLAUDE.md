@@ -51,7 +51,7 @@ alles, was sie nicht selbst behandelt, per `baseWorker.fetch(request, env)`.
 
 ```
 worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-Hinweis, scheduled()-Cron
-  └ worker-classification Klassifizierung: Situationen, 20 Musterklassen + 3 Zuschnitt-Flags, blinde Doppelklassifizierung, Kappa, Lena-Freischaltung (/api/classification/*, /klassifizierung*.html)
+  └ worker-classification Klassifizierung: Situationen, 20 Musterklassen + 3 Zuschnitt-Flags, blinde Doppelklassifizierung, Kappa, Lena-Freischaltung, LLM-Dritt-Rater (Anthropic) + Alpha + Abweichungsliste (/api/classification/*, /klassifizierung*.html)
     └ worker-boundary-pairs Doppelprüfung: Runden, Markierungen, Vergleich/F1, Streitfälle, ?dataset=, Transfer
       └ worker-source-integrity-v4  Integritätsprüfung des 4-Jahres-Rohchats
         └ worker-situation-quiz     Situations-Quiz
@@ -80,7 +80,8 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 - `0010` Push-Einstellungen symmetrisch: `notify_lena_on_philipp_submit`, `dispute_alert_philipp_enabled`, `dispute_alert_lena_enabled` (je Person einzeln abschaltbar statt ein geteilter Schalter)
 - `0011` `segment_optimizer_runs` — Verlauf der Schwellwert-Optimierung (rein informativ, ändert nicht die laufende Segmentierung)
 - `0012` `segment_validation_runs` — Verlauf des Validierungs-Splits (70/30 Overfitting-Test, rein informativ)
-- `0013` Klassifizierung: `review_situations` (+`in_validation_sample`), `review_classification_marks` (+`is_correction_of_llm`, `codebook_version`, reviewer inkl. `'llm'`), `review_classification_submissions` (Blind-Gate je Situation), `review_classification_resolutions` (beide-müssen-zustimmen wie 0008), `review_situation_quality_flags`/`_resolutions` (3 Zuschnitt-Flags), `app_settings` (Key-Value, u. a. `lena_classification_enabled`)
+- `0013` Klassifizierung: `review_situations` (+`in_validation_sample`), `review_classification_marks` (+`is_correction_of_llm`, `codebook_version`, reviewer inkl. `'llm'` — in 0014 auf `'LLM'` gehoben), `review_classification_submissions` (Blind-Gate je Situation), `review_classification_resolutions` (beide-müssen-zustimmen wie 0008), `review_situation_quality_flags`/`_resolutions` (3 Zuschnitt-Flags), `app_settings` (Key-Value, u. a. `lena_classification_enabled`)
+- `0014` LLM-Dritt-Rater: `review_classification_marks` neu (reviewer `'LLM'` großgeschrieben + Spalte `rater_model`), Kosten-Ledger `ai_llm_budget`/`ai_llm_reservations`/`ai_llm_usage_events` (Zwei-Phasen-Commit, Mikro-Dollar, keine Inhalte), `review_classification_auto` (Freigabe je `pattern_key`). LLM = Anthropic/Claude über `anthropic-gateway.ts`; Secret `ANTHROPIC_API_KEY` (getrennt), Modell per `ANTHROPIC_MODEL` (Default `claude-haiku-4-5`), Deckel `ANTHROPIC_MAX_TOTAL_USD`/`ANTHROPIC_MAX_COST_PER_REQUEST_USD`.
 
 ### PWA (Browser)
 
