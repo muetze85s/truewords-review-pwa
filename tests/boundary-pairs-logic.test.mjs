@@ -381,10 +381,10 @@ assert.ok(hashSeed('a') !== hashSeed('b'), 'unterschiedliche Eingaben sollten un
   // segmentConversationWindow(toSegmentationInput(...)) direkt verschachteln.
   const worker = readFileSync(new URL('../src/worker-boundary-pairs.ts', import.meta.url), 'utf8');
   const calls = worker.match(/segmentConversationWindow\(/gu) || [];
-  assert.equal(calls.length, 6, 'erwartet werden genau sechs Aufrufe der Segmentierung');
+  assert.equal(calls.length, 7, 'erwartet werden genau sieben Aufrufe der Segmentierung');
   assert.equal(
     (worker.match(/segmentConversationWindow\(\s*toSegmentationInput\(/gu) || []).length,
-    6,
+    7,
     'alle Aufrufstellen müssen toSegmentationInput direkt an segmentConversationWindow übergeben',
   );
   assert.ok(

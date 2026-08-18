@@ -324,6 +324,92 @@
     wrap.hidden = false;
   });
 
+  // --- Validierungs-Split (Overfitting-Test) ---------------------------------
+
+  const MIN_VALIDATE_ROUNDS = 10;
+  let lastValidationRuns = [];
+
+  function renderValidationFacts(data) {
+    const run = data.latestRun;
+    if (run) {
+      $('val-last-run').textContent = fmtDateTime(run.ranAt);
+      $('val-rounds').textContent = `${run.roundsTrain} / ${run.roundsValidate}`;
+      $('val-f1-train').textContent = run.f1Train.toFixed(4);
+      $('val-f1-validate').textContent = run.f1Validate.toFixed(4);
+    } else {
+      $('val-last-run').textContent = 'noch nie';
+      $('val-rounds').textContent = '–';
+      $('val-f1-train').textContent = '–';
+      $('val-f1-validate').textContent = '–';
+    }
+    lastValidationRuns = data.recentRuns || [];
+    const ready = data.readyRoundsNow ?? 0;
+    const runButton = $('val-run');
+    const hint = $('val-hint');
+    if (ready < 4) {
+      runButton.disabled = true;
+      hint.textContent = `Braucht mindestens 4 beidseitig abgegebene Runden (aktuell ${ready}).`;
+    } else {
+      runButton.disabled = false;
+      hint.textContent = `${ready} beidseitig abgegebene Runden verfügbar.`;
+    }
+    // Warnung, wenn der letzte Lauf zu wenige Validierungs-Runden hatte.
+    const warn = $('val-warn');
+    if (run && run.roundsValidate < MIN_VALIDATE_ROUNDS) {
+      warn.hidden = false;
+      warn.textContent = `Nur ${run.roundsValidate} Validierungs-Runden — Ergebnis mit Vorsicht interpretieren (belastbar erst ab ${MIN_VALIDATE_ROUNDS}).`;
+    } else {
+      warn.hidden = true;
+    }
+  }
+
+  async function loadValidationStatus() {
+    try {
+      const response = await fetch(withDataset('/api/admin/validation-status'), { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Konnte Validierungs-Status nicht laden.');
+      renderValidationFacts(data);
+    } catch (caught) {
+      $('val-status').textContent = `Fehler: ${caught.message}`;
+    }
+  }
+
+  $('val-run').addEventListener('click', async () => {
+    const button = $('val-run');
+    const statusEl = $('val-status');
+    button.disabled = true;
+    statusEl.textContent = 'Validierung läuft …';
+    try {
+      const response = await fetch(withDataset('/api/admin/validate-split'), { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || 'Validierung fehlgeschlagen.');
+      statusEl.textContent = 'Idle (bereit)';
+      const gap = Math.abs(data.f1Train - data.f1Validate);
+      setStatus(`Validierung fertig! F1 Training ${data.f1Train.toFixed(4)} vs. Validierung ${data.f1Validate.toFixed(4)} (Differenz ${gap.toFixed(4)}).`, 'ok');
+      await loadValidationStatus();
+    } catch (caught) {
+      statusEl.textContent = `Fehler: ${caught.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('val-logs').addEventListener('click', () => {
+    const wrap = $('val-logs-wrap');
+    const body = $('val-logs-body');
+    if (!wrap.hidden) { wrap.hidden = true; return; }
+    body.innerHTML = lastValidationRuns.length
+      ? lastValidationRuns.map((run) => `<tr>
+          <td>${fmtDateTime(run.ranAt)}</td>
+          <td>${run.roundsTrain} / ${run.roundsValidate}</td>
+          <td>${run.splitSeed}</td>
+          <td>${run.f1Train.toFixed(4)}</td>
+          <td>${run.f1Validate.toFixed(4)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5">Noch keine Läufe.</td></tr>';
+    wrap.hidden = false;
+  });
+
   // --- Abschnitt 4: Datenbank (Dataset-Schalter) -----------------------------
 
   const DATASETS = [
@@ -360,5 +446,6 @@
 
   setupDatasetSelect();
   loadOptimizerStatus();
+  loadValidationStatus();
   load();
 })();

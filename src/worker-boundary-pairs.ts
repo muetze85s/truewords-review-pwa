@@ -2460,6 +2460,239 @@ async function optimizerStatus(env: Env, dataset: DatasetRow): Promise<Response>
   });
 }
 
+// --------------------------------------------------- Validierungs-Split
+
+/** Deterministischer PRNG (mulberry32) — macht einen Split bei Bedarf über
+ * den gespeicherten split_seed exakt reproduzierbar. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(items: T[], seed: number): T[] {
+  const rand = mulberry32(seed);
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Fallback, falls noch kein Optimizer-Lauf existiert — derselbe Wert wie
+// die hartcodierte PAUSE_BOUNDARY_HOURS-Konstante in segmentation-v4.mjs
+// (dort nicht exportiert, deshalb hier gespiegelt statt importiert, analog
+// zum bereits vorhandenen "currentThresholdHours: 3" in optimizeThreshold/
+// optimizerStatus oben).
+const DEFAULT_THRESHOLD_MINUTES = 180;
+
+/**
+ * Prüft, ob die gefundene Segmentierungsregel echt ist oder auf den
+ * bisherigen Runden overfittet: alle beidseitig abgegebenen Runden werden
+ * reproduzierbar (split_seed) 70/30 in Training/Validierung geteilt, der
+ * aktuelle/beste Schwellwert (letzter Optimizer-Lauf, sonst
+ * DEFAULT_THRESHOLD_MINUTES) wird auf BEIDEN Teilmengen getrennt
+ * ausgewertet. Ändert nichts an der laufenden Segmentierung — rein
+ * informativ, wie der Optimizer.
+ */
+async function validateSplit(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+  const tolerance = parseTolerance(url);
+  const doubtMode = parseDoubtMode(url);
+  const seedParam = Number(url.searchParams.get('seed'));
+  const seed = Number.isFinite(seedParam) && seedParam !== 0 ? Math.trunc(seedParam) : Math.floor(Math.random() * 2 ** 31);
+
+  const [sequence, roundRows, submissionRows, allMarks, allResolutions, latestOptimizerRun] = await Promise.all([
+    filteredSequence(env, dataset.id),
+    env.DB.prepare(
+      'SELECT round, first_message_id, message_count FROM review_rounds WHERE dataset_id = ?1 ORDER BY round',
+    ).bind(dataset.id).all<RoundRow>(),
+    env.DB.prepare(
+      'SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string }>(),
+    env.DB.prepare(
+      'SELECT round, reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; reviewer: string; seam_message_id: string; mark: string }>(),
+    env.DB.prepare(
+      'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
+    ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
+    env.DB.prepare(
+      'SELECT best_threshold_minutes FROM segment_optimizer_runs WHERE dataset_id = ?1 ORDER BY ran_at DESC LIMIT 1',
+    ).bind(dataset.id).first<{ best_threshold_minutes: number }>(),
+  ]);
+
+  const seqIndex = new Map<string, number>();
+  for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
+
+  const readyRounds = new Set<number>();
+  const subByRound = new Map<number, Set<string>>();
+  for (const row of submissionRows.results || []) {
+    if (!subByRound.has(row.round)) subByRound.set(row.round, new Set());
+    subByRound.get(row.round)!.add(row.reviewer);
+  }
+  for (const [round, reviewers] of subByRound) {
+    if (reviewers.has('Philipp') && reviewers.has('Lena')) readyRounds.add(round);
+  }
+
+  const marksByRound = new Map<number, { philipp: MarkRow[]; lena: MarkRow[] }>();
+  for (const row of allMarks.results || []) {
+    if (!marksByRound.has(row.round)) marksByRound.set(row.round, { philipp: [], lena: [] });
+    const entry = marksByRound.get(row.round)!;
+    const markRow: MarkRow = { seam_message_id: row.seam_message_id, mark: row.mark as 'cut' | 'doubt' };
+    if (row.reviewer === 'Philipp') entry.philipp.push(markRow);
+    else if (row.reviewer === 'Lena') entry.lena.push(markRow);
+  }
+
+  const resByRound = new Map<number, Array<{ seam_message_id: string; decided_by: string; decision: string }>>();
+  for (const row of allResolutions.results || []) {
+    if (!resByRound.has(row.round)) resByRound.set(row.round, []);
+    resByRound.get(row.round)!.push(row);
+  }
+
+  type RoundData = { round: number; messages: ViewMessage[]; positions: Map<string, number>; combinedCuts: number[] };
+  const roundData: RoundData[] = [];
+  const existingRounds = (roundRows.results || []).filter((r) => readyRounds.has(r.round));
+  for (const roundRow of existingRounds) {
+    const startIdx = seqIndex.get(roundRow.first_message_id);
+    if (startIdx === undefined) continue;
+    const messages = sequence.slice(startIdx, startIdx + roundRow.message_count).map(toView);
+    const positions = seamPositions(messages);
+    const totalSeams = Math.max(0, messages.length - 1);
+    const marks = marksByRound.get(roundRow.round) || { philipp: [], lena: [] };
+    const marksP = toPositionalMarks(marks.philipp, positions);
+    const marksL = toPositionalMarks(marks.lena, positions);
+    const comparison = compareReviewers(marksP, marksL, { totalSeams, tolerance, doubtMode });
+    const resolutions = resByRound.get(roundRow.round) || [];
+    const agreed = agreeResolutions(resolutions);
+    const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+    roundData.push({ round: roundRow.round, messages, positions, combinedCuts: combined.cuts });
+  }
+
+  if (roundData.length < 4) {
+    return json({
+      ok: false,
+      error: `Zu wenige beidseitig abgegebene Runden für einen Trainings-/Validierungs-Split (aktuell ${roundData.length}, mindestens 4 nötig).`,
+    }, 409);
+  }
+
+  const shuffled = seededShuffle(roundData, seed);
+  const trainCount = Math.max(1, Math.min(shuffled.length - 1, Math.round(shuffled.length * 0.7)));
+  const trainSet = shuffled.slice(0, trainCount);
+  const validateSet = shuffled.slice(trainCount);
+
+  const thresholdMinutes = latestOptimizerRun?.best_threshold_minutes ?? DEFAULT_THRESHOLD_MINUTES;
+  const opts: SegmentationOptions = { pauseBoundaryHours: thresholdMinutes / 60 };
+
+  const evalF1 = (rounds: RoundData[]): number => {
+    let pairs = 0;
+    let onlyAuto = 0;
+    let onlyHuman = 0;
+    for (const rd of rounds) {
+      const autoResult = segmentConversationWindow(toSegmentationInput(rd.messages), opts);
+      const autoPositions = autoResult.boundaries
+        .map((b: { beforeEventId: string }) => rd.positions.get(b.beforeEventId))
+        .filter((p: number | undefined): p is number => p !== undefined);
+      const vs = pairSeams(autoPositions, rd.combinedCuts, tolerance);
+      pairs += vs.pairs.length;
+      onlyAuto += vs.onlyA.length;
+      onlyHuman += vs.onlyB.length;
+    }
+    const denom = 2 * pairs + onlyAuto + onlyHuman;
+    return denom ? (2 * pairs) / denom : 0;
+  };
+
+  const f1Train = evalF1(trainSet);
+  const f1Validate = evalF1(validateSet);
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(`
+    INSERT INTO segment_validation_runs
+      (dataset_id, ran_at, rounds_total, rounds_train, rounds_validate, split_seed, threshold_minutes, f1_train, f1_validate)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+  `).bind(
+    dataset.id, now, roundData.length, trainSet.length, validateSet.length,
+    seed, thresholdMinutes, f1Train, f1Validate,
+  ).run();
+
+  return json({
+    ok: true,
+    dataset: dataset.id,
+    tolerance,
+    doubtMode,
+    splitSeed: seed,
+    thresholdMinutes,
+    thresholdHours: Math.round((thresholdMinutes / 60) * 100) / 100,
+    roundsTotal: roundData.length,
+    roundsTrain: trainSet.length,
+    roundsValidate: validateSet.length,
+    f1Train,
+    f1Validate,
+    trainRounds: trainSet.map((r) => r.round).sort((a, b) => a - b),
+    validateRounds: validateSet.map((r) => r.round).sort((a, b) => a - b),
+  });
+}
+
+type ValidationRunRow = {
+  ran_at: string;
+  rounds_total: number;
+  rounds_train: number;
+  rounds_validate: number;
+  split_seed: number;
+  threshold_minutes: number;
+  f1_train: number;
+  f1_validate: number;
+};
+
+/** Leichtgewichtiger Status für den Seitenaufruf, analog zu optimizerStatus(). */
+async function validationStatus(env: Env, dataset: DatasetRow): Promise<Response> {
+  const [latestRun, recentRuns, readyRow] = await Promise.all([
+    env.DB.prepare(
+      'SELECT * FROM segment_validation_runs WHERE dataset_id = ?1 ORDER BY ran_at DESC LIMIT 1',
+    ).bind(dataset.id).first<ValidationRunRow>(),
+    env.DB.prepare(
+      'SELECT * FROM segment_validation_runs WHERE dataset_id = ?1 ORDER BY ran_at DESC LIMIT 10',
+    ).bind(dataset.id).all<ValidationRunRow>(),
+    env.DB.prepare(`
+      SELECT COUNT(*) AS n FROM (
+        SELECT round FROM review_round_submissions WHERE dataset_id = ?1
+        GROUP BY round HAVING COUNT(DISTINCT reviewer) = 2
+      )
+    `).bind(dataset.id).first<{ n: number }>(),
+  ]);
+
+  return json({
+    ok: true,
+    dataset: dataset.id,
+    readyRoundsNow: readyRow?.n ?? 0,
+    latestRun: latestRun ? {
+      ranAt: latestRun.ran_at,
+      roundsTotal: latestRun.rounds_total,
+      roundsTrain: latestRun.rounds_train,
+      roundsValidate: latestRun.rounds_validate,
+      splitSeed: latestRun.split_seed,
+      thresholdMinutes: latestRun.threshold_minutes,
+      thresholdHours: Math.round((latestRun.threshold_minutes / 60) * 100) / 100,
+      f1Train: latestRun.f1_train,
+      f1Validate: latestRun.f1_validate,
+    } : null,
+    recentRuns: (recentRuns.results || []).map((row) => ({
+      ranAt: row.ran_at,
+      roundsTotal: row.rounds_total,
+      roundsTrain: row.rounds_train,
+      roundsValidate: row.rounds_validate,
+      splitSeed: row.split_seed,
+      thresholdMinutes: row.threshold_minutes,
+      thresholdHours: Math.round((row.threshold_minutes / 60) * 100) / 100,
+      f1Train: row.f1_train,
+      f1Validate: row.f1_validate,
+    })),
+  });
+}
+
 // ----------------------------------------------------------- Verdrahtung
 
 async function boundaryPairsApi(request: Request, env: Env): Promise<Response | null> {
@@ -2477,6 +2710,8 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/transfer-boundaries'
     && url.pathname !== '/api/admin/optimize-threshold'
     && url.pathname !== '/api/admin/optimizer-status'
+    && url.pathname !== '/api/admin/validate-split'
+    && url.pathname !== '/api/admin/validation-status'
     && url.pathname !== '/api/admin/marks-backfill-plan'
     && url.pathname !== '/api/admin/marks-backfill-apply'
   ) return null;
@@ -2538,6 +2773,16 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/optimizer-status' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf den Optimizer-Status sehen.', 403);
       return await optimizerStatus(env, dataset);
+    }
+
+    if (url.pathname === '/api/admin/validate-split' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Validierungs-Split auslösen.', 403);
+      return await validateSplit(env, dataset, url);
+    }
+
+    if (url.pathname === '/api/admin/validation-status' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf den Validierungs-Status sehen.', 403);
+      return await validationStatus(env, dataset);
     }
 
     if (url.pathname === '/api/admin/marks-backfill-plan' && request.method === 'GET') {

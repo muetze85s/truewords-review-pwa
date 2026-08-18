@@ -124,6 +124,30 @@
             </table>
           </div>
         </div>
+
+        <div class="tw-set" id="validation-box">
+          <legend>Validierungs-Split (Overfitting-Test)</legend>
+          <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Teilt die Runden zufällig 70/30 in Training und Validierung, wertet den aktuellen Schwellwert auf beiden Teilen getrennt aus. Ähnliche F1-Werte = die Regel hält auch auf ungesehenen Runden. Stark abfallendes F1 auf der Validierung = Verdacht auf Overfitting.</p>
+          <dl class="tw-optimizer-facts">
+            <div><dt>Letzter Lauf</dt><dd id="val-last-run">–</dd></div>
+            <div><dt>Runden Training / Validierung</dt><dd id="val-rounds">–</dd></div>
+            <div><dt>F1 Training</dt><dd id="val-f1-train">–</dd></div>
+            <div><dt>F1 Validierung</dt><dd id="val-f1-validate">–</dd></div>
+            <div><dt>Status</dt><dd id="val-status">Idle (bereit)</dd></div>
+          </dl>
+          <div class="tw-optimizer-actions">
+            <button type="button" id="val-run" class="primary">Validierung starten</button>
+            <button type="button" id="val-logs">Logs anzeigen</button>
+          </div>
+          <p id="val-hint" class="tw-device"></p>
+          <p id="val-warn" class="tw-device" style="color:var(--tw-warn,#b45309)" hidden></p>
+          <div id="val-logs-wrap" hidden>
+            <table class="tw-optimizer-log-table">
+              <thead><tr><th>Datum</th><th>Training / Val.</th><th>Seed</th><th>F1 Train</th><th>F1 Val.</th></tr></thead>
+              <tbody id="val-logs-body"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- Abschnitt 4: Datenbank -->
