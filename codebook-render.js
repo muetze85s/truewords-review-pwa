@@ -13,10 +13,17 @@
     ));
   }
 
-  // Inline: **fett**, *kursiv*, `code` auf bereits escaptem Text.
+  // Inline: **fett**, *kursiv*, `key` → deutsche Bezeichnung (hervorgehoben).
+  // Technische Schlüssel (englisch) werden nie angezeigt: bekannte Keys werden
+  // durch ihre deutsche Klartext-Bezeichnung ersetzt, unbekannte fallen als
+  // Klartext (ohne Backticks) zurück.
   function inline(text) {
     let out = escapeHtml(text);
-    out = out.replace(/`([^`]+)`/gu, '<code>$1</code>');
+    out = out.replace(/`([^`]+)`/gu, (match, token) => {
+      const label = state.keyToLabel[token];
+      if (label) return `<strong class="cb-ref">${escapeHtml(label)}</strong>`;
+      return escapeHtml(token);
+    });
     out = out.replace(/\*\*([^*]+)\*\*/gu, '<strong>$1</strong>');
     out = out.replace(/(^|[^*])\*([^*\n]+)\*/gu, '$1<em>$2</em>');
     return out;
@@ -56,15 +63,7 @@
     if (/^Abgrenzung/u.test(label)) return 'delimit';
     return 'note';
   }
-  function fieldLabelText(kind, raw) {
-    if (kind === 'definition') return 'Definition';
-    if (kind === 'example') return 'Beispiel';
-    if (kind === 'boundary') return 'Zählt NICHT';
-    if (kind === 'delimit') return raw.replace(/:$/u, '');
-    return raw.replace(/:$/u, '');
-  }
-
-  const state = { me: '', signoffs: {}, total: 0 };
+  const state = { me: '', signoffs: {}, total: 0, keyToLabel: {} };
 
   function signFor(key) {
     return state.signoffs[key] || { Philipp: false, Lena: false };
@@ -82,16 +81,31 @@
   function classCard(cls) {
     const fields = cls.fields.map((f) => {
       const kind = fieldKind(f.label);
+      let labelText;
+      let textHtml = inline(f.value);
+      if (kind === 'definition') labelText = 'Definition';
+      else if (kind === 'example') labelText = 'Beispiel';
+      else if (kind === 'boundary') labelText = 'Zählt NICHT';
+      else if (kind === 'delimit') {
+        // „Abgrenzung zu `key`" → deutsche Bezeichnung in den Text vorziehen,
+        // der englische Schlüssel taucht nirgends auf.
+        labelText = 'Abgrenzung';
+        const ref = f.label.match(/`([^`]+)`/u);
+        const refLabel = ref && state.keyToLabel[ref[1]];
+        if (refLabel) textHtml = `Gegenüber <strong class="cb-ref">${escapeHtml(refLabel)}</strong>: ${textHtml}`;
+      } else {
+        labelText = f.label.replace(/:$/u, '');
+      }
       return `<div class="cb-field cb-${kind}">
-        <span class="cb-field-label">${escapeHtml(fieldLabelText(kind, f.label))}</span>
-        <span class="cb-field-text">${inline(f.value)}</span>
+        <span class="cb-field-label">${escapeHtml(labelText)}</span>
+        <span class="cb-field-text">${textHtml}</span>
       </div>`;
     }).join('');
     const s = signFor(cls.key);
     const both = s.Philipp && s.Lena;
     return `<article class="cb-card${both ? ' freigegeben' : ''}" data-key="${escapeHtml(cls.key)}">
       <header class="cb-card-head">
-        <div class="cb-card-title"><span class="cb-key">${escapeHtml(cls.key)}</span><span class="cb-label">${escapeHtml(cls.label)}</span></div>
+        <h3 class="cb-label">${escapeHtml(cls.label)}</h3>
         <span class="cb-badge">${both ? 'freigegeben ✓' : ''}</span>
       </header>
       <div class="cb-fields">${fields}</div>
@@ -151,8 +165,13 @@
     if (sign && sign.ok) { state.me = sign.reviewer || ''; state.signoffs = sign.signoffs || {}; }
     const versionMatch = markdown.match(/Kodierhandbuchversion:\s*(\d+)/u);
     const badge = document.getElementById('cb-version');
-    if (badge && versionMatch) badge.textContent = `Handbuchversion ${versionMatch[1]}${sign && sign.version ? '' : ''}`;
-    render(parse(markdown));
+    if (badge && versionMatch) badge.textContent = `Handbuchversion ${versionMatch[1]}`;
+    const groups = parse(markdown);
+    // Key → deutsche Bezeichnung, damit inline() Verweise auf andere Klassen
+    // in Klartext statt englischem Schlüssel anzeigt.
+    state.keyToLabel = {};
+    groups.forEach((g) => g.classes.forEach((c) => { if (c.key) state.keyToLabel[c.key] = c.label; }));
+    render(groups);
   }).catch((caught) => {
     const container = document.getElementById('cb-content');
     if (container) container.innerHTML = `<p class="dp-status error">Konnte das Kodierhandbuch nicht laden: ${escapeHtml(caught.message)}</p>`;

@@ -224,13 +224,15 @@ button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
 }
 .cb-card.freigegeben { border-left-color: var(--tw-status-confirmed); }
 .cb-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.cb-card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.cb-key {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
-  color: var(--tw-text-muted); word-break: break-all;
+/* Deutsche Bezeichnung — hervorgehoben (fett + farbige Unterstreichung).
+   Kein englischer Schlüssel mehr im Kopf. */
+.cb-label {
+  font-size: 16.5px; font-weight: 700; color: var(--tw-text); line-height: 1.3; margin: 0;
+  border-bottom: 2px solid var(--tw-philipp); display: inline; padding-bottom: 1px;
 }
-.cb-label { font-size: 16px; font-weight: 700; color: var(--tw-text); line-height: 1.25; }
 .cb-badge { font-size: 11.5px; font-weight: 700; color: var(--tw-status-confirmed); white-space: nowrap; }
+/* Verweis auf eine andere Klasse — deutsche Bezeichnung, hervorgehoben. */
+.cb-ref { font-weight: 700; color: var(--tw-philipp-text); }
 
 .cb-fields { display: flex; flex-direction: column; gap: 7px; }
 .cb-field { border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
