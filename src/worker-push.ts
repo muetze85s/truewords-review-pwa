@@ -369,13 +369,19 @@ async function runScheduled(env: Env): Promise<void> {
     const nowLocal = localParts(now, config.tz);
     const ymd = nowLocal.ymd;
 
-    // Früheste Uhrzeit für die Streitfall-Warnung = erste konfigurierte
-    // Erinnerungszeit der Person (Fallback 09:00), damit sie nicht direkt nach
-    // Mitternacht kommt, wenn der Tagesschlüssel wechselt.
+    // Uhrzeit für die Streitfall-Warnung = Mittelpunkt zwischen den beiden
+    // konfigurierten Erinnerungszeiten (bei 09:00/18:00 also 13:30), damit sie
+    // nicht direkt nach Mitternacht und nicht gleichzeitig mit einer Erinnerung
+    // kommt. Fallback 13:00, wenn keine Zeit parsebar ist.
     const reminderMinutes = config.times
       .map((hhmm) => parseHhmm(hhmm))
       .filter((min): min is number => min !== null);
-    const earliestDisputeMinutes = reminderMinutes.length ? Math.min(...reminderMinutes) : 9 * 60;
+    let earliestDisputeMinutes = 13 * 60;
+    if (reminderMinutes.length >= 2) {
+      earliestDisputeMinutes = Math.round((Math.min(...reminderMinutes) + Math.max(...reminderMinutes)) / 2);
+    } else if (reminderMinutes.length === 1) {
+      earliestDisputeMinutes = reminderMinutes[0];
+    }
 
     // Erinnerungen — nur wenn an dem Ortstag noch keine Runde abgegeben.
     const submissionTimes = await reviewerSubmissionTimes(env, dataset.id, config.reviewer);
