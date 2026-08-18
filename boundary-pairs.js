@@ -349,6 +349,17 @@
     return `<span class="dp-vote-badge ${cls}">Du: ${escapeHtml(voteLabel(mine))} · ${escapeHtml(other)}: ${escapeHtml(voteLabel(theirs))}${suffix}</span>`;
   }
 
+  /**
+   * Eigene Stimme der eingeloggten Person zu diesem Streitfall ('cut'|'no_cut'|
+   * 'open'). Die zentrale Naht und die Entscheidungs-Buttons richten sich danach,
+   * damit ein Antippen sofort sichtbar reagiert — auch wenn die/der andere noch
+   * nicht abgestimmt hat und der gemeinsame Stand (dispute.decision) noch „open" ist.
+   */
+  function ownVote(dispute) {
+    const votes = dispute.votes || { philipp: null, lena: null };
+    return (state.reviewer === 'Philipp' ? votes.philipp : votes.lena) || 'open';
+  }
+
   /** Antippen entscheidet den Streitfall — offen → Grenze → keine Grenze → offen. */
   function nextDecision(current) {
     if (current === 'cut') return 'no_cut';
@@ -379,9 +390,12 @@
           : seam?.lena ? ' marked-lena' : '';
 
         if (isCentral) {
-          const decided = dispute.decision && dispute.decision !== 'open' ? decisionLabel(dispute.decision) : '';
-          const centralLabel = decided ? `${label} · ${decided}` : `${label} · antippen zum Entscheiden`;
-          parts.push(`<button type="button" class="dp-dispute-seam central${markedClass}" data-central-seam="${escapeHtml(dispute.seamMessageId)}" data-decision-state="${escapeHtml(dispute.decision || 'open')}">
+          // Eigene Stimme steuert die Anzeige (Linie + Label), nicht der noch
+          // offene gemeinsame Stand — so reagiert die Naht sofort aufs Antippen.
+          const mine = ownVote(dispute);
+          const decided = mine !== 'open' ? decisionLabel(mine) : '';
+          const centralLabel = decided ? `${label} · du: ${decided}` : `${label} · antippen zum Entscheiden`;
+          parts.push(`<button type="button" class="dp-dispute-seam central${markedClass}" data-central-seam="${escapeHtml(dispute.seamMessageId)}" data-decision-state="${escapeHtml(mine)}">
             <span class="line"></span><span class="label">${escapeHtml(centralLabel)}</span>
           </button>`);
         } else {
@@ -424,9 +438,9 @@
         <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b> · ${votesMetaHtml(dispute)}</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
-          <button type="button" data-decision="cut" class="${dispute.decision === 'cut' ? 'active' : ''}">ist eine Grenze</button>
-          <button type="button" data-decision="no_cut" class="${dispute.decision === 'no_cut' ? 'active' : ''}">ist keine</button>
-          <button type="button" data-decision="open" class="${dispute.decision === 'open' ? 'active' : ''}">bleibt offen</button>
+          <button type="button" data-decision="cut" class="${ownVote(dispute) === 'cut' ? 'active' : ''}">ist eine Grenze</button>
+          <button type="button" data-decision="no_cut" class="${ownVote(dispute) === 'no_cut' ? 'active' : ''}">ist keine</button>
+          <button type="button" data-decision="open" class="${ownVote(dispute) === 'open' ? 'active' : ''}">bleibt offen</button>
           <input type="text" placeholder="Notiz" value="${escapeHtml(dispute.note || '')}">
         </div>
         <div class="dp-dispute-status"></div>
