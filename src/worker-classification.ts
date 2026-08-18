@@ -1027,6 +1027,38 @@ async function getLlmStatus(env: Env): Promise<Response> {
   return json({ ok: true, configured: anthropicConfigured(env), model: anthropicModel(env), budget: await llmBudgetStatus(env) });
 }
 
+// ------------------------------------------------- Kodierhandbuch-Freigabe
+
+const CODEBOOK_KEYS = new Set<string>([...CLASSIFICATION_KEYS, ...QUALITY_FLAG_KEYS]);
+
+/** GET /api/classification/codebook-signoff — Freigabestand je Definition (aktuelle Version). */
+async function getCodebookSignoff(env: Env, user: SessionUser): Promise<Response> {
+  const rows = await env.DB.prepare(
+    `SELECT pattern_key, reviewer, agreed FROM review_codebook_signoff WHERE codebook_version = ?1`,
+  ).bind(CODEBOOK_VERSION).all<{ pattern_key: string; reviewer: Role; agreed: number }>();
+  const signoffs: Record<string, { Philipp: boolean; Lena: boolean }> = {};
+  for (const row of rows.results || []) {
+    if (!signoffs[row.pattern_key]) signoffs[row.pattern_key] = { Philipp: false, Lena: false };
+    signoffs[row.pattern_key][row.reviewer] = Number(row.agreed) === 1;
+  }
+  return json({ ok: true, version: CODEBOOK_VERSION, reviewer: user.role, signoffs });
+}
+
+/** POST /api/classification/codebook-signoff — eigenen Haken setzen/lösen. Jeder nur den eigenen. */
+async function setCodebookSignoff(request: Request, env: Env, user: SessionUser): Promise<Response> {
+  let body: { patternKey?: unknown; agreed?: unknown };
+  try { body = await request.json(); } catch { return error('Ungültige Anfrage.'); }
+  const key = String(body.patternKey || '');
+  if (!CODEBOOK_KEYS.has(key)) return error('Unbekannte Definition.', 422);
+  const agreed = body.agreed ? 1 : 0;
+  await env.DB.prepare(`
+    INSERT INTO review_codebook_signoff (pattern_key, reviewer, codebook_version, agreed, decided_at)
+    VALUES (?1, ?2, ?3, ?4, ?5)
+    ON CONFLICT(pattern_key, reviewer, codebook_version) DO UPDATE SET agreed = excluded.agreed, decided_at = excluded.decided_at
+  `).bind(key, user.role, CODEBOOK_VERSION, agreed, new Date().toISOString()).run();
+  return json({ ok: true, patternKey: key, reviewer: user.role, agreed: agreed === 1 });
+}
+
 // ------------------------------------------------------------- Verdrahtung
 
 async function classificationApi(request: Request, env: Env): Promise<Response | null> {
@@ -1075,6 +1107,12 @@ async function classificationApi(request: Request, env: Env): Promise<Response |
     // --- LLM-Dritt-Rater (PR 2) ---
     if (url.pathname === '/api/classification/llm-status' && request.method === 'GET') {
       return await getLlmStatus(env);
+    }
+    if (url.pathname === '/api/classification/codebook-signoff' && request.method === 'GET') {
+      return await getCodebookSignoff(env, user);
+    }
+    if (url.pathname === '/api/classification/codebook-signoff' && request.method === 'POST') {
+      return await setCodebookSignoff(request, env, user);
     }
     if (url.pathname === '/api/classification/deviations' && request.method === 'GET') {
       return await getDeviations(env, dataset);

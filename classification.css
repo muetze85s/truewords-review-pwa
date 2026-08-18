@@ -206,21 +206,71 @@ button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
 
 .cl-broken { display: inline-block; font-size: 12px; font-weight: 700; color: var(--tw-status-open); }
 
-/* Nachschlage-Seite (Kodierhandbuch) */
-.cl-codebook { line-height: 1.55; color: var(--tw-text); }
-.cl-codebook h1 { font-size: 22px; margin: 18px 0 8px; }
-.cl-codebook h2 { font-size: 18px; margin: 22px 0 8px; padding-top: 8px; border-top: 1px solid var(--tw-border); }
-.cl-codebook h3 { font-size: 15.5px; margin: 18px 0 4px; color: var(--tw-philipp-text); }
-.cl-codebook p { margin: 6px 0; }
-.cl-codebook ul { margin: 6px 0; padding-left: 20px; }
-.cl-codebook li { margin: 3px 0; }
-.cl-codebook hr { border: none; border-top: 1px solid var(--tw-border); margin: 18px 0; }
-.cl-codebook code {
-  background: var(--tw-surface-secondary, rgba(0,0,0,.05)); border-radius: 5px;
-  padding: 1px 5px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--tw-philipp-text);
+/* Nachschlage-Seite (Kodierhandbuch) — strukturierte Karten je Klasse. */
+.cb-intro { margin: 4px 0 16px; }
+.cb-summary { font-size: 14px; font-weight: 700; color: var(--tw-text); margin: 0 0 8px; }
+.cb-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.cb-legend-item { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.cb-legend-example { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cb-legend-boundary { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+
+.cb-group { margin: 0 0 8px; }
+.cb-group-title { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--tw-text-muted); font-weight: 700; margin: 22px 0 8px; }
+
+.cb-card {
+  border: 1px solid var(--tw-border); border-left: 3px solid var(--tw-border);
+  border-radius: 12px; background: var(--tw-surface-raised, var(--tw-surface));
+  padding: 12px 14px; margin: 0 0 12px;
 }
-.cl-codebook strong { color: var(--tw-text); }
+.cb-card.freigegeben { border-left-color: var(--tw-status-confirmed); }
+.cb-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.cb-card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cb-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  color: var(--tw-text-muted); word-break: break-all;
+}
+.cb-label { font-size: 16px; font-weight: 700; color: var(--tw-text); line-height: 1.25; }
+.cb-badge { font-size: 11.5px; font-weight: 700; color: var(--tw-status-confirmed); white-space: nowrap; }
+
+.cb-fields { display: flex; flex-direction: column; gap: 7px; }
+.cb-field { border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+.cb-field-label {
+  display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; margin-right: 8px; vertical-align: baseline; opacity: .85;
+}
+.cb-field-text { font-size: 14.5px; }
+
+/* Definition: neutral, prominent. */
+.cb-definition { background: var(--tw-surface-secondary, rgba(0,0,0,.04)); }
+.cb-definition .cb-field-label { color: var(--tw-text-muted); }
+/* Beispiel: grüner Hintergrund („so zählt es"). */
+.cb-example { background: var(--tw-status-confirmed-surface); }
+.cb-example .cb-field-label { color: var(--tw-status-confirmed); }
+.cb-example .cb-field-text { color: var(--tw-text); }
+/* Grenzfall: roter Hintergrund („zählt NICHT"). */
+.cb-boundary { background: var(--tw-status-unclear-surface); }
+.cb-boundary .cb-field-label { color: var(--tw-status-unclear); }
+.cb-boundary .cb-field-text { color: var(--tw-text); }
+/* Abgrenzung / Hinweis: dezent. */
+.cb-delimit, .cb-note { background: transparent; border: 1px dashed var(--tw-border); }
+.cb-delimit .cb-field-label, .cb-note .cb-field-label { color: var(--tw-text-muted); }
+
+.cb-field code {
+  background: rgba(0,0,0,.06); border-radius: 5px; padding: 1px 5px; font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:root[data-theme="dark"] .cb-field code, :root:not([data-theme="light"]) .cb-field code { background: rgba(255,255,255,.08); }
+
+.cb-signoff {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--tw-border);
+}
+.cb-signoff-hint { font-size: 12.5px; color: var(--tw-text-muted); }
+.cb-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.cb-check input { width: 20px; height: 20px; }
+.cb-check.own { font-weight: 700; color: var(--tw-text); cursor: pointer; }
+.cb-check.own input { accent-color: var(--tw-status-confirmed); cursor: pointer; }
+.cb-check.other { color: var(--tw-text-muted); }
 
 /* Übersicht-Tabelle: 5 Spalten (Situation · Philipp · Lena · Streitfälle · Zuschnitt).
    Überschreibt die 7-Spalten-Vorlage aus boundary-pairs.css. */
