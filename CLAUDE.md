@@ -132,56 +132,71 @@ Ereignisstrom gespeichert wird.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-16 · 03:35_
+_Stand: 2026-08-18_
 
-**Stand heute:** Zwei Etappen, beide deployed und grün. Letzter Commit
-`11db6f5`, Branch `claude/segmentation-v5-migration-h0syxc`, kein PR offen,
-Arbeitsverzeichnis sauber.
+**Stand heute:** Alles deployed und grün (letzter Deploy `66d014d` inkl. D1-
+Migration 0012). Branch `claude/segmentation-v5-migration-h0syxc`, kein PR
+offen, Arbeitsverzeichnis sauber. Der Tag drehte sich um die Rückstellung der
+Rohmarkierungen für Runden 1–17, die anschließende Klärung eines
+vermeintlichen Streitfall-Problems (war keins) und das letzte Handoff-Feature
+(Validierungs-Split).
 
-1. **F0/F1/GT-Nomenklatur + Übersicht-Redesign + Prüfstand-Link entfernt**
-   (`9e9b596`): Backend und Frontend einheitlich auf F0 (rohe Übereinstimmung
-   Philipp/Lena), GT (kombinierte Grenzenmenge aus F0 + geklärten
-   Streitfällen) und F1 (Algorithmus vs. GT) umgestellt. Übersichtsseite neu:
-   Spalten `Runde|Philipp|Lena|F0|Streitfälle|GT|F1` mit gepoolten Ø/Σ-
-   Aggregaten in den Köpfen, „öffnen"-Spalte weg — ganze Zeile/Karte ist
-   jetzt Desktop **und** Mobile klickbar. Dabei einen echten Bug gefunden:
-   das Live-F1-Panel in der Doppelprüfung war in einer früheren Session
-   komplett aus dem HTML gelöscht (nicht nur der Platzhaltertext) — der JS-
-   Code lief seither ins Leere. Wiederhergestellt mit den neuen Feldnamen.
-   „Prüfstand" aus `nav.js` entfernt (einzige Fundstelle im Repo);
-   `review.html` selbst bleibt voll funktionsfähig und ist weiterhin die
-   Redirect-Zielseite für Nutzer ohne Upload-Recht in `upload.js` — bewusst
-   nicht angetastet.
-2. **Eigenes Home-Screen-Icon für review.html** (`11db6f5`): echtes
-   TrueWords-Logo (Türkis/Rosa-Sprechblasen) aus `truewords-paaruebersetzer`
-   übernommen als `icon-pruefstand-192.png`/`-512.png`, `apple-touch-icon` +
-   neuer `apple-mobile-web-app-title`-Tag „TW - Prüfstand" in `review.html`.
-   Restliche Seiten/Manifest bewusst unverändert (bleiben „TW Prüfung").
-
-**Noch unverifiziert (von Philipp/Lena):**
-- Übersicht-Redesign (F0/Streitfälle/GT/F1-Spalten, ganze Zeile klickbar) —
-  auf echten Geräten (Desktop + iPhone + iPad) noch nicht bestätigt.
-- Neues Prüfstand-Icon — noch nicht frisch zum Home-Bildschirm hinzugefügt
-  und gegen das bestehende „TW Prüfung"-Icon auf Konflikte geprüft.
+1. **Marks-Rückstellung Runden 1–17 gebaut, angewandt, verifiziert**
+   (`63f4344` Plan, `4a25908` Apply-Endpunkt, `c6db011` Browser-Seite,
+   `66cdd4c` UI-Fix): `review_boundary_marks` in `philena-4y` wurde für die
+   Runden 1–17 zeilenweise auf den eingefrorenen Basis-Stand
+   (`philena-2026-pilot-v4-unseen`) zurückgesetzt — nötig, weil der
+   Marks-Backfill (cut→dupliziert, no_cut→gelöscht) und der behobene
+   Speicher-Race die rohen F0-Werte verfälscht hatten. `review_boundary_resolutions`
+   blieb unangetastet, GT/F1 unverändert, nur F0 zeigt wieder die echten
+   Originalwerte. Endpunkte: `GET /api/admin/marks-restore-plan` (Nur-Lese),
+   `POST /api/admin/marks-restore-apply` (Admin-Token + `confirm:'restore-rounds-1-17'`).
+   Bedienung ohne Terminal über `marks-restore.html`. **Philipp hat die
+   Rückstellung ausgeführt** — Plan zeigt jetzt 0/0/0 (nichts mehr abweichend).
+2. **Streitfall-Diagnose Runden 13–17** (`ea84cfa`, `07445c0`):
+   `GET /api/admin/dispute-check?rounds=13-17` (Nur-Lese) zeigt pro offener
+   Naht Philipps/Lenas Markierung **und** alle gespeicherten Resolution-Votes.
+   Ergebnis: Die 14 offenen Nähte über Runden 13–17 sind **kein** Bug und
+   **nicht** Folge der Rückstellung (13–15 waren von der Rückstellung gar nicht
+   betroffen). Ursache: **Lena hat bei diesen 14 Nähten nie abgestimmt** — bei
+   3 davon hat Philipp schon „cut" gevotet, es fehlt aber Lenas Zustimmung
+   (Regel: beide müssen zustimmen). Streitfälle sind **nicht** gesperrt
+   (`resolveDispute` verlangt nur beidseitige Abgabe, `philena-4y` ist nicht
+   eingefroren) — Lena kann sie jederzeit über Doppelprüfung/Übersicht klären.
+3. **Validierungs-Split (Overfitting-Test)** (`66d014d`, letzter Handoff-Punkt):
+   Migration `0012_segment_validation_runs.sql`, Endpunkte
+   `GET /api/admin/validate-split` + `/api/admin/validation-status`
+   (canUpload-only), neues Panel auf der Settings-Seite unter dem Optimizer.
+   Teilt alle beidseitig abgegebenen Runden reproduzierbar (`split_seed`,
+   mulberry32) 70/30 in Training/Validierung, wertet den besten Schwellwert
+   (letzter Optimizer-Lauf, sonst 180 min) getrennt aus → `f1_train` vs.
+   `f1_validate`. Rein informativ, ändert die Segmentierung nicht.
 
 **Morgen zuerst:**
-1. Rückmeldung von Philipp zu den beiden obigen Punkten einholen bzw.
-   nachfragen, falls noch nichts getestet wurde.
-2. **Optimizer neu trainieren** — auf der Settings-Seite „Neu trainieren"
-   klicken. Alle bisherigen `segment_optimizer_runs`-Einträge liefen mit der
-   falschen Toleranz (0 statt 1, `parseTolerance`-Bug vom 15.08.) und sind
-   damit nicht mehr aussagekräftig. Steht seit gestern aus.
-3. Push-Opt-in beider Geräte + Zustell-Test steht weiterhin aus (siehe unten).
+1. **Lena klärt die 14 offenen Streitfälle** in Runden 13–17 (Doppelprüfung,
+   Runden 13/14/15/16/17 durchgehen — sie tauchen auch automatisch in der
+   Übersicht auf, da unvollständig). Danach `dispute-check?rounds=13-17`
+   erneut aufrufen: openCount sollte auf 0 fallen. **Noch nicht erledigt.**
+2. **Validierungs-Split ein paar Mal laufen lassen** (Settings → „Validierung
+   starten"): bei ~26–31 Runden ist der Validierungs-Teil nur ~8–9 Runden
+   (< 10, Tool warnt selbst) — mehrere Läufe zeigen, ob `f1_train`/`f1_validate`
+   stabil sind oder springen. Ergebnis mit Philipp einordnen.
+3. **Optimizer neu trainieren** steht weiterhin aus (Settings → „Neu
+   trainieren") — bisherige `segment_optimizer_runs` liefen z. T. mit falscher
+   Toleranz und sind nicht mehr aussagekräftig.
 
 **Offene Punkte:**
+- 14 offene Streitfälle 13–17 warten auf Lenas Votes (s. o.).
+- Validierungs-Split noch nicht real ausgeführt/eingeordnet (s. o.).
 - Optimizer-Neutraining ausstehend (s. o.).
 - Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt (Philipp:
   Home-Screen-Icon neu anlegen → Benachrichtigungen erlauben; Lena:
-  dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und
-  prüfen, ob die Benachrichtigung ankommt — beide Richtungen einzeln
-  an-/abschaltbar auf der Settings-Seite).
+  dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und prüfen).
+- Übersicht-Redesign + neues Prüfstand-Icon auf echten Geräten noch von
+  Philipp/Lena zu bestätigen.
 - Playwright-Visual-Snapshots (`tests/visual/boundary-pairs.visual.spec.mjs`)
-  brauchen nach den UI-Umbauten ein `--update-snapshots` — nicht Teil des
-  Deploy-Gates (`npm run check`), daher unkritisch.
-- Live-F1 nur auf abgeschlossenen Runden belastbar; bei < 40 gemeinsamen
-  Grenzen volatil.
+  brauchen nach den UI-Umbauten ein `--update-snapshots` — nicht Teil von
+  `npm run check`, daher unkritisch.
+- Backlog (kein Auftrag): adaptives Segmentierungstool für neue Paare, Konzept
+  in `KONZEPT_Adaptive_Segmentierung.md` — vier Produktentscheidungen erst zu
+  klären, eigene Sitzung wert.
