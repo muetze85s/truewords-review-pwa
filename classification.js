@@ -2,8 +2,9 @@ import {
   CLASSIFICATION_CLASSES,
   CLASSIFICATION_KEYS,
   GROUP_LABELS,
+  codeByKey,
 } from './classification-classes.mjs';
-import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
+import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-flags.mjs';
 
 (() => {
   'use strict';
@@ -48,6 +49,18 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
   function situationTag(row) {
     if (row && row.startOrdinal != null) return `Grenze ${row.startOrdinal}`;
     return `R${row ? row.round : '?'}·${row ? row.situationIndex + 1 : '?'}`;
+  }
+
+  // Punkt 9: fester Kurzcode (N7/P3/E1/Z1) je Klasse/Flag, an den key gebunden.
+  function codeFor(key) {
+    return codeByKey(key) || qualityCodeByKey(key) || '';
+  }
+
+  // „N7 · Wirkung relativiert" als HTML — Code hervorgehoben, Klartext dahinter.
+  function labelWithCodeHtml(key, label) {
+    const code = codeFor(key);
+    const text = escapeHtml(label || key);
+    return code ? `<span class="cl-code">${escapeHtml(code)}</span> · ${text}` : text;
   }
 
   function withDataset(path) {
@@ -125,7 +138,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     return `<div class="cl-check-row" data-key="${escapeHtml(entry.key)}">
       <label class="cl-check">
         <input type="checkbox" data-group="${group}" data-key="${escapeHtml(entry.key)}" ${checked}>
-        <span class="cl-check-label">${escapeHtml(entry.label)}</span>
+        <span class="cl-check-label">${labelWithCodeHtml(entry.key, entry.label)}</span>
       </label>
       <button type="button" class="cl-info-dot" data-hint-for="${escapeHtml(entry.key)}" aria-label="Definition anzeigen">i</button>
       <div class="cl-hint dp-weg" id="cl-hint-${escapeHtml(entry.key)}">${escapeHtml(entry.hint)}</div>
@@ -472,7 +485,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
            <div class="cl-kappa-auto">${autoBadge(stat)}</div>`
         : '';
       return `<div class="cl-kappa-row${withLlm ? ' cl-kappa-row-llm' : ''}">
-        <div class="cl-kappa-label">${escapeHtml(stat.label || stat.key)} ${self}</div>
+        <div class="cl-kappa-label">${labelWithCodeHtml(stat.key, stat.label)} ${self}</div>
         <div class="cl-kappa-value">MM ${hh}</div>
         ${extra}
       </div>`;
@@ -654,7 +667,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     const cards = payload.deviations.map((dev) => `
       <div class="cl-dev${dev.corrected ? ' corrected' : ''}${dev.selfImplicating ? ' self' : ''}" data-id="${dev.situationId}" data-key="${escapeHtml(dev.key)}">
         <div class="cl-dev-head">
-          <span class="cl-dev-class">${escapeHtml(dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : ''}</span>
+          <span class="cl-dev-class">${labelWithCodeHtml(dev.key, dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : ''}</span>
           <span class="cl-dev-loc">${escapeHtml(situationTag(dev))}</span>
         </div>
         <div class="cl-dev-values">Ihr (einig): <b>${dev.humanValue ? 'ja' : 'nein'}</b> · LLM: <b>${dev.llmValue ? 'ja' : 'nein'}</b></div>

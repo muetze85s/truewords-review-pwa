@@ -23,8 +23,12 @@ export const GROUP_LABELS = {
 };
 
 /**
- * Reihenfolge = Anzeigereihenfolge in der UI. `selfImplicating` markiert
- * Klassen, bei denen das eigene Verhalten betroffen sein kann — für die
+ * Reihenfolge = Anzeigereihenfolge in der UI. `code` (N1–N10 / P1–P9 / E1) ist
+ * der feste, KURZE Anzeigecode je Klasse — an den `key` (pattern_key) gebunden,
+ * NICHT an die Anzeigereihenfolge: ändert sich die Reihenfolge, wandert der Code
+ * mit dem key mit. Angezeigt wird überall „N7 · Wirkung relativiert" (Code +
+ * Klartext); der englische `key` bleibt rein intern (D1/LLM). `selfImplicating`
+ * markiert Klassen, bei denen das eigene Verhalten betroffen sein kann — für die
  * Bias-Auswertung und die Priorisierung der Abweichungsliste (PR 2).
  * `autoClassificationEnabled` bleibt bis zur bestandenen Validierung false;
  * erst dann übernimmt das LLM diese Klasse im Dauerbetrieb (PR 2).
@@ -32,6 +36,7 @@ export const GROUP_LABELS = {
 export const CLASSIFICATION_CLASSES = [
   // --- Risikomuster (10) ---
   {
+    code: 'N1',
     key: 'countercriticism_before_addressing_concern',
     label: 'Gegenkritik vor Bearbeitung des Anliegens',
     group: 'risk',
@@ -40,6 +45,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Auf ein Anliegen wird zuerst mit einem eigenen Vorwurf geantwortet, bevor auf das Anliegen eingegangen wird.',
   },
   {
+    code: 'N2',
     key: 'previous_issue_used_to_displace_current_issue',
     label: 'Aufrechnen (altes Thema verdrängt aktuelles)',
     group: 'risk',
@@ -48,6 +54,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Ein altes, unabhängiges Thema wird herangezogen, um vom aktuellen Anliegen abzulenken.',
   },
   {
+    code: 'N3',
     key: 'whataboutism_candidate',
     label: 'Whataboutism',
     group: 'risk',
@@ -56,6 +63,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Statt Auseinandersetzung mit dem Vorwurf ein Gegenvorwurf, der das Thema „zurückspielt".',
   },
   {
+    code: 'N4',
     key: 'topic_shift',
     label: 'Themenwechsel',
     group: 'risk',
@@ -64,6 +72,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Das Gespräch wandert vom Anliegen weg zu einem anderen Thema, ohne das Anliegen zu klären.',
   },
   {
+    code: 'N5',
     key: 'problem_mixing',
     label: 'Problemvermischung',
     group: 'risk',
@@ -72,6 +81,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Mehrere Konfliktpunkte gleichzeitig verhandelt, keiner davon einzeln zu Ende besprochen.',
   },
   {
+    code: 'N6',
     key: 'responsibility_shift',
     label: 'Verantwortungsverschiebung',
     group: 'risk',
@@ -80,6 +90,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Verantwortung fürs eigene Verhalten wird der anderen Person oder den Umständen zugeschrieben.',
   },
   {
+    code: 'N7',
     key: 'impact_relativized',
     label: 'Wirkung relativiert',
     group: 'risk',
@@ -88,6 +99,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Die Wirkung des eigenen Verhaltens auf den anderen wird kleingeredet statt anerkannt.',
   },
   {
+    code: 'N8',
     key: 'intent_attribution',
     label: 'Absichtsunterstellung',
     group: 'risk',
@@ -96,6 +108,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Der anderen Person wird eine (meist negative) Absicht unterstellt, die sie nicht geäußert hat.',
   },
   {
+    code: 'N9',
     key: 'generalization_candidate',
     label: 'Verallgemeinerung',
     group: 'risk',
@@ -104,6 +117,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Ein Einzelfall wird zum generellen Urteil erklärt („immer", „nie").',
   },
   {
+    code: 'N10',
     key: 'criticism_justification_loop',
     label: 'Kritik-Rechtfertigungs-Schleife',
     group: 'risk',
@@ -114,6 +128,7 @@ export const CLASSIFICATION_CLASSES = [
 
   // --- Positive Marker (9) ---
   {
+    code: 'P1',
     key: 'repair_offer',
     label: 'Reparaturangebot',
     group: 'positive',
@@ -122,6 +137,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Aktives Angebot, die Situation zu verbessern (Entschuldigung, Vorschlag, Geste).',
   },
   {
+    code: 'P2',
     key: 'responsibility_taken',
     label: 'Verantwortungsübernahme',
     group: 'positive',
@@ -130,6 +146,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Eigenes Fehlverhalten wird explizit anerkannt, ohne es zu relativieren oder zu bedingen.',
   },
   {
+    code: 'P3',
     key: 'topic_return',
     label: 'Themenrückkehr',
     group: 'positive',
@@ -138,6 +155,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Nach einem Abschweifen kehrt das Gespräch zum ursprünglichen Anliegen zurück.',
   },
   {
+    code: 'P4',
     key: 'agreement_reached',
     label: 'Vereinbarung',
     group: 'positive',
@@ -146,6 +164,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Beide Seiten einigen sich erkennbar auf eine konkrete nächste Handlung oder ein Verständnis.',
   },
   {
+    code: 'P5',
     key: 'concern_stated_without_blame',
     label: 'Anliegen ohne Vorwurf formuliert',
     group: 'positive',
@@ -154,6 +173,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Kritisches Anliegen angesprochen ohne Schuld-/Absichtszuschreibung — eigene Wahrnehmung/Bedürfnis statt Fehlverhalten des anderen.',
   },
   {
+    code: 'P6',
     key: 'clarifying_question',
     label: 'Nachfrage statt Annahme',
     group: 'positive',
@@ -162,6 +182,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Statt eine Deutung als gegeben zu behandeln, wird nachgefragt, wie etwas gemeint war.',
   },
   {
+    code: 'P7',
     key: 'perception_validated',
     label: 'Wahrnehmung des anderen bestätigt',
     group: 'positive',
@@ -170,6 +191,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Empfindung/Sichtweise des anderen wird als berechtigt anerkannt — unabhängig von inhaltlicher Zustimmung.',
   },
   {
+    code: 'P8',
     key: 'deescalation',
     label: 'Bewusste Deeskalation',
     group: 'positive',
@@ -178,6 +200,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Jemand nimmt erkennbar Tempo/Schärfe heraus — Pause vorschlagen, Dynamik benennen, bewusst abbremsen.',
   },
   {
+    code: 'P9',
     key: 'affection_in_conflict',
     label: 'Zuneigung/Wärme im Konfliktkontext',
     group: 'positive',
@@ -188,6 +211,7 @@ export const CLASSIFICATION_CLASSES = [
 
   // --- Entschuldigung: reine Erkennung (1) ---
   {
+    code: 'E1',
     key: 'apology_present',
     label: 'Situation enthält eine Entschuldigung',
     group: 'apology',
@@ -196,6 +220,14 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Irgendeine Form von Entschuldigung („tut mir leid", „sorry") kommt vor — Art/Aufrichtigkeit hier noch nicht bewertet.',
   },
 ];
+
+/** Code (N7) → key, und key → Code — für Anzeige und Nachschlag. */
+const CODE_BY_KEY = new Map(CLASSIFICATION_CLASSES.map((entry) => [entry.key, entry.code]));
+
+/** Kurzer Anzeigecode (N7/P3/E1/…) zu einem key, oder '' wenn unbekannt. */
+export function codeByKey(key) {
+  return CODE_BY_KEY.get(key) || '';
+}
 
 /** Keys in Anzeigereihenfolge. */
 export const CLASSIFICATION_KEYS = CLASSIFICATION_CLASSES.map((entry) => entry.key);
