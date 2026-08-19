@@ -1095,6 +1095,23 @@ async function setCodebookSignoff(request: Request, env: Env, user: SessionUser)
   return json({ ok: true, patternKey: key, reviewer: user.role, agreed: agreed === 1 });
 }
 
+/**
+ * Punkt 7: billiger „Zustands-Stempel" einer Situation für leichtgewichtiges
+ * Polling. Ändert er sich, hat der Partner abgegeben oder einen Streitfall
+ * (Klasse/Zuschnitt) entschieden → die Seite lädt die Situation über den
+ * normalen blind-gegateten Endpunkt neu. Ohne Nachrichten-/Chat-Laden, nur
+ * drei indizierte Zählungen/Max über Abgaben und Streitfall-Entscheidungen.
+ */
+async function getSituationState(env: Env, id: number): Promise<Response> {
+  const [sub, classRes, flagRes] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(submitted_at), '') AS m FROM review_classification_submissions WHERE situation_id = ?1").bind(id).first<{ c: number; m: string }>(),
+    env.DB.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(decided_at), '') AS m FROM review_classification_resolutions WHERE situation_id = ?1").bind(id).first<{ c: number; m: string }>(),
+    env.DB.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(decided_at), '') AS m FROM review_situation_quality_resolutions WHERE situation_id = ?1").bind(id).first<{ c: number; m: string }>(),
+  ]);
+  const stamp = `${Number(sub?.c || 0)}:${sub?.m || ''}|${Number(classRes?.c || 0)}:${classRes?.m || ''}|${Number(flagRes?.c || 0)}:${flagRes?.m || ''}`;
+  return json({ ok: true, stamp });
+}
+
 // ------------------------------------------------------------- Verdrahtung
 
 async function classificationApi(request: Request, env: Env): Promise<Response | null> {
@@ -1173,11 +1190,12 @@ async function classificationApi(request: Request, env: Env): Promise<Response |
       return await setAutoEnable(request, env);
     }
 
-    const match = url.pathname.match(/^\/api\/classification\/situations\/(\d+)(\/marks|\/submit|\/resolve)?$/u);
+    const match = url.pathname.match(/^\/api\/classification\/situations\/(\d+)(\/marks|\/submit|\/resolve|\/state)?$/u);
     if (match) {
       const id = Number(match[1]);
       if (!Number.isInteger(id) || id < 1) return error('Ungültige Situation.', 422);
       const suffix = match[2] || '';
+      if (suffix === '/state' && request.method === 'GET') return await getSituationState(env, id);
       if (suffix === '' && request.method === 'GET') return await getSituationDetail(env, dataset, user, id);
       if (suffix === '/marks' && request.method === 'PUT') return await putMarks(request, env, dataset, user, id);
       if (suffix === '/submit' && request.method === 'POST') return await submitSituation(request, env, dataset, user, id);

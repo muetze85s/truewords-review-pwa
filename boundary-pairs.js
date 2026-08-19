@@ -28,6 +28,10 @@
     // + Seite rein clientseitig auf den bereits geladenen Daten.
     overviewShowAll: false,
     overviewPage: 0,
+    // Punkt 7: zuletzt gesehener „Zustands-Stempel" der Runde (Partner-Abgabe/
+    // Streitfall-Stimmen) für leichtgewichtiges Polling; null = noch keine
+    // Baseline.
+    pollStamp: null,
   };
 
   function $(id) { return document.getElementById(id); }
@@ -254,6 +258,34 @@
     });
   }
 
+  // ---------------------------------------------------------- Auto-Update (P7)
+  // Leichtgewichtiges Polling: ein billiger Zustands-Stempel je Runde (Abgaben
+  // + Streitfall-Stimmen, KEIN Chat-Laden). Ändert er sich gegenüber der
+  // Baseline, hat der Partner etwas getan → Runde neu laden (über den normalen
+  // blind-gegateten Endpunkt; Blindheit bleibt gewahrt). Nur während man die
+  // Runde ansieht UND schon abgegeben hat (vorher sieht man ohnehin nichts vom
+  // Partner) und nur bei sichtbarem Tab.
+  const POLL_INTERVAL_MS = 12000;
+
+  function refreshPollBaseline() {
+    if (state.tab !== 'round' || !state.submitted) { state.pollStamp = null; return; }
+    const round = state.round;
+    fetchJson(`rounds/${round}/state`).then(({ status, payload }) => {
+      if (status === 200 && payload && payload.ok && state.round === round) state.pollStamp = payload.stamp;
+    }).catch(() => { /* nächster Tick versucht es erneut */ });
+  }
+
+  function pollTick() {
+    if (state.tab !== 'round' || !state.submitted || document.hidden) return;
+    if (state.pollStamp === null) { refreshPollBaseline(); return; }
+    const round = state.round;
+    fetchJson(`rounds/${round}/state`).then(({ status, payload }) => {
+      if (status !== 200 || !payload || !payload.ok) return;
+      if (state.round !== round || state.tab !== 'round') return;
+      if (payload.stamp !== state.pollStamp) { state.pollStamp = payload.stamp; loadRound(); }
+    }).catch(() => { /* Netzwerkzucken ignorieren, nächster Tick */ });
+  }
+
   function loadRound() {
     setStatus('Wird geladen …', false);
     return fetchJson(`rounds/${state.round}`).then(({ status, payload }) => {
@@ -265,6 +297,9 @@
       state.otherSubmitted = Boolean(payload.otherSubmitted);
       $('dp-sub').textContent = `${state.reviewer} · Runde ${state.round}`;
       setStatus('', false);
+      // Punkt 7: Baseline-Stempel zum Ladezeitpunkt setzen, damit das Polling
+      // nur echte spätere Änderungen des Partners als Reload-Auslöser sieht.
+      refreshPollBaseline();
 
       if (!state.submitted) {
         showState('mark');
@@ -472,6 +507,9 @@
           // kein zweiter Request/kein zweites Laden des Runden-Fensters mehr
           // nötig, das war der spürbar langsame Teil beim Klären.
           renderAgreement(payload.agreement);
+          // Punkt 7: eigene Stimme ändert den Stempel — Baseline nachziehen,
+          // damit das Polling darauf nicht mit einem Reload reagiert.
+          refreshPollBaseline();
         }).catch((caught) => {
           statusNode.textContent = `Nicht gespeichert — ${caught.message}`;
         });
@@ -707,6 +745,9 @@
     });
 
     startAtRightRound();
+    // Punkt 7: ein einziges Intervall; pollTick prüft selbst, ob es gerade
+    // sinnvoll ist (Runden-Tab, abgegeben, sichtbar).
+    setInterval(pollTick, POLL_INTERVAL_MS);
   }
 
   function startAtRightRound() {

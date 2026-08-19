@@ -33,6 +33,8 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     flags: {},
     submitted: false,
     otherSubmitted: false,
+    // Punkt 7: zuletzt gesehener Zustands-Stempel der Situation für Polling.
+    pollStamp: null,
   };
 
   function $(id) { return document.getElementById(id); }
@@ -269,6 +271,9 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       : `${state.reviewer} · Runde ${payload.round}, Nr. ${payload.situationIndex + 1}`;
     $('cl-position').textContent = positionLabel();
     setStatus('', false);
+    // Punkt 7: Baseline-Stempel zum Ladezeitpunkt (deckt loadSituation UND die
+    // direkte applyDetail-Anzeige nach der Abgabe ab).
+    refreshPollBaseline();
 
     if (!state.submitted) {
       showMarkState('mark');
@@ -296,6 +301,33 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       $('cl-waiting-title').textContent = 'Abgegeben';
       $('cl-waiting-text').classList.add('dp-weg');
     }
+  }
+
+  // ---------------------------------------------------------- Auto-Update (P7)
+  // Leichtgewichtiges Polling eines billigen Zustands-Stempels je Situation
+  // (Abgaben + Streitfall-Entscheidungen, KEIN Nachrichten-/Chat-Laden). Ändert
+  // er sich, hat der Partner etwas getan → Situation über den blind-gegateten
+  // Endpunkt neu laden. Nur in der Situations-Ansicht, nur nach eigener Abgabe,
+  // nur bei sichtbarem Tab.
+  const POLL_INTERVAL_MS = 12000;
+
+  function refreshPollBaseline() {
+    if (state.view !== 'situation' || !state.submitted || !state.situationId) { state.pollStamp = null; return; }
+    const id = state.situationId;
+    fetchJson(`classification/situations/${id}/state`).then(({ status, payload }) => {
+      if (status === 200 && payload && payload.ok && state.situationId === id) state.pollStamp = payload.stamp;
+    }).catch(() => {});
+  }
+
+  function pollTick() {
+    if (state.view !== 'situation' || !state.submitted || !state.situationId || document.hidden) return;
+    if (state.pollStamp === null) { refreshPollBaseline(); return; }
+    const id = state.situationId;
+    fetchJson(`classification/situations/${id}/state`).then(({ status, payload }) => {
+      if (status !== 200 || !payload || !payload.ok) return;
+      if (state.situationId !== id || state.view !== 'situation') return;
+      if (payload.stamp !== state.pollStamp) { state.pollStamp = payload.stamp; loadSituation(id); }
+    }).catch(() => {});
   }
 
   function loadSituation(id) {
@@ -801,6 +833,10 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
         setReviewer(payload.role || state.reviewer);
       }
     }).catch(() => {}).then(startAtRightView);
+
+    // Punkt 7: ein Intervall; pollTick prüft selbst, ob es sinnvoll ist
+    // (Situations-Ansicht, abgegeben, sichtbar).
+    setInterval(pollTick, POLL_INTERVAL_MS);
   }
 
   function startAtRightView() {

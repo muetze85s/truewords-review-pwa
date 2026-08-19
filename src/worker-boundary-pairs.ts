@@ -607,6 +607,28 @@ async function submitRound(env: Env, dataset: DatasetRow, round: number, reviewe
 }
 
 /**
+ * Punkt 7: billiger „Zustands-Stempel" einer Runde für leichtgewichtiges
+ * Polling. Ändert sich der Stempel, hat sich beim Partner etwas getan (Abgabe
+ * oder Streitfall-Stimme) → die Seite lädt die Runde neu (über den normalen,
+ * blind-gegateten Endpunkt, Blindheit bleibt gewahrt). Bewusst OHNE
+ * filteredSequence/Runden-Fenster — nur zwei indizierte Zählungen/Max über
+ * Abgaben und Streitfall-Entscheidungen dieser Runde. Marks fließen NICHT ein
+ * (blind bis zur Abgabe; ihre Änderung soll keine Reaktion auslösen).
+ */
+async function getRoundState(env: Env, dataset: DatasetRow, round: number): Promise<Response> {
+  const [sub, res] = await Promise.all([
+    env.DB.prepare(
+      "SELECT COUNT(*) AS c, COALESCE(MAX(submitted_at), '') AS m FROM review_round_submissions WHERE dataset_id = ?1 AND round = ?2",
+    ).bind(dataset.id, round).first<{ c: number; m: string }>(),
+    env.DB.prepare(
+      "SELECT COUNT(*) AS c, COALESCE(MAX(decided_at), '') AS m FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2",
+    ).bind(dataset.id, round).first<{ c: number; m: string }>(),
+  ]);
+  const stamp = `${Number(sub?.c || 0)}:${sub?.m || ''}|${Number(res?.c || 0)}:${res?.m || ''}`;
+  return json({ ok: true, stamp });
+}
+
+/**
  * Baut den vollständigen Vergleichs-/Streitfall-Datensatz aus einem bereits
  * geladenen Runden-Fenster. Ausgelagert aus getAgreement(), damit
  * resolveDispute() nach dem Speichern einer Entscheidung denselben Datensatz
@@ -2883,12 +2905,13 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
       return await backfillOrdinals(env, dataset);
     }
 
-    const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
+    const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve|\/state)?$/u);
     if (!match) return error('Endpunkt nicht gefunden.', 404);
     const round = Number(match[1]);
     if (!Number.isInteger(round) || round < 1) return error('Ungültige Runde.', 422);
     const suffix = match[2] || '';
 
+    if (suffix === '/state' && request.method === 'GET') return await getRoundState(env, dataset, round);
     if (suffix === '' && request.method === 'GET') return await getRound(env, dataset, round, user.role);
     if (suffix === '/marks' && request.method === 'PUT') return await putMarks(request, env, dataset, round, user.role);
     if (suffix === '/submit' && request.method === 'POST') return await submitRound(env, dataset, round, user.role);
