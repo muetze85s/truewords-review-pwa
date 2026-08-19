@@ -305,6 +305,33 @@ function marksToMap(rows: MarkRow[], keyField: 'pattern_key' | 'flag_key'): Reco
   return out;
 }
 
+/**
+ * Führt eine SELECT-Abfrage mit einer `situation_id IN (…)`-Liste in Batches
+ * aus, damit D1s hartes Limit von 100 gebundenen Variablen pro Statement nie
+ * überschritten wird. Die Validierungsstichprobe kann > 100 Situationen groß
+ * sein — dann sprengt eine einzige IN-Liste das Limit („variable number must
+ * be between ?1 and ?100"). `sqlTemplate(placeholders)` muss die gebundene
+ * Liste an der `placeholders`-Stelle einsetzen (z. B.
+ * `` `… WHERE situation_id IN (${placeholders})` ``); die Batch-IDs werden als
+ * `?1..?N` gebunden. Rückgabe im `{ results }`-Format von D1s `.all()`, damit
+ * die Aufrufer unverändert `.results` lesen können.
+ */
+async function selectBySituationIds<T>(
+  env: Env,
+  ids: number[],
+  sqlTemplate: (placeholders: string) => string,
+): Promise<{ results: T[] }> {
+  const CHUNK = 90; // Sicherheitsmarge unter 100 gebundenen Variablen
+  const results: T[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const batch = ids.slice(i, i + CHUNK);
+    const placeholders = batch.map((_, index) => `?${index + 1}`).join(',');
+    const rows = await env.DB.prepare(sqlTemplate(placeholders)).bind(...batch).all<T>();
+    results.push(...(rows.results || []));
+  }
+  return { results };
+}
+
 // ------------------------------------------------------- Endpunkte
 
 /** Übersicht: Validierungssituationen mit Status + Fortschritt. */
@@ -319,14 +346,13 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
     return json({ ok: true, needsPreparation: true, sampleSize: 0, situations: [], progress: { classifiedByBoth: 0, sampleSize: 0 }, partnerActive: await lenaEnabled(env) });
   }
   const ids = situations.map((entry) => entry.id);
-  const placeholders = ids.map((_, index) => `?${index + 1}`).join(',');
 
   const [subsRows, classMarksRows, classResRows, flagMarksRows, flagResRows] = await Promise.all([
-    env.DB.prepare(`SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${placeholders})`).bind(...ids).all<{ situation_id: number; reviewer: Role }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${placeholders}) AND reviewer IN ('Philipp','Lena')`).bind(...ids).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, pattern_key, decided_by, resolved_present FROM review_classification_resolutions WHERE situation_id IN (${placeholders})`).bind(...ids).all<{ situation_id: number; pattern_key: string; decided_by: string; resolved_present: number }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${placeholders}) AND reviewer IN ('Philipp','Lena')`).bind(...ids).all<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, flag_key, decided_by, resolved_present FROM review_situation_quality_resolutions WHERE situation_id IN (${placeholders})`).bind(...ids).all<{ situation_id: number; flag_key: string; decided_by: string; resolved_present: number }>(),
+    selectBySituationIds<{ situation_id: number; reviewer: Role }>(env, ids, (p) => `SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${p})`),
+    selectBySituationIds<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(env, ids, (p) => `SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; pattern_key: string; decided_by: string; resolved_present: number }>(env, ids, (p) => `SELECT situation_id, pattern_key, decided_by, resolved_present FROM review_classification_resolutions WHERE situation_id IN (${p})`),
+    selectBySituationIds<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(env, ids, (p) => `SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; flag_key: string; decided_by: string; resolved_present: number }>(env, ids, (p) => `SELECT situation_id, flag_key, decided_by, resolved_present FROM review_situation_quality_resolutions WHERE situation_id IN (${p})`),
   ]);
 
   const submittedBy = new Map<number, Set<Role>>();
@@ -661,12 +687,11 @@ async function getSummary(env: Env, dataset: { id: string }): Promise<Response> 
     });
   }
 
-  const ph = valIds.map((_, index) => `?${index + 1}`).join(',');
   const [subRows, classRows, flagRows, llmRows] = await Promise.all([
-    env.DB.prepare(`SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer = 'LLM'`).bind(...valIds).all<{ situation_id: number; pattern_key: string; present: number }>(),
+    selectBySituationIds<{ situation_id: number; reviewer: Role }>(env, valIds, (p) => `SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(env, valIds, (p) => `SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; reviewer: Role; flag_key: string; present: number }>(env, valIds, (p) => `SELECT situation_id, reviewer, flag_key, present FROM review_situation_quality_flags WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; pattern_key: string; present: number }>(env, valIds, (p) => `SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer = 'LLM'`),
   ]);
 
   const submittedBy = new Map<number, Set<Role>>();
@@ -905,12 +930,11 @@ async function getDeviations(env: Env, dataset: { id: string }): Promise<Respons
   const valIds = [...meta.keys()];
   if (!valIds.length) return json({ ok: true, deviations: [], count: 0 });
 
-  const ph = valIds.map((_, index) => `?${index + 1}`).join(',');
   const [subRows, classRows, llmRows, corrRows] = await Promise.all([
-    env.DB.prepare(`SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role }>(),
-    env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...valIds).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(),
-    env.DB.prepare(`SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer = 'LLM'`).bind(...valIds).all<{ situation_id: number; pattern_key: string; present: number }>(),
-    env.DB.prepare(`SELECT DISTINCT situation_id, pattern_key FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena') AND is_correction_of_llm = 1`).bind(...valIds).all<{ situation_id: number; pattern_key: string }>(),
+    selectBySituationIds<{ situation_id: number; reviewer: Role }>(env, valIds, (p) => `SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(env, valIds, (p) => `SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
+    selectBySituationIds<{ situation_id: number; pattern_key: string; present: number }>(env, valIds, (p) => `SELECT situation_id, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer = 'LLM'`),
+    selectBySituationIds<{ situation_id: number; pattern_key: string }>(env, valIds, (p) => `SELECT DISTINCT situation_id, pattern_key FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena') AND is_correction_of_llm = 1`),
   ]);
   const submittedBy = new Map<number, Set<Role>>();
   for (const row of subRows.results || []) { if (!submittedBy.has(row.situation_id)) submittedBy.set(row.situation_id, new Set()); submittedBy.get(row.situation_id)?.add(row.reviewer); }
@@ -999,10 +1023,10 @@ async function getSelfImplication(env: Env, dataset: { id: string; year: number 
   const ids = (bothRows.results || []).map((row) => row.id);
   if (!ids.length) return json({ ok: true, situations: 0, content: [] });
 
-  const situationRows = await env.DB.prepare(`
+  const situationRows = await selectBySituationIds<SituationRow>(env, ids, (p) => `
     SELECT id, dataset_id, round, situation_index, start_message_id, end_message_id, in_validation_sample
-    FROM review_situations WHERE id IN (${ids.map((_, i) => `?${i + 1}`).join(',')})
-  `).bind(...ids).all<SituationRow>();
+    FROM review_situations WHERE id IN (${p})
+  `);
 
   const situationsWithBearer: Array<{ id: number; bearer: Role | null }> = [];
   for (const situation of situationRows.results || []) {
@@ -1012,8 +1036,7 @@ async function getSelfImplication(env: Env, dataset: { id: string; year: number 
     } catch { situationsWithBearer.push({ id: situation.id, bearer: null }); }
   }
 
-  const ph = ids.map((_, i) => `?${i + 1}`).join(',');
-  const classRows = await env.DB.prepare(`SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${ph}) AND reviewer IN ('Philipp','Lena')`).bind(...ids).all<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>();
+  const classRows = await selectBySituationIds<{ situation_id: number; reviewer: Role; pattern_key: string; present: number }>(env, ids, (p) => `SELECT situation_id, reviewer, pattern_key, present FROM review_classification_marks WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`);
   const marksP: MarkRow[] = []; const marksL: MarkRow[] = [];
   for (const row of classRows.results || []) (row.reviewer === 'Philipp' ? marksP : marksL).push({ situation_id: row.situation_id, pattern_key: row.pattern_key, present: row.present });
 
