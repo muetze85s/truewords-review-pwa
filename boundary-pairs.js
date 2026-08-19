@@ -22,7 +22,10 @@
     otherSubmitted: false,
     tolerance: 1,
     doubtMode: 'skip',
-    tab: 'round',
+    // Standardansicht ist die Übersicht des Werkzeugs (wie in der
+    // Klassifizierung) — in eine Runde geht es nur über die Übersicht oder
+    // einen ausdrücklichen Direktlink.
+    tab: 'overview',
     dataset: readDataset(),
     // Punkt 3: Übersicht zeigt standardmäßig nur unfertige Runden, Umschalter
     // + Seite rein clientseitig auf den bereits geladenen Daten.
@@ -232,10 +235,10 @@
           if (oStatus === 200 && oPayload.ok) {
             cachedOverview = oPayload;
             const mine = oPayload.reviewers && oPayload.reviewers[oPayload.reviewer];
+            // Wie in der Klassifizierung: nach der Abgabe geht es direkt in die
+            // nächste offene Einheit weiter (kein Umweg über die Übersicht).
             if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
-              state.round = mine.nextRound;
-              $('dp-round-input').value = state.round;
-              return loadRound().then(() => scrollToTop());
+              return openRound(mine.nextRound).then(() => scrollToTop());
             }
           }
           return loadRound().then(() => scrollToTop());
@@ -555,6 +558,19 @@
     });
   }
 
+  /**
+   * Kopfzelle der Übersicht: kurze Überschrift oben, Aggregat (Ø/Σ über den
+   * GESAMTEN Bestand, nicht die aktuelle Seite) in einer eigenen schmalen
+   * Zeile darunter. Getrennt, damit die Kopfzelle auf dem iPhone nicht die
+   * breiteste Stelle der Tabelle ist. Identische Form in der Klassifizierung.
+   */
+  function headCell(columnClass, label, aggregate) {
+    return `<div class="ov-cell ${columnClass}" role="columnheader">
+      <span class="ov-h-label">${escapeHtml(label)}</span>
+      <span class="ov-h-agg">${escapeHtml(aggregate || '')}</span>
+    </div>`;
+  }
+
   function roundStatusClass(row) {
     if (row.philippSubmitted && row.lenaSubmitted) return 'ov-done';
     if (row.philippSubmitted && !row.lenaSubmitted) return 'ov-lena-open';
@@ -633,6 +649,8 @@
     const f0Agg = fmtF1(data.f0Aggregate);
     const f1Agg = fmtF1(data.f1Aggregate);
     const gtAgg = data.gtTotal ?? '–';
+    const pSub = (data.reviewers && data.reviewers.Philipp) ? data.reviewers.Philipp.submitted : 0;
+    const lSub = (data.reviewers && data.reviewers.Lena) ? data.reviewers.Lena.submitted : 0;
 
     const toggleHtml = `<div class="ov-toggle-row">
       <label class="ov-toggle"><input type="checkbox" id="ov-show-all" ${state.overviewShowAll ? 'checked' : ''}> Alle Runden anzeigen</label>
@@ -648,15 +666,15 @@
       ${statsHtml}
       ${toggleHtml}
       <div class="ov-table-wrap">
-        <div class="ov-table" role="table">
-          <div class="ov-row ov-head" role="row" aria-hidden="true">
-            <div class="ov-cell ov-c-round">Runde</div>
-            <div class="ov-cell ov-c-philipp">Philipp</div>
-            <div class="ov-cell ov-c-lena">Lena</div>
-            <div class="ov-cell ov-c-f0">F0 (Ø ${f0Agg})</div>
-            <div class="ov-cell ov-c-disputes">Streitfälle</div>
-            <div class="ov-cell ov-c-gt">GT (Σ ${gtAgg})</div>
-            <div class="ov-cell ov-c-f1">F1 (Ø ${f1Agg})</div>
+        <div class="ov-table ov-table--segmentierung" role="table">
+          <div class="ov-row ov-head" role="row">
+            ${headCell('ov-c-round', 'Runde', `Σ ${data.totalRounds}`)}
+            ${headCell('ov-c-philipp', 'Philipp', `Σ ${pSub}`)}
+            ${headCell('ov-c-lena', 'Lena', `Σ ${lSub}`)}
+            ${headCell('ov-c-f0', 'F0', `Ø ${f0Agg}`)}
+            ${headCell('ov-c-disputes', 'Streit', `Σ ${totalOpen}`)}
+            ${headCell('ov-c-gt', 'GT', `Σ ${gtAgg}`)}
+            ${headCell('ov-c-f1', 'F1', `Ø ${f1Agg}`)}
           </div>
           ${rows || emptyRow}
         </div>
@@ -674,34 +692,26 @@
     if (pageNext) pageNext.addEventListener('click', () => { state.overviewPage += 1; renderOverview(data); });
 
     $('dp-overview-body').querySelectorAll('.ov-row:not(.ov-head)').forEach((rowEl) => {
-      rowEl.addEventListener('click', () => {
-        const round = Number(rowEl.dataset.round);
-        state.round = round;
-        $('dp-round-input').value = round;
-        setTab('round');
-        loadRound();
-      });
+      rowEl.addEventListener('click', () => openRound(Number(rowEl.dataset.round)));
     });
   }
 
   function navigateToNextOpen() {
     if (!cachedOverview) return;
     const mine = cachedOverview.reviewers && cachedOverview.reviewers[cachedOverview.reviewer];
-    if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
-      state.round = mine.nextRound;
-      $('dp-round-input').value = state.round;
-      loadRound();
-      syncUrlAndNav();
-    }
+    if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) openRound(mine.nextRound);
   }
 
   // ------------------------------------------------------------------ Tabs
 
-  // Aufgabe 20: hält Adresszeile und die aktive Markierung im Kopfbalken in
-  // Sync mit dem intern (per JS, ohne Neuladen) gewählten Tab/Runde — nav.js
-  // baut den Balken nur einmal und braucht sonst keine Rückmeldung darüber.
+  // Hält die Adresszeile mit der intern (per JS, ohne Neuladen) gewählten
+  // Ansicht in Sync. Konvention in BEIDEN Werkzeugen gleich: die Übersicht ist
+  // die Standardansicht und braucht keinen Parameter, eine geöffnete Einheit
+  // ist per `?round=` (bzw. `?situation=`) direkt verlinkbar. Alte Links mit
+  // `?tab=overview` landen dadurch von selbst richtig (kein `round`-Parameter
+  // → Übersicht).
   function syncUrlAndNav() {
-    const search = state.tab === 'overview' ? '?tab=overview' : (state.round ? `?round=${state.round}` : '');
+    const search = state.tab === 'round' && state.round ? `?round=${state.round}` : '';
     const url = `${location.pathname}${search}`;
     if (`${location.pathname}${location.search}` !== url) history.replaceState(null, '', url);
     if (window.TW_NAV) window.TW_NAV.setActive(search);
@@ -718,28 +728,44 @@
     syncUrlAndNav();
   }
 
+  /**
+   * Öffnet eine Runde aus der Übersicht heraus — das Gegenstück zu
+   * openSituation() in der Klassifizierung: Nummer setzen, in die
+   * Einheitenansicht wechseln, laden, Adresszeile nachziehen.
+   */
+  function openRound(round) {
+    state.round = round;
+    $('dp-round-input').value = round;
+    setTab('round');
+    const loading = loadRound();
+    syncUrlAndNav();
+    return loading;
+  }
+
   // -------------------------------------------------------------------- Init
 
   function boot() {
     $('dp-submit').addEventListener('click', submitRound);
-    $('dp-round-go').addEventListener('click', () => {
+    // Zurück zur Übersicht — gleiche Beschriftung, Position und Wirkung wie
+    // „Zur Übersicht" in der Klassifizierung.
+    $('dp-to-overview').addEventListener('click', () => setTab('overview'));
+    // Sprungfeld: Enter (bzw. „Go" auf der iPad-Tastatur) oder Verlassen des
+    // Feldes öffnet die Runde — ersetzt den früheren „Öffnen"-Knopf, damit die
+    // Leiste in beiden Werkzeugen gleich aufgebaut ist.
+    function openTypedRound() {
       const value = Number($('dp-round-input').value);
-      state.round = Number.isInteger(value) && value > 0 ? value : 1;
-      loadRound();
-      syncUrlAndNav();
+      const round = Number.isInteger(value) && value > 0 ? value : 1;
+      if (state.tab === 'round' && round === state.round) return;
+      state.round = round;
+      $('dp-round-input').value = round;
+      openRound(round);
+    }
+    $('dp-round-input').addEventListener('change', openTypedRound);
+    $('dp-round-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); $('dp-round-input').blur(); openTypedRound(); }
     });
-    $('dp-round-prev').addEventListener('click', () => {
-      state.round = Math.max(1, state.round - 1);
-      $('dp-round-input').value = state.round;
-      loadRound();
-      syncUrlAndNav();
-    });
-    $('dp-round-next').addEventListener('click', () => {
-      state.round += 1;
-      $('dp-round-input').value = state.round;
-      loadRound();
-      syncUrlAndNav();
-    });
+    $('dp-round-prev').addEventListener('click', () => openRound(Math.max(1, state.round - 1)));
+    $('dp-round-next').addEventListener('click', () => openRound(state.round + 1));
     $('dp-tolerance').addEventListener('change', (event) => {
       state.tolerance = Number(event.target.value);
       loadAgreement();
@@ -749,41 +775,27 @@
       loadAgreement();
     });
 
-    startAtRightRound();
+    startAtRightView();
     // Punkt 7: ein einziges Intervall; pollTick prüft selbst, ob es gerade
     // sinnvoll ist (Runden-Tab, abgegeben, sichtbar).
     setInterval(pollTick, POLL_INTERVAL_MS);
   }
 
-  function startAtRightRound() {
+  /**
+   * Einstieg wie in der Klassifizierung: der Nav-Punkt führt IMMER zuerst auf
+   * die Übersicht des Werkzeugs — kein automatisches Hineinspringen in eine
+   * Runde mehr. Nur ein ausdrücklicher Direktlink (`?round=N`, z. B. aus einer
+   * Push-Benachrichtigung) öffnet die Runde sofort.
+   */
+  function startAtRightView() {
     const params = new URLSearchParams(location.search);
-
-    if (params.get('tab') === 'overview') {
-      setTab('overview');
-      return;
-    }
-
     let requested = null;
     try { requested = Number(params.get('round')); } catch (_) { requested = null; }
     if (Number.isInteger(requested) && requested > 0) {
-      state.round = requested;
-      $('dp-round-input').value = state.round;
-      loadRound();
+      openRound(requested);
       return;
     }
-
-    fetchJson('overview').then(({ status, payload }) => {
-      if (status === 200 && payload.ok) {
-        cachedOverview = payload;
-        const mine = payload.reviewers && payload.reviewers[payload.reviewer];
-        if (mine && Number.isInteger(mine.nextRound) && mine.nextRound > 0) {
-          state.round = mine.nextRound;
-          $('dp-round-input').value = state.round;
-        }
-      }
-    }).catch(() => { /* Fallback: bleibt bei Runde 1 */ }).then(() => {
-      loadRound();
-    });
+    setTab('overview');
   }
 
   boot();

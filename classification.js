@@ -35,7 +35,14 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     otherSubmitted: false,
     // Punkt 7: zuletzt gesehener Zustands-Stempel der Situation für Polling.
     pollStamp: null,
+    // Übersicht: standardmäßig nur offene Situationen, Rest über den
+    // Umschalter — identisch zur Segmentierung.
+    overviewShowAll: false,
+    overviewPage: 0,
   };
+
+  // Seitengröße der Übersicht — gleicher Wert wie in der Segmentierung.
+  const OVERVIEW_PAGE_SIZE = 25;
 
   function $(id) { return document.getElementById(id); }
 
@@ -479,6 +486,27 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     });
   }
 
+  /**
+   * Kopfzelle der Übersicht: kurze Überschrift oben, Aggregat (Ø/Σ über den
+   * GESAMTEN Bestand, nicht die aktuelle Seite) in einer eigenen schmalen
+   * Zeile darunter. Wortgleich mit der Segmentierung.
+   */
+  function headCell(columnClass, label, aggregate) {
+    return `<div class="ov-cell ${columnClass}" role="columnheader">
+      <span class="ov-h-label">${escapeHtml(label)}</span>
+      <span class="ov-h-agg">${escapeHtml(aggregate || '')}</span>
+    </div>`;
+  }
+
+  /** Mittelwert über die belastbaren Werte — n/a-Fälle zählen NICHT mit. */
+  function averageOf(values) {
+    const usable = values.filter((value) => typeof value === 'number' && Number.isFinite(value));
+    if (!usable.length) return null;
+    return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+  }
+
+  const fmtNum = (value) => (value === null || value === undefined ? '–' : value.toFixed(2));
+
   function ampelDot(ampel) {
     const map = { green: 'grün', yellow: 'gelb', red: 'rot', insufficient: 'zu wenige', none: '–' };
     return `<span class="cl-ampel cl-ampel-${escapeHtml(ampel)}" title="${escapeHtml(map[ampel] || ampel)}"></span>`;
@@ -563,9 +591,28 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
         ? `${summary.bothSubmittedCount} beidseitig klassifiziert`
         : (summary.partnerActive ? 'noch keine beidseitigen Abgaben' : 'Lena nicht freigeschaltet — Mensch–Mensch entfällt');
       const llmNote = summary.llmPresent ? `${summary.llmRatedCount} vom LLM bewertet` : 'noch kein LLM-Rating';
+      // Aggregat über den GESAMTEN Bestand (alle Musterklassen), nicht die
+      // aktuelle Seite. Klassen ohne belastbare Basis (zu wenige Situationen)
+      // und n/a-Fälle (degenerierte Klasse → κ/α nicht definiert) fließen NICHT
+      // ein — konsistent zur F1/κ-Behandlung aus dem Bugfix-Durchgang.
+      const usableMm = summary.content.filter((stat) => stat.ampel !== 'insufficient').map((stat) => stat.kappa);
+      const usableLlm = summary.content
+        .filter((stat) => stat.humanLlm && stat.humanLlm.ampel !== 'insufficient')
+        .map((stat) => stat.humanLlm.kappa);
+      const usableAlpha = summary.content.map((stat) => stat.alpha);
+      const aggMm = averageOf(usableMm);
+      const aggLlm = averageOf(usableLlm);
+      const aggAlpha = averageOf(usableAlpha);
+      const aggLine = `<div class="cl-kappa-agg">
+        <span>Ø MM κ <b>${fmtNum(aggMm)}</b></span>
+        <span>Ø LLM κ <b>${fmtNum(aggLlm)}</b></span>
+        <span>Ø α <b>${fmtNum(aggAlpha)}</b></span>
+        <span class="cl-kappa-agg-note">über alle Klassen mit belastbarer Basis — n/a bleibt außen vor</span>
+      </div>`;
       kappaHtml = `<div class="cl-kappa">
         <div class="cl-kappa-head">Übereinstimmung je Klasse — MM = Mensch–Mensch (Cohens κ) · LLM = Mensch–LLM · α = Krippendorff (3 Kodierer)</div>
         <div class="cl-kappa-sub">${escapeHtml(hhNote)} · ${escapeHtml(llmNote)} · ◆ = selbstimplizierend</div>
+        ${aggLine}
         ${renderKappaGroup(GROUP_LABELS.risk, risk, true)}
         ${renderKappaGroup(GROUP_LABELS.positive, positive, true)}
         ${renderKappaGroup(GROUP_LABELS.apology, apology, true)}
@@ -589,7 +636,24 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       llmControl = `<div class="cl-llm-control">${admin}</div>`;
     }
 
-    const rows = situations.situations.map((row) => {
+    // Filter + Paginierung wie in der Segmentierung: standardmäßig nur offene
+    // Einheiten, alter Bestand nur auf Wunsch, 25 pro Seite.
+    const allRows = situations.situations;
+    const visible = state.overviewShowAll ? allRows : allRows.filter((row) => !row.done);
+    const totalPages = Math.max(1, Math.ceil(visible.length / OVERVIEW_PAGE_SIZE));
+    if (state.overviewPage >= totalPages) state.overviewPage = totalPages - 1;
+    if (state.overviewPage < 0) state.overviewPage = 0;
+    const paged = state.overviewShowAll
+      ? visible.slice(state.overviewPage * OVERVIEW_PAGE_SIZE, (state.overviewPage + 1) * OVERVIEW_PAGE_SIZE)
+      : visible;
+
+    // Aggregate über den GESAMTEN Bestand (nicht die aktuelle Seite).
+    const aggPhilipp = allRows.filter((row) => row.philippSubmitted).length;
+    const aggLena = allRows.filter((row) => row.lenaSubmitted).length;
+    const aggDisputes = allRows.reduce((sum, row) => sum + (row.openDisputes || 0), 0);
+    const aggBroken = allRows.filter((row) => row.segmentationBroken).length;
+
+    const rows = paged.map((row) => {
       const cls = row.philippSubmitted && row.lenaSubmitted ? 'ov-done'
         : row.philippSubmitted && !row.lenaSubmitted ? 'ov-lena-open'
         : !row.philippSubmitted && row.lenaSubmitted ? 'ov-philipp-open' : 'ov-both-open';
@@ -598,15 +662,35 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       const disputes = (row.philippSubmitted && row.lenaSubmitted)
         ? (row.openDisputes > 0 ? `<span class="ov-disputes-open">${row.openDisputes}</span>` : '–')
         : '–';
-      const broken = row.segmentationBroken ? '<span class="cl-broken" title="Zuschnitt strittig/fehlerhaft">⚠ Zuschnitt</span>' : '';
+      // Auf schmalen Geräten bleibt nur das Warndreieck stehen (Text per CSS
+      // ausgeblendet), die Bedeutung steckt im title.
+      const broken = row.segmentationBroken
+        ? '<span class="cl-broken" title="Zuschnitt strittig/fehlerhaft"><span class="ov-broken-icon">⚠</span> <span class="ov-broken-text">Zuschnitt</span></span>'
+        : '–';
       return `<div class="ov-row ${cls}" data-id="${row.id}">
         <div class="ov-cell ov-c-round" data-label="Situation">${escapeHtml(situationTag(row))}</div>
         <div class="ov-cell ov-c-philipp" data-label="Philipp"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></div>
         <div class="ov-cell ov-c-lena" data-label="Lena"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></div>
-        <div class="ov-cell ov-c-disputes" data-label="Streitfälle">${disputes}</div>
+        <div class="ov-cell ov-c-disputes" data-label="Streit">${disputes}</div>
         <div class="ov-cell ov-c-broken" data-label="Zuschnitt">${broken}</div>
       </div>`;
     }).join('');
+
+    const emptyRow = paged.length
+      ? ''
+      : (state.overviewShowAll
+        ? '<p class="ov-empty">Keine Situationen in der Stichprobe.</p>'
+        : '<p class="ov-empty">Keine offenen Situationen — alles erledigt.</p>');
+
+    const toggleHtml = `<div class="ov-toggle-row">
+      <label class="ov-toggle"><input type="checkbox" id="ov-show-all" ${state.overviewShowAll ? 'checked' : ''}> Alle anzeigen</label>
+    </div>`;
+
+    const paginationHtml = (state.overviewShowAll && totalPages > 1) ? `<div class="ov-pagination">
+      <button type="button" id="ov-page-prev" ${state.overviewPage === 0 ? 'disabled' : ''}>← Vorherige</button>
+      <span>Seite ${state.overviewPage + 1} / ${totalPages}</span>
+      <button type="button" id="ov-page-next" ${state.overviewPage >= totalPages - 1 ? 'disabled' : ''}>Nächste →</button>
+    </div>` : '';
 
     body.innerHTML = `
       <div class="cl-overview-head"><h2>Klassifizierung</h2>${infoBtn}</div>
@@ -618,19 +702,34 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       <p class="cl-progress-line">${mineDone} von ${progress.sampleSize} Validierungssituationen klassifiziert.</p>
       ${llmControl}
       ${kappaHtml}
+      ${toggleHtml}
       <div class="ov-table-wrap">
-        <div class="ov-table" role="table">
-          <div class="ov-row ov-head" role="row" aria-hidden="true">
-            <div class="ov-cell ov-c-round">Situation</div>
-            <div class="ov-cell ov-c-philipp">Philipp</div>
-            <div class="ov-cell ov-c-lena">Lena</div>
-            <div class="ov-cell ov-c-disputes">Streitfälle</div>
-            <div class="ov-cell ov-c-broken">Zuschnitt</div>
+        <div class="ov-table ov-table--klassifizierung" role="table">
+          <div class="ov-row ov-head" role="row">
+            ${headCell('ov-c-round', 'Situation', `Σ ${allRows.length}`)}
+            ${headCell('ov-c-philipp', 'Philipp', `Σ ${aggPhilipp}`)}
+            ${headCell('ov-c-lena', 'Lena', `Σ ${aggLena}`)}
+            ${headCell('ov-c-disputes', 'Streit', `Σ ${aggDisputes}`)}
+            ${headCell('ov-c-broken', 'Zuschnitt', `Σ ${aggBroken}`)}
           </div>
-          ${rows || '<p class="ov-empty">Keine Situationen in der Stichprobe.</p>'}
+          ${rows || emptyRow}
         </div>
       </div>
+      ${paginationHtml}
       ${prepareBtn}`;
+
+    const showAll = $('ov-show-all');
+    if (showAll) {
+      showAll.addEventListener('change', (event) => {
+        state.overviewShowAll = event.target.checked;
+        state.overviewPage = 0;
+        renderOverview(situations, summary);
+      });
+    }
+    const pagePrev = $('ov-page-prev');
+    const pageNext = $('ov-page-next');
+    if (pagePrev) pagePrev.addEventListener('click', () => { state.overviewPage -= 1; renderOverview(situations, summary); });
+    if (pageNext) pageNext.addEventListener('click', () => { state.overviewPage += 1; renderOverview(situations, summary); });
 
     body.querySelectorAll('.ov-row:not(.ov-head)').forEach((rowEl) => {
       rowEl.addEventListener('click', () => openSituation(Number(rowEl.dataset.id)));
@@ -789,10 +888,12 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
 
   // --------------------------------------------------- Ansichten / Nav
 
+  // Gleiche Konvention wie in der Segmentierung: die Übersicht ist die
+  // Standardansicht und braucht keinen Parameter; eine geöffnete Einheit ist
+  // per `?situation=` direkt verlinkbar.
   function syncUrlAndNav() {
     let search = '';
-    if (state.view === 'overview') search = '?tab=overview';
-    else if (state.view === 'deviations') search = '?tab=deviations';
+    if (state.view === 'deviations') search = '?tab=deviations';
     else if (state.situationId) search = `?situation=${state.situationId}`;
     const url = `${location.pathname}${search}`;
     if (`${location.pathname}${location.search}` !== url) history.replaceState(null, '', url);
@@ -844,7 +945,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     const tab = params.get('tab');
     const situation = Number(params.get('situation'));
     if (tab === 'deviations') { setView('deviations'); return; }
-    if (tab !== 'overview' && Number.isInteger(situation) && situation > 0) {
+    if (Number.isInteger(situation) && situation > 0) {
       // Direkt eine Situation öffnen — Sample im Hintergrund nachladen für die Navigation.
       refreshSampleThen(() => {});
       openSituation(situation);

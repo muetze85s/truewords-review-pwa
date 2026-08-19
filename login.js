@@ -93,7 +93,7 @@
       if (isIos() && !isStandalone() && !installHintDismissed()) {
         await showInstallPopup();
       }
-      location.replace('/doppelpruefung.html?tab=overview');
+      location.replace('/doppelpruefung.html');
     } catch (caught) {
       setStatus(caught?.message || 'Anmeldung fehlgeschlagen.', 'error');
     } finally {

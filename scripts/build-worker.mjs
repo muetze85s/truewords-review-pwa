@@ -64,6 +64,7 @@ const files = [
   'upload.js',
   'doppelpruefung.html',
   'boundary-pairs.css',
+  'overview.css',
   'boundary-pairs.js',
   'klassifizierung.html',
   'classification.css',

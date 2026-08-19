@@ -47,6 +47,7 @@ const FILES = [
   './server-sync.css',
   './server-sync.js',
   './doppelpruefung.html',
+  './overview.css',
   './boundary-pairs.css',
   './boundary-pairs.js',
   './push-settings.html',

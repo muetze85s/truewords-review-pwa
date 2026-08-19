@@ -347,6 +347,7 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
     return json({ ok: true, needsPreparation: true, sampleSize: 0, situations: [], progress: { classifiedByBoth: 0, sampleSize: 0 }, partnerActive: await lenaEnabled(env) });
   }
   const ids = situations.map((entry) => entry.id);
+  const partnerActive = await lenaEnabled(env);
   // Globale Grenz-Nummer je Situation = Ordinalzahl ihrer Start-Grenze
   // (start_message_id). Ersetzt die runden-lokale „R{round}·{index+1}"-Anzeige.
   const startOrdinals = await messageOrdinals(env, dataset.id, situations.map((entry) => entry.start_message_id));
@@ -436,6 +437,12 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
       lenaSubmitted,
       openDisputes,
       segmentationBroken,
+      // „Erledigt" — dieselbe Definition wie bei den Runden der Segmentierung:
+      // beide haben abgegeben UND kein Streitfall ist mehr offen. Solange Lena
+      // nicht freigeschaltet ist, entscheidet allein Philipps Abgabe (ohne
+      // zweite Person kann es keinen Streitfall geben). Steuert den
+      // Standardfilter der Übersicht (offene zuerst).
+      done: partnerActive ? (both && openDisputes === 0) : philippSubmitted,
     };
   });
 
@@ -443,7 +450,7 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
     ok: true,
     needsPreparation: false,
     sampleSize: situations.length,
-    partnerActive: await lenaEnabled(env),
+    partnerActive,
     role: user.role,
     progress: { classifiedByBoth, sampleSize: situations.length },
     situations: list,
@@ -1216,7 +1223,7 @@ async function classificationPageGate(request: Request, env: Env): Promise<Respo
   if (pathname !== '/klassifizierung.html' && pathname !== '/klassifizierung-info.html') return null;
   const user = await sessionUser(request, env);
   if (!user) return redirect('/login.html');
-  if (!(await classificationAllowed(env, user))) return redirect('/doppelpruefung.html?tab=overview');
+  if (!(await classificationAllowed(env, user))) return redirect('/doppelpruefung.html');
   return asset(request, env, pathname);
 }
 

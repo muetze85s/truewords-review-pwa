@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="TW Prüfstand">
+<meta name="apple-mobile-web-app-title" content="TW Segmentierung">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <meta name="robots" content="noindex,nofollow">
-<title>Doppelprüfung · TrueWords</title>
+<title>Segmentierung · TrueWords</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./truewords-theme.css">
 <link rel="stylesheet" href="./truewords-ui-theme.css">
 <link rel="stylesheet" href="./boundary-pairs.css">
+<link rel="stylesheet" href="./overview.css">
 <link rel="stylesheet" href="./nav.css">
 <script src="./truewords-user-theme.js" defer></script>
 <script src="./nav.js" defer></script>
@@ -22,13 +23,17 @@
 
 <header class="dp-top">
   <div class="dp-top-inner">
-    <div class="dp-brand"><strong>Doppelprüfung</strong><span id="dp-sub">Wird geladen …</span></div>
+    <div class="dp-brand"><strong>Segmentierung</strong><span id="dp-sub">Wird geladen …</span></div>
   </div>
 </header>
 
 <main class="dp-wrap">
 
-  <section id="dp-round-picker" class="dp-card">
+  <!-- Gleiches Muster wie die Klassifizierung: Schritt-Pfeile + Sprungfeld
+       links, „Zur Übersicht" rechts in derselben Position. Das Feld öffnet die
+       Runde mit Enter bzw. beim Verlassen — ein eigener „Öffnen"-Knopf entfällt,
+       damit die Leiste in beiden Werkzeugen identisch aussieht. -->
+  <section id="dp-round-picker" class="dp-card dp-weg">
     <div class="dp-round-nav">
       <button type="button" id="dp-round-prev" class="dp-round-step" aria-label="Vorherige Runde">←</button>
       <label class="dp-round-field">
@@ -40,10 +45,10 @@
       </label>
       <button type="button" id="dp-round-next" class="dp-round-step" aria-label="Nächste Runde">→</button>
     </div>
-    <button type="button" id="dp-round-go" class="primary dp-round-open">Öffnen</button>
+    <button type="button" id="dp-to-overview" class="dp-round-open">Zur Übersicht</button>
   </section>
 
-  <section id="dp-round-view">
+  <section id="dp-round-view" class="dp-weg">
     <p class="dp-status" id="dp-status"></p>
 
     <div id="dp-state-mark" class="dp-state">
@@ -99,7 +104,7 @@
     </div>
   </section>
 
-  <section id="dp-overview-view" class="dp-weg">
+  <section id="dp-overview-view">
     <div id="dp-overview-body"></div>
   </section>
 

@@ -1,0 +1,173 @@
+/*
+ * Gemeinsame Übersichts-Komponente beider Werkzeuge
+ * ------------------------------------------------
+ * Segmentierung (Runden: F0/GT/F1) und Klassifizierung (Situationen) benutzen
+ * DIESELBEN Klassen und dieselbe Datei — es gibt bewusst keine zweite,
+ * parallel gepflegte Tabellen-Optik. Unterschiedlich ist nur die
+ * Spaltenaufteilung, die je Werkzeug über eine Modifier-Klasse
+ * (.ov-table--segmentierung / .ov-table--klassifizierung) gesetzt wird.
+ *
+ * Aufbau je Zeile: Div-Grid statt <table> — gleiches Markup auf allen Größen,
+ * nur die Spaltenbreiten ändern sich per Media Query. Kein horizontales
+ * Scrollen, keine getrennten Mobile-/Desktop-Codepfade.
+ */
+
+/* --- Zähler-Kacheln über der Tabelle ---------------------------------- */
+.ov-stats { display: flex; gap: 12px; margin: 0 0 16px; flex-wrap: wrap; }
+.ov-stat {
+  flex: 1 1 0; min-width: 100px; text-align: center; padding: 14px 8px;
+  background: var(--tw-surface-raised, var(--tw-surface)); border: 1px solid var(--tw-border);
+  border-radius: 10px;
+}
+.ov-stat-num { display: block; font-size: 28px; font-weight: 700; color: var(--tw-text); }
+.ov-stat-label { font-size: 12px; color: var(--tw-text-muted); }
+
+/* --- Tabelle ----------------------------------------------------------- */
+/* Kein overflow:hidden auf dem Rahmen — das würde die sticky Kopfzeile an
+   diesen Kasten binden statt an den Viewport (sticky klebt am nächsten
+   Scroll-Container). Stattdessen runden die erste/letzte Zeile selbst ab. */
+.ov-table-wrap {
+  border: 1px solid var(--tw-border); border-radius: 10px;
+  background: var(--tw-surface-raised, var(--tw-surface));
+}
+.ov-table { width: 100%; font-size: 14px; }
+
+.ov-row {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--tw-border);
+  /* Ganze Zeile ist Tap-/Klick-Ziel, kein separater Link. */
+  -webkit-tap-highlight-color: rgba(0, 0, 0, .06);
+}
+.ov-row:last-child { border-bottom: none; }
+.ov-table > .ov-row:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+.ov-table > .ov-row:last-child { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+.ov-row:not(.ov-head):hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); cursor: pointer; }
+.ov-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- Kopfzeile: klebt oben, Aggregat unter der Überschrift -------------- */
+/* Die Kopfzeile bleibt beim Scrollen sichtbar (sonst rät man bei 25 Zeilen,
+   welche Spalte welcher Wert ist). `--tw-nav-height` setzt nav.js nach dem
+   Bau des Balkens, damit die Zeile UNTER der ebenfalls klebenden Navigation
+   hängt und nicht darunter verschwindet. */
+.ov-row.ov-head {
+  position: sticky;
+  top: var(--tw-nav-height, 0px);
+  z-index: 3;
+  background: var(--tw-surface-raised, var(--tw-surface));
+  color: var(--tw-text-muted);
+  border-bottom: 2px solid var(--tw-border);
+  cursor: default;
+}
+.ov-row.ov-head .ov-cell { display: block; overflow: visible; text-overflow: unset; }
+/* Überschrift und Aggregat sind getrennte Zeilen in der Kopfzelle: die
+   Kopfzelle wird dadurch so schmal wie das längere von beiden — statt
+   „F0 (Ø 0.69)" in einer breiten Zeile, die auf dem iPhone die Tabelle
+   sprengt. */
+.ov-h-label {
+  display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .02em; white-space: nowrap; line-height: 1.2;
+}
+.ov-h-agg {
+  display: block; font-size: 10.5px; font-weight: 700; line-height: 1.2;
+  color: var(--tw-text); font-variant-numeric: tabular-nums;
+  white-space: nowrap; text-transform: none; letter-spacing: 0;
+}
+.ov-h-agg:empty { display: none; }
+
+/* --- Spaltenausrichtung ------------------------------------------------ */
+.ov-c-round { font-weight: 600; text-align: left; }
+.ov-c-philipp, .ov-c-lena, .ov-c-disputes, .ov-c-broken { text-align: center; }
+.ov-c-f0, .ov-c-gt, .ov-c-f1 { text-align: right; }
+.ov-c-f0, .ov-c-gt, .ov-c-f1, .ov-c-disputes {
+  font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text);
+}
+.ov-c-broken { font-size: 13px; }
+
+/* --- Spaltengruppen ----------------------------------------------------
+   Zwei erkennbare Blöcke statt gleichmäßiger Verteilung: links die Prüfer
+   samt ihrer Übereinstimmung, rechts das Ergebnis der Automatik. Getrennt
+   durch eine schmale, leere Grid-Spur (die „Lücke"), nicht durch Ränder.
+   Die Zellen werden dafür fest auf ihre Spur gesetzt. */
+.ov-table--segmentierung .ov-row {
+  /* runde | philipp | lena | f0 | LÜCKE | streit | gt | f1 */
+  grid-template-columns: minmax(46px, auto) minmax(0, 1fr) minmax(0, 1fr) 48px 20px 54px 44px 48px;
+}
+.ov-table--segmentierung .ov-c-round { grid-column: 1; }
+.ov-table--segmentierung .ov-c-philipp { grid-column: 2; }
+.ov-table--segmentierung .ov-c-lena { grid-column: 3; }
+.ov-table--segmentierung .ov-c-f0 { grid-column: 4; }
+.ov-table--segmentierung .ov-c-disputes { grid-column: 6; }
+.ov-table--segmentierung .ov-c-gt { grid-column: 7; }
+.ov-table--segmentierung .ov-c-f1 { grid-column: 8; }
+
+/* Gleiche Gruppenlogik in der Klassifizierung: links Einheit + Prüfer,
+   rechts das Ergebnis (Streitfälle, Zuschnitt). */
+.ov-table--klassifizierung .ov-row {
+  /* situation | philipp | lena | LÜCKE | streit | zuschnitt */
+  grid-template-columns: minmax(74px, auto) minmax(0, 1fr) minmax(0, 1fr) 20px 54px 78px;
+}
+.ov-table--klassifizierung .ov-c-round { grid-column: 1; }
+.ov-table--klassifizierung .ov-c-philipp { grid-column: 2; }
+.ov-table--klassifizierung .ov-c-lena { grid-column: 3; }
+.ov-table--klassifizierung .ov-c-disputes { grid-column: 5; }
+.ov-table--klassifizierung .ov-c-broken { grid-column: 6; }
+
+/* --- Zellinhalte -------------------------------------------------------- */
+.ov-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.ov-badge.done { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.ov-badge.open { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+.ov-disputes-open {
+  display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear);
+}
+
+/* Ampel-/Farblogik der Zeile: wer noch offen ist, färbt den linken Rand. */
+.ov-row.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
+.ov-row.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
+.ov-row.ov-both-open { border-left: 3px solid var(--tw-status-open, #b78b43); }
+.ov-row.ov-done { border-left: 3px solid transparent; }
+
+.ov-empty { text-align: center; padding: 24px; color: var(--tw-text-muted); }
+
+/* --- Umschalter + Paginierung ------------------------------------------ */
+.ov-toggle-row { display: flex; justify-content: flex-end; margin: 0 0 10px; }
+.ov-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tw-text-muted); cursor: pointer; }
+.ov-toggle input { cursor: pointer; }
+.ov-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--tw-text-muted); }
+.ov-pagination button {
+  border: 1px solid var(--tw-button-border);
+  background: var(--tw-button-bg);
+  color: var(--tw-button-text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ov-pagination button:disabled { opacity: .5; cursor: default; }
+
+/* --- Mobil: Tabelle BLEIBT Tabelle, nur die Kopfzellen werden schmal ----
+   Kein Kartenlayout: nicht die Werte sind breit („0.69", „12", ein Häkchen),
+   sondern waren es die Überschriften. Kurze Labels, Aggregat in der zweiten
+   Kopfzeilen-Zeile und feste schmale Zahlenspalten lassen die 7 Spalten aufs
+   iPhone passen — ohne horizontales Scrollen. */
+@media (max-width: 560px) {
+  .ov-table { font-size: 13px; }
+  .ov-row { padding: 7px 7px; gap: 3px; }
+  .ov-table--segmentierung .ov-row {
+    grid-template-columns: minmax(34px, auto) minmax(0, 1fr) minmax(0, 1fr) 36px 8px 40px 32px 36px;
+  }
+  .ov-table--klassifizierung .ov-row {
+    grid-template-columns: minmax(58px, auto) minmax(0, 1fr) minmax(0, 1fr) 8px 40px 64px;
+  }
+  .ov-h-label { font-size: 9.5px; letter-spacing: 0; }
+  .ov-h-agg { font-size: 9.5px; }
+  .ov-badge { padding: 2px 5px; font-size: 10.5px; }
+  .ov-disputes-open { padding: 2px 5px; font-size: 10.5px; }
+  .ov-c-f0, .ov-c-gt, .ov-c-f1, .ov-c-disputes { font-size: 11.5px; }
+  .ov-c-round { font-size: 11.5px; }
+  /* „⚠ Zuschnitt" → nur noch das Warndreieck (Bedeutung bleibt im title). */
+  .ov-broken-text { display: none; }
+}

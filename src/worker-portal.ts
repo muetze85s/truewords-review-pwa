@@ -315,10 +315,10 @@ async function routePage(request: Request, env: Env): Promise<Response | null> {
   const user = await sessionUser(request, env);
   if (pathname === '/' || pathname === '/index.html') {
     if (!user) return asset(request, env, '/login.html');
-    return redirect('/doppelpruefung.html?tab=overview');
+    return redirect('/doppelpruefung.html');
   }
   if (pathname === '/dashboard.html') {
-    return user ? redirect('/doppelpruefung.html?tab=overview') : redirect('/login.html');
+    return user ? redirect('/doppelpruefung.html') : redirect('/login.html');
   }
   if (pathname === '/login.html') {
     return user ? redirect('/') : asset(request, env, '/login.html');

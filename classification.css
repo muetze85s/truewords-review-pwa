@@ -276,25 +276,18 @@ button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
 .cb-check.own input { accent-color: var(--tw-status-confirmed); cursor: pointer; }
 .cb-check.other { color: var(--tw-text-muted); }
 
-/* Übersicht-Tabelle: 5 Spalten (Situation · Philipp · Lena · Streitfälle · Zuschnitt).
-   Überschreibt die 7-Spalten-Vorlage aus boundary-pairs.css. */
-body.cl .ov-row { grid-template-columns: 72px 1fr 1fr 76px 96px; }
-.ov-c-broken { text-align: center; font-size: 13px; }
+/* Die Übersichts-Tabelle (Spalten, Kopfzeile, Mobil-Verhalten) kommt
+   vollständig aus der gemeinsamen overview.css — hier bewusst KEINE
+   eigene Fassung mehr. Die frühere Sonderlösung (eigenes Spaltenraster
+   plus Kartenlayout auf schmalen Geräten) hat die gemeinsame Komponente
+   überschrieben und ist deshalb ersatzlos entfallen. */
 
-@media (max-width: 560px) {
-  body.cl .ov-row {
-    grid-template-columns: auto 1fr 1fr;
-    grid-template-areas:
-      "round philipp lena"
-      "disputes disputes broken";
-    row-gap: 6px;
-  }
-  body.cl .ov-c-round { grid-area: round; }
-  body.cl .ov-c-philipp { grid-area: philipp; }
-  body.cl .ov-c-lena { grid-area: lena; }
-  body.cl .ov-c-disputes { grid-area: disputes; font-size: 11px; text-align: left; }
-  body.cl .ov-c-broken { grid-area: broken; font-size: 11px; text-align: right; }
-  body.cl .ov-c-disputes::before, body.cl .ov-c-broken::before {
-    content: attr(data-label) ": "; color: var(--tw-text-muted); font-weight: 400;
-  }
+/* Aggregat-Zeile über der Kappa-Tabelle: Ø über den gesamten Bestand
+   (n/a-/nicht belastbare Klassen ausgenommen) — Gegenstück zu den Σ/Ø-Werten
+   in der Kopfzeile der Situationsliste. */
+.cl-kappa-agg {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+  margin: 6px 0 10px; font-size: 12.5px; color: var(--tw-text-muted);
 }
+.cl-kappa-agg b { color: var(--tw-text); font-variant-numeric: tabular-nums; }
+.cl-kappa-agg-note { font-size: 11.5px; opacity: .85; }
