@@ -307,8 +307,39 @@ async function filteredSequenceUsing(
   return out;
 }
 
+// Modul-Cache der geparsten, gefilterten Nachrichtenfolge je Datensatz (Punkt 2).
+// Der teure Teil von filteredSequence ist das Lesen + JSON.parse ALLER Chunks —
+// das lief bisher bei jedem Runden-/Übersichts-/Streitfall-/Klassifizierungs-
+// Aufruf neu. Der Cache lebt im Worker-Isolate und wird gegen einen billigen
+// Fingerprint (Chunk-Anzahl + Gesamt-Bytelänge) validiert: ändert sich nichts
+// (kein Import), wird die geparste Folge wiederverwendet, sonst neu geladen.
+// Die Folge wird nur gelesen (slice/findIndex/map) und nie mutiert, daher ist
+// das Teilen derselben Referenz über Aufrufe hinweg sicher.
+type SequenceCacheEntry = { fingerprint: string; sequence: RawMessage[] };
+const sequenceCache = new Map<string, SequenceCacheEntry>();
+const SEQUENCE_CACHE_MAX = 3;
+
+async function sequenceFingerprint(env: Env, datasetId: string): Promise<string> {
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(messages_json)), 0) AS bytes FROM review_chat_chunks WHERE dataset_id = ?1',
+  ).bind(datasetId).first<{ c: number; bytes: number }>();
+  return `${Number(row?.c || 0)}:${Number(row?.bytes || 0)}`;
+}
+
 async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
-  return filteredSequenceUsing(env, datasetId, isReviewable);
+  const fingerprint = await sequenceFingerprint(env, datasetId);
+  const cached = sequenceCache.get(datasetId);
+  if (cached && cached.fingerprint === fingerprint) return cached.sequence;
+
+  const sequence = await filteredSequenceUsing(env, datasetId, isReviewable);
+  // Speicher begrenzen: bei Überlauf den am längsten nicht neu geschriebenen
+  // Eintrag (ältester Insert-Platz) verwerfen. In der Praxis 1–2 Datensätze.
+  if (!sequenceCache.has(datasetId) && sequenceCache.size >= SEQUENCE_CACHE_MAX) {
+    const oldest = sequenceCache.keys().next().value;
+    if (oldest !== undefined) sequenceCache.delete(oldest);
+  }
+  sequenceCache.set(datasetId, { fingerprint, sequence });
+  return sequence;
 }
 
 // Datensätze, in denen keine NEUEN Runden mehr angelegt werden dürfen.
@@ -523,21 +554,40 @@ async function putMarks(request: Request, env: Env, dataset: DatasetRow, round: 
     clean.push({ seamMessageId, mark });
   }
 
+  // Inkrementell speichern (Punkt 2): nur den Unterschied schreiben, statt bei
+  // jedem (debounced) Speichern ALLE Markierungen der Runde zu löschen und neu
+  // einzufügen. Ein typisches Speichern kippt eine einzige Naht → eine einzige
+  // Insert-/Update-/Delete-Zeile statt „DELETE alle + bis zu 60 INSERTs".
+  const existingRows = await loadMarks(env, dataset.id, round, reviewer);
+  const existing = new Map(existingRows.map((row) => [row.seam_message_id, row.mark]));
+  const desired = new Map(clean.map((entry) => [entry.seamMessageId, entry.mark]));
+
+  const toUpsert = clean.filter((entry) => existing.get(entry.seamMessageId) !== entry.mark);
+  const toDelete = [...existing.keys()].filter((id) => !desired.has(id));
+
   const now = new Date().toISOString();
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3')
-      .bind(dataset.id, round, reviewer),
-  ];
-  for (const entry of clean) {
+  const statements: D1PreparedStatement[] = [];
+  if (toDelete.length) {
+    // ≤ MAX_MARKS_PER_ROUND (60) IDs + 3 feste Binds ⇒ sicher unter D1s 100er-Limit.
+    const placeholders = toDelete.map((_, index) => `?${index + 4}`).join(',');
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3 AND seam_message_id IN (${placeholders})`,
+      ).bind(dataset.id, round, reviewer, ...toDelete),
+    );
+  }
+  for (const entry of toUpsert) {
     statements.push(
       env.DB.prepare(`
         INSERT INTO review_boundary_marks
           (dataset_id, round, reviewer, seam_message_id, mark, created_at, updated_at)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+        ON CONFLICT(dataset_id, round, reviewer, seam_message_id) DO UPDATE SET
+          mark = excluded.mark, updated_at = excluded.updated_at
       `).bind(dataset.id, round, reviewer, entry.seamMessageId, entry.mark, now),
     );
   }
-  await env.DB.batch(statements);
+  if (statements.length) await env.DB.batch(statements);
 
   return json({ ok: true, saved: clean.length });
 }
