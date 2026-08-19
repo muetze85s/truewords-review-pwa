@@ -353,6 +353,9 @@ async function loadRoundWindow(
   if (sequence.length < ROUND_WINDOW_SIZE) {
     throw new Error('Die gefilterte Nachrichtenfolge ist kürzer als eine Runde.');
   }
+  // Globale Positions-Ordinalzahlen aktuell halten (billiger COUNT-Schnellpfad,
+  // wenn nichts Neues) — nutzt die ohnehin geladene Folge, kein Extra-Parse.
+  await ensureMessageOrdinals(env, dataset.id, sequence);
 
   let row = await env.DB.prepare(`
     SELECT dataset_id, round, first_message_id, message_count
@@ -665,9 +668,16 @@ async function buildAgreementPayload(
     ...comparison.onlyB.map((position) => disputeEntry(position, 'Lena')),
   ];
 
-  // Stabile Nummerierung nach Position (Konversationsreihenfolge), unabhängig
-  // vom Klärungsstatus — bleibt fix, auch wenn während der Sitzung ein
-  // Streitfall geklärt wird und in der Anzeige ans Ende rutscht.
+  // Global stabile Grenz-Nummer je Streitfall = Ordinalzahl der Naht-Nachricht
+  // (Punkt 1). Ersetzt die frühere runden-lokale 1..k-Zählung, die in jeder
+  // Runde bei 1 neu begann und sich beim Klären verschob. Fallback auf die
+  // runden-lokale Reihenfolge nur, falls die Ordinalzahlen für diese Naht noch
+  // nicht gebackfillt sind — dann bleibt die Anzeige wenigstens nicht leer.
+  const disputeOrdinals = await messageOrdinals(
+    env,
+    dataset.id,
+    disputeEntries.map((entry) => entry.seamMessageId),
+  );
   const numberByPosition = new Map(
     [...disputeEntries].sort((a, b) => a.position - b.position).map((entry, index) => [entry.position, index + 1]),
   );
@@ -675,7 +685,11 @@ async function buildAgreementPayload(
   // Offene Streitfälle zuerst, geklärte ans Ende — serverseitig sortiert,
   // damit beide Partner exakt dieselbe Reihenfolge sehen.
   const disputes = disputeEntries
-    .map((entry) => ({ ...entry, number: numberByPosition.get(entry.position) }))
+    .map((entry) => ({
+      ...entry,
+      // Globale Grenz-Nummer (bevorzugt) bzw. runden-lokaler Fallback.
+      number: disputeOrdinals.get(entry.seamMessageId) ?? numberByPosition.get(entry.position) ?? null,
+    }))
     .sort((a, b) => {
       const aResolved = a.decision !== 'open' ? 1 : 0;
       const bResolved = b.decision !== 'open' ? 1 : 0;
@@ -991,6 +1005,12 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
     ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
 
+  // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
+  // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
+  // ist die Startseite nach dem Login → Nummern sind vor dem ersten
+  // Runden-Öffnen gefüllt.
+  await ensureMessageOrdinals(env, dataset.id, sequence);
+
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
 
@@ -1181,6 +1201,12 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
       'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
     ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
+
+  // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
+  // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
+  // ist die Startseite nach dem Login → Nummern sind vor dem ersten
+  // Runden-Öffnen gefüllt.
+  await ensureMessageOrdinals(env, dataset.id, sequence);
 
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
@@ -2714,6 +2740,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/validation-status'
     && url.pathname !== '/api/admin/marks-backfill-plan'
     && url.pathname !== '/api/admin/marks-backfill-apply'
+    && url.pathname !== '/api/admin/backfill-ordinals'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2788,6 +2815,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/marks-backfill-plan' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf den Marks-Nachtrag sehen.', 403);
       return await getMarksBackfillPlan(env);
+    }
+
+    if (url.pathname === '/api/admin/backfill-ordinals' && request.method === 'POST') {
+      if (!user.canUpload) return error('Nur der Admin darf die Ordinalzahlen backfillen.', 403);
+      return await backfillOrdinals(env, dataset);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
@@ -2966,6 +2998,115 @@ export async function bothSubmittedRounds(env: Env, datasetId: string): Promise<
     .filter(([, reviewers]) => reviewers.has('Philipp') && reviewers.has('Lena'))
     .map(([round]) => round)
     .sort((a, b) => a - b);
+}
+
+// ------------------------------------------ Globale Grenz-/Situations-Nummern
+//
+// Runden-lokale Nummern ("Streitfall 3", situation_index) sind mehrdeutig und
+// verschieben sich. Stattdessen bekommt jede Nachricht EINE global stabile
+// Positions-Ordinalzahl: ihren 1-basierten Platz in der globalen Chronologie
+// (= filteredSequence-/Chunk-Reihenfolge, das ist die Telegram-Export-Reihen-
+// folge). Eine Grenze/Naht wird über die ihr folgende Nachricht
+// (seam_message_id) benannt → "Grenze N" = Ordinalzahl dieser Nachricht. Eine
+// Situation über ihre Start-Grenze → "Situation ab Grenze N" = Ordinalzahl von
+// start_message_id. EINE Nummerierungslogik, für Grenzen wie für Situationen.
+//
+// Persistiert (review_message_ordinals, Migration 0016), damit die Nummern
+// unveränderlich sind (Neuimporte hängen nur hinten an) UND die billigen
+// Übersichts-Pfade sie per indiziertem Lookup holen, ohne den Chat zu parsen.
+
+/**
+ * Stellt sicher, dass jede Nachricht der (bereits geladenen) globalen Folge eine
+ * persistente Ordinalzahl hat. Idempotent und append-only: schon vergebene
+ * Nummern bleiben, neue Nachrichten bekommen fortlaufend die nächste Nummer
+ * hinter der bisher höchsten. Normalfall (nichts Neues) = eine COUNT-Abfrage,
+ * kein Schreiben. Aufgerufen dort, wo `sequence` ohnehin schon geladen ist
+ * (loadRoundWindow, getOverview, Backfill-Endpunkt) — kein Extra-Parse.
+ */
+export async function ensureMessageOrdinals(
+  env: Env,
+  datasetId: string,
+  sequence: RawMessage[],
+): Promise<void> {
+  const countRow = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(MAX(ordinal), 0) AS m FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(datasetId).first<{ c: number; m: number }>();
+  const stored = Number(countRow?.c || 0);
+  // Schnellpfad: mindestens so viele Nummern vergeben wie es nummerierbare
+  // (id-tragende) Nachrichten gibt → nichts Neues (Append-only). Kein Diff,
+  // kein Schreiben. Gegen die Zahl der id-tragenden Nachrichten geprüft (nicht
+  // sequence.length), damit id-lose Einträge den Schnellpfad nicht dauerhaft
+  // blockieren.
+  let numberable = 0;
+  for (const message of sequence) if (rawId(message)) numberable += 1;
+  if (stored >= numberable) return;
+
+  const existing = new Set<string>();
+  const rows = await env.DB.prepare(
+    'SELECT message_id FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(datasetId).all<{ message_id: string }>();
+  for (const row of rows.results || []) existing.add(row.message_id);
+
+  let next = Number(countRow?.m || 0) + 1;
+  const inserts: D1PreparedStatement[] = [];
+  for (const message of sequence) {
+    const id = rawId(message);
+    if (!id || existing.has(id)) continue;
+    existing.add(id);
+    inserts.push(
+      env.DB.prepare(
+        `INSERT INTO review_message_ordinals (dataset_id, message_id, ordinal)
+         VALUES (?1, ?2, ?3) ON CONFLICT(dataset_id, message_id) DO NOTHING`,
+      ).bind(datasetId, id, next),
+    );
+    next += 1;
+  }
+  // In Blöcken schreiben, damit ein einzelnes D1-Batch nicht zu groß wird.
+  for (let i = 0; i < inserts.length; i += 50) {
+    await env.DB.batch(inserts.slice(i, i + 50));
+  }
+}
+
+/**
+ * Globale Ordinalzahlen für die angegebenen Nachrichten-IDs — billiger,
+ * indizierter Lookup ohne Chat-Parsing. Fehlt für eine ID noch eine Nummer
+ * (Ordinalzahlen noch nicht gebackfillt), fehlt der Eintrag in der Map (der
+ * Aufrufer fällt dann auf eine Ersatzanzeige zurück). Chunked auf ≤90 gebundene
+ * Variablen, damit D1s 100er-Limit nie überschritten wird.
+ */
+export async function messageOrdinals(
+  env: Env,
+  datasetId: string,
+  messageIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const unique = [...new Set(messageIds.filter(Boolean))];
+  const CHUNK = 90;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = unique.slice(i, i + CHUNK);
+    // dataset_id = ?1, IDs = ?2..?N+1.
+    const placeholders = batch.map((_, index) => `?${index + 2}`).join(',');
+    const rows = await env.DB.prepare(
+      `SELECT message_id, ordinal FROM review_message_ordinals WHERE dataset_id = ?1 AND message_id IN (${placeholders})`,
+    ).bind(datasetId, ...batch).all<{ message_id: string; ordinal: number }>();
+    for (const row of rows.results || []) out.set(row.message_id, Number(row.ordinal));
+  }
+  return out;
+}
+
+/**
+ * POST /api/admin/backfill-ordinals — vergibt (einmalig, danach No-Op) die
+ * globalen Ordinalzahlen für alle Nachrichten des Datensatzes. Nur canUpload.
+ * Nicht zwingend nötig (loadRoundWindow/getOverview backfillen ohnehin beim
+ * ersten Zugriff), aber praktisch, um direkt nach Deploy/Migration zu füllen.
+ */
+async function backfillOrdinals(env: Env, dataset: DatasetRow): Promise<Response> {
+  const sequence = await filteredSequence(env, dataset.id);
+  await ensureMessageOrdinals(env, dataset.id, sequence);
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(MAX(ordinal), 0) AS m FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(dataset.id).first<{ c: number; m: number }>();
+  return json({ ok: true, dataset: dataset.id, sequenceLength: sequence.length, numbered: Number(row?.c || 0), maxOrdinal: Number(row?.m || 0) });
 }
 
 export default {

@@ -42,6 +42,14 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     ));
   }
 
+  // Punkt 1: EINE Nummerierungslogik. Global stabile Grenz-Nummer der
+  // Start-Grenze (startOrdinal) statt runden-lokaler „R{round}·{index+1}".
+  // Fallback auf die alte Form nur, falls die Ordinalzahl (noch) fehlt.
+  function situationTag(row) {
+    if (row && row.startOrdinal != null) return `Grenze ${row.startOrdinal}`;
+    return `R${row ? row.round : '?'}·${row ? row.situationIndex + 1 : '?'}`;
+  }
+
   function withDataset(path) {
     if (!state.dataset) return path;
     return path + (path.includes('?') ? '&' : '?') + 'dataset=' + encodeURIComponent(state.dataset);
@@ -243,7 +251,9 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
     state.otherSubmitted = Boolean(payload.otherSubmitted);
     state.partnerActive = Boolean(payload.partnerActive);
 
-    $('cl-sub').textContent = `${state.reviewer} · Runde ${payload.round}, Nr. ${payload.situationIndex + 1}`;
+    $('cl-sub').textContent = payload.startOrdinal != null
+      ? `${state.reviewer} · Situation ab Grenze ${payload.startOrdinal}`
+      : `${state.reviewer} · Runde ${payload.round}, Nr. ${payload.situationIndex + 1}`;
     $('cl-position').textContent = positionLabel();
     setStatus('', false);
 
@@ -545,7 +555,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
         : '–';
       const broken = row.segmentationBroken ? '<span class="cl-broken" title="Zuschnitt strittig/fehlerhaft">⚠ Zuschnitt</span>' : '';
       return `<div class="ov-row ${cls}" data-id="${row.id}">
-        <div class="ov-cell ov-c-round" data-label="Situation">R${row.round}·${row.situationIndex + 1}</div>
+        <div class="ov-cell ov-c-round" data-label="Situation">${escapeHtml(situationTag(row))}</div>
         <div class="ov-cell ov-c-philipp" data-label="Philipp"><span class="ov-badge ${row.philippSubmitted ? 'done' : 'open'}">${pIcon}</span></div>
         <div class="ov-cell ov-c-lena" data-label="Lena"><span class="ov-badge ${row.lenaSubmitted ? 'done' : 'open'}">${lIcon}</span></div>
         <div class="ov-cell ov-c-disputes" data-label="Streitfälle">${disputes}</div>
@@ -645,7 +655,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS } from './quality-flags.mjs';
       <div class="cl-dev${dev.corrected ? ' corrected' : ''}${dev.selfImplicating ? ' self' : ''}" data-id="${dev.situationId}" data-key="${escapeHtml(dev.key)}">
         <div class="cl-dev-head">
           <span class="cl-dev-class">${escapeHtml(dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : ''}</span>
-          <span class="cl-dev-loc">R${dev.round}·${dev.situationIndex + 1}</span>
+          <span class="cl-dev-loc">${escapeHtml(situationTag(dev))}</span>
         </div>
         <div class="cl-dev-values">Ihr (einig): <b>${dev.humanValue ? 'ja' : 'nein'}</b> · LLM: <b>${dev.llmValue ? 'ja' : 'nein'}</b></div>
         <div class="cl-dev-actions">

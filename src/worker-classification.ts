@@ -2,6 +2,7 @@ import baseWorker, {
   combinedBoundaryForRound,
   resolveDatasetRow,
   bothSubmittedRounds,
+  messageOrdinals,
 } from './worker-boundary-pairs';
 import { hashSeed, mulberry32 } from '../boundary-pairs-logic.mjs';
 import {
@@ -346,6 +347,9 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
     return json({ ok: true, needsPreparation: true, sampleSize: 0, situations: [], progress: { classifiedByBoth: 0, sampleSize: 0 }, partnerActive: await lenaEnabled(env) });
   }
   const ids = situations.map((entry) => entry.id);
+  // Globale Grenz-Nummer je Situation = Ordinalzahl ihrer Start-Grenze
+  // (start_message_id). Ersetzt die runden-lokale „R{round}·{index+1}"-Anzeige.
+  const startOrdinals = await messageOrdinals(env, dataset.id, situations.map((entry) => entry.start_message_id));
 
   const [subsRows, classMarksRows, classResRows, flagMarksRows, flagResRows] = await Promise.all([
     selectBySituationIds<{ situation_id: number; reviewer: Role }>(env, ids, (p) => `SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${p})`),
@@ -425,6 +429,9 @@ async function getSituationsOverview(env: Env, dataset: { id: string; year: numb
       id: situation.id,
       round: situation.round,
       situationIndex: situation.situation_index,
+      // Global stabile Grenz-Nummer (Ordinalzahl der Start-Grenze) — null, falls
+      // noch nicht gebackfillt; die Anzeige fällt dann auf R{round}·{index+1}.
+      startOrdinal: startOrdinals.get(situation.start_message_id) ?? null,
       philippSubmitted,
       lenaSubmitted,
       openDisputes,
@@ -453,11 +460,12 @@ async function getSituationDetail(env: Env, dataset: { id: string; year: number 
   const partnerActive = await lenaEnabled(env);
   const other: Role = user.role === 'Philipp' ? 'Lena' : 'Philipp';
 
-  const [ownSub, otherSub, ownClass, ownFlags] = await Promise.all([
+  const [ownSub, otherSub, ownClass, ownFlags, startOrdinals] = await Promise.all([
     classificationSubmittedAt(env, id, user.role),
     classificationSubmittedAt(env, id, other),
     loadClassMarks(env, id, user.role),
     loadFlagMarks(env, id, user.role),
+    messageOrdinals(env, dataset.id, [situation.start_message_id]),
   ]);
 
   const base = {
@@ -465,6 +473,8 @@ async function getSituationDetail(env: Env, dataset: { id: string; year: number 
     id,
     round: situation.round,
     situationIndex: situation.situation_index,
+    // Global stabile Grenz-Nummer der Start-Grenze (Punkt 1), null vor Backfill.
+    startOrdinal: startOrdinals.get(situation.start_message_id) ?? null,
     messages,
     reviewer: user.role,
     partnerActive,
@@ -924,11 +934,13 @@ async function setAutoEnable(request: Request, env: Env): Promise<Response> {
  */
 async function getDeviations(env: Env, dataset: { id: string }): Promise<Response> {
   const valRows = await env.DB.prepare(
-    `SELECT id, round, situation_index FROM review_situations WHERE dataset_id = ?1 AND in_validation_sample = 1`,
-  ).bind(dataset.id).all<{ id: number; round: number; situation_index: number }>();
+    `SELECT id, round, situation_index, start_message_id FROM review_situations WHERE dataset_id = ?1 AND in_validation_sample = 1`,
+  ).bind(dataset.id).all<{ id: number; round: number; situation_index: number; start_message_id: string }>();
   const meta = new Map((valRows.results || []).map((row) => [row.id, row]));
   const valIds = [...meta.keys()];
   if (!valIds.length) return json({ ok: true, deviations: [], count: 0 });
+  // Global stabile Grenz-Nummer je Situation (Punkt 1).
+  const startOrdinals = await messageOrdinals(env, dataset.id, (valRows.results || []).map((row) => row.start_message_id));
 
   const [subRows, classRows, llmRows, corrRows] = await Promise.all([
     selectBySituationIds<{ situation_id: number; reviewer: Role }>(env, valIds, (p) => `SELECT situation_id, reviewer FROM review_classification_submissions WHERE situation_id IN (${p}) AND reviewer IN ('Philipp','Lena')`),
@@ -959,6 +971,7 @@ async function getDeviations(env: Env, dataset: { id: string }): Promise<Respons
         situationId: id,
         round: meta.get(id)?.round,
         situationIndex: meta.get(id)?.situation_index,
+        startOrdinal: startOrdinals.get(meta.get(id)?.start_message_id || '') ?? null,
         key,
         label: info?.label || key,
         humanValue: p,

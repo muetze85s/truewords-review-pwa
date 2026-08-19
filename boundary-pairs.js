@@ -434,7 +434,7 @@
     }
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
       <div class="dp-dispute${dispute.resolved ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
-        <div class="dp-dispute-number">Streitfall ${escapeHtml(dispute.number)}</div>
+        <div class="dp-dispute-number">${dispute.number == null ? 'Streitfall' : `Streitfall an Grenze ${escapeHtml(dispute.number)}`}</div>
         <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b> · ${votesMetaHtml(dispute)}</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">
