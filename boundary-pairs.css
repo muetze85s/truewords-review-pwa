@@ -25,9 +25,24 @@ body.dp {
   flex-wrap: wrap;
 }
 /* Punkt 13: Titel horizontal + vertikal zentriert, prominenter. */
-.dp-brand { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.dp-brand { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 100%; }
 .dp-brand strong { font-size: 20px; line-height: 1.25; }
 .dp-brand span { font-size: 13.5px; color: var(--tw-text-muted); margin-top: 2px; }
+/* Punkt 8: Kopf-Unterzeile (Prüfer · Runde bzw. Situation ab Grenze N) auf
+   schmalen Geräten (~380px) EINZEILIG halten — kein Umbruch, kein horizontales
+   Scrollen. Ellipsis nur als äußerste Notbremse; die Grenz-Nummer passt bei
+   kleinerer Schrift regulär hinein. */
+#dp-sub, #cl-sub {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 400px) {
+  .dp-brand strong { font-size: 18px; }
+  .dp-brand span { font-size: 12px; }
+}
 
 .dp-wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 80px; }
 
@@ -182,7 +197,9 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
   padding: 14px;
   margin-bottom: 12px;
 }
-.dp-dispute-number { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 2px; }
+/* Punkt 8: Streitfall-Kopf („Streitfall an Grenze N") einzeilig, kein Umbruch. */
+.dp-dispute-number { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 400px) { .dp-dispute-number { font-size: 12px; } }
 .dp-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
 .dp-dispute-badge {
   display: inline-block; padding: 1px 8px; border-radius: 999px;
