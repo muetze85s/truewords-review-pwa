@@ -35,6 +35,9 @@
     // Streitfall-Stimmen) für leichtgewichtiges Polling; null = noch keine
     // Baseline.
     pollStamp: null,
+    // Globale Grenz-Nummern der Nähte dieses Fensters (messageId → Ordinalzahl),
+    // damit jede gesetzte Grenze ihre Nummer AN DER LINIE tragen kann.
+    ordinals: {},
   };
 
   function $(id) { return document.getElementById(id); }
@@ -110,8 +113,17 @@
 
   // ---------------------------------------------------------------- Runde
 
-  function seamLabel(mark) {
-    if (mark === 'cut') return 'Grenze';
+  /**
+   * Beschriftung einer Naht. Eine GESETZTE Grenze trägt ihre global stabile
+   * Nummer direkt an der Linie („Grenze 60413") — in der Runden-Ansicht sind
+   * die Grenzen der Arbeitsgegenstand, also gehört die Nummer an den Ort, an
+   * dem die Grenze physisch liegt, nicht in die Kopfzeile.
+   */
+  function seamLabel(mark, seamMessageId) {
+    if (mark === 'cut') {
+      const ordinal = state.ordinals[seamMessageId];
+      return ordinal ? `Grenze ${ordinal}` : 'Grenze';
+    }
     if (mark === 'doubt') return 'unsicher';
     return '';
   }
@@ -131,9 +143,13 @@
       if (index > 0) {
         const before = state.messages[index - 1];
         const mark = state.marks.get(message.id) || '';
-        const label = mark ? seamLabel(mark) : pauseLabel(before, message);
-        parts.push(`<button type="button" class="dp-seam" data-seam="${escapeHtml(message.id)}" data-mark="${mark}" ${readOnly ? 'disabled' : ''}>
-          <span class="line"></span><span class="label">${escapeHtml(label)}</span>
+        const label = mark ? seamLabel(mark, message.id) : pauseLabel(before, message);
+        // Gemeinsame Grenzlinien-Komponente (seam.css): data-mark sagt, OB hier
+        // eine Grenze ist, data-owner, von wem — beim eigenen Markieren also
+        // immer die eingeloggte Person.
+        const owner = mark === 'cut' ? (state.reviewer || '') : '';
+        parts.push(`<button type="button" class="tw-seam" data-seam="${escapeHtml(message.id)}" data-mark="${mark}" data-owner="${escapeHtml(owner)}" ${readOnly ? 'disabled' : ''}>
+          <span class="tw-seam-line"></span><span class="tw-seam-label">${escapeHtml(label)}</span>
         </button>`);
       }
       parts.push(messageHtml(message));
@@ -141,7 +157,7 @@
     container.innerHTML = parts.join('');
 
     if (!readOnly) {
-      container.querySelectorAll('.dp-seam').forEach((element) => {
+      container.querySelectorAll('.tw-seam').forEach((element) => {
         element.addEventListener('click', () => toggleSeam(element.dataset.seam));
       });
     }
@@ -199,14 +215,17 @@
   // ohne die Nachrichten-Bubbles neu zu bauen.
   function updateSeamButton(seamId) {
     const stream = $('dp-stream');
-    const button = stream && [...stream.querySelectorAll('.dp-seam')].find((el) => el.dataset.seam === seamId);
+    const button = stream && [...stream.querySelectorAll('.tw-seam')].find((el) => el.dataset.seam === seamId);
     if (!button) return;
     const index = state.messages.findIndex((message) => message.id === seamId);
     if (index < 1) return;
     const mark = state.marks.get(seamId) || '';
-    const label = mark ? seamLabel(mark) : pauseLabel(state.messages[index - 1], state.messages[index]);
+    const label = mark ? seamLabel(mark, seamId) : pauseLabel(state.messages[index - 1], state.messages[index]);
     button.dataset.mark = mark;
-    const labelEl = button.querySelector('.label');
+    // Beim Antippen wandert auch die Zuordnung mit — sonst bliebe die frisch
+    // gesetzte Grenze ungefärbt, bis die Runde neu geladen wird.
+    button.dataset.owner = mark === 'cut' ? (state.reviewer || '') : '';
+    const labelEl = button.querySelector('.tw-seam-label');
     if (labelEl) labelEl.textContent = label;
   }
 
@@ -296,6 +315,7 @@
       state.reviewer = payload.reviewer;
       state.messages = payload.messages;
       state.marks = new Map((payload.marks || []).map((entry) => [entry.seamMessageId, entry.mark]));
+      state.ordinals = payload.ordinals || {};
       state.submitted = Boolean(payload.submitted);
       state.otherSubmitted = Boolean(payload.otherSubmitted);
       $('dp-sub').textContent = `${state.reviewer} · Runde ${state.round}`;
@@ -428,22 +448,25 @@
         // hervorgehoben.
         const pCut = seam?.philipp === 'cut';
         const lCut = seam?.lena === 'cut';
-        const markedClass = pCut && lCut ? ' marked-both'
-          : pCut ? ' marked-philipp'
-          : lCut ? ' marked-lena' : '';
+        // Gemeinsame Grenzlinien-Komponente: „von wem" steckt in data-owner.
+        const owner = pCut && lCut ? 'both' : pCut ? 'Philipp' : lCut ? 'Lena' : '';
+        const seamMark = owner ? 'cut' : '';
 
         if (isCentral) {
           // Eigene Stimme steuert die Anzeige (Linie + Label), nicht der noch
           // offene gemeinsame Stand — so reagiert die Naht sofort aufs Antippen.
+          // Die strittige Grenze trägt hier ihre globale Nummer: sie ist der
+          // Ort, um den es geht (nicht der Abschnittsanfang).
           const mine = ownVote(dispute);
           const decided = mine !== 'open' ? decisionLabel(mine) : '';
-          const centralLabel = decided ? `${label} · du: ${decided}` : `${label} · antippen zum Entscheiden`;
-          parts.push(`<button type="button" class="dp-dispute-seam central${markedClass}" data-central-seam="${escapeHtml(dispute.seamMessageId)}" data-decision-state="${escapeHtml(mine)}">
-            <span class="line"></span><span class="label">${escapeHtml(centralLabel)}</span>
+          const number = dispute.number == null ? '' : `Grenze ${dispute.number} · `;
+          const centralLabel = decided ? `${number}${label} · du: ${decided}` : `${number}${label} · antippen zum Entscheiden`;
+          parts.push(`<button type="button" class="tw-seam is-compact is-disputed" data-mark="${escapeHtml(seamMark)}" data-owner="${escapeHtml(owner)}" data-central-seam="${escapeHtml(dispute.seamMessageId)}" data-decision-state="${escapeHtml(mine)}">
+            <span class="tw-seam-line"></span><span class="tw-seam-label">${escapeHtml(centralLabel)}</span>
           </button>`);
         } else {
-          parts.push(`<div class="dp-dispute-seam${markedClass}">
-            <span class="line"></span><span class="label">${escapeHtml(label)}</span>
+          parts.push(`<div class="tw-seam is-compact is-static" data-mark="${escapeHtml(seamMark)}" data-owner="${escapeHtml(owner)}">
+            <span class="tw-seam-line"></span><span class="tw-seam-label">${escapeHtml(label)}</span>
           </div>`);
         }
       }
@@ -477,7 +500,7 @@
     }
     disputesContainer.innerHTML = data.disputes.map((dispute) => `
       <div class="dp-dispute${dispute.resolved ? ` geklaert decision-${escapeHtml(dispute.decision)}` : ''}" data-seam="${escapeHtml(dispute.seamMessageId)}">
-        <div class="dp-dispute-number">${dispute.number == null ? 'Streitfall' : `Streitfall an Grenze ${escapeHtml(dispute.number)}`}</div>
+        <div class="dp-dispute-number">Streitfall</div>
         <div class="dp-dispute-meta">${escapeHtml(pauseLabel(dispute.before, dispute.after))} · geschnitten von <b>${escapeHtml(dispute.setBy)}</b> · ${votesMetaHtml(dispute)}</div>
         <div class="dp-dispute-messages">${disputeContextHtml(dispute)}</div>
         <div class="dp-dispute-actions">

@@ -317,6 +317,9 @@ async function routePage(request: Request, env: Env): Promise<Response | null> {
     if (!user) return asset(request, env, '/login.html');
     return redirect('/doppelpruefung.html');
   }
+  // Die frühere Dashboard-Seite ist entfernt (verwaist, von keiner Navigation
+  // verlinkt). Die Weiterleitung bleibt bewusst stehen, damit alte Lesezeichen
+  // und Home-Screen-Symbole weiter auf der Segmentierung landen statt ins Leere.
   if (pathname === '/dashboard.html') {
     return user ? redirect('/doppelpruefung.html') : redirect('/login.html');
   }

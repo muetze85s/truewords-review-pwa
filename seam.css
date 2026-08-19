@@ -1,0 +1,127 @@
+/*
+ * Gemeinsame Grenzlinien-Komponente (Naht)
+ * ----------------------------------------
+ * EINE Definition davon, wie eine Grenze aussieht — benutzt von allen drei
+ * Stellen, an denen Grenzen im Text erscheinen:
+ *   1. Segmentierung, Runden-Ansicht  — jede antippbare Naht (eigene Marken)
+ *   2. Segmentierung, Streitfall-Ansicht — Kontextnähte + die strittige Naht
+ *   3. Klassifizierung, Situationsansicht — der Trenner am Situationsanfang
+ * Vorher lagen dafür zwei getrennte Fassungen (.dp-seam und .dp-dispute-seam)
+ * nebeneinander; die sind ersatzlos entfallen.
+ *
+ * Zustand steckt in zwei Attributen, damit ein Selektorsatz alle Fälle deckt:
+ *   data-mark  = "cut" | "doubt" | ""      (ist hier eine Grenze?)
+ *   data-owner = "Philipp" | "Lena" | "both" | ""   (von wem?)
+ * Zusatzklassen: .is-static (nicht antippbar), .is-disputed (strittige Naht).
+ */
+
+.tw-seam {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  height: 40px;
+  position: relative;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.tw-seam.is-static,
+.dp-readonly .tw-seam { cursor: default; }
+
+.tw-seam-line {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--tw-border);
+}
+.tw-seam-label {
+  position: relative;
+  display: inline-block;
+  background: var(--tw-surface);
+  padding: 3px 10px;
+  font-size: 11.5px;
+  color: var(--tw-text-muted);
+  top: 8px;
+}
+
+/* --- Gesetzte Grenze: dick, in Prüferfarbe ----------------------------- */
+/* Das ist DIE Stelle, an der „so sieht eine Grenze aus" definiert ist. */
+.tw-seam[data-mark="cut"][data-owner="Philipp"] { background: var(--tw-philipp-surface); }
+.tw-seam[data-mark="cut"][data-owner="Philipp"] .tw-seam-line {
+  background: var(--tw-philipp); height: 3px; border-radius: 2px;
+}
+.tw-seam[data-mark="cut"][data-owner="Philipp"] .tw-seam-label {
+  background: var(--tw-philipp-surface); color: var(--tw-philipp-text); font-weight: 700;
+}
+.tw-seam[data-mark="cut"][data-owner="Lena"] { background: var(--tw-lena-surface); }
+.tw-seam[data-mark="cut"][data-owner="Lena"] .tw-seam-line {
+  background: var(--tw-lena); height: 3px; border-radius: 2px;
+}
+.tw-seam[data-mark="cut"][data-owner="Lena"] .tw-seam-label {
+  background: var(--tw-lena-surface); color: var(--tw-lena-text); font-weight: 700;
+}
+/* Beide einig (gemeinsame Fassung): gestricheltes Muster, abwechselnd
+   Türkis (Philipp) und Rosa (Lena) — dieselbe Optik wie bei Übereinstimmung
+   in der Runden-Ansicht. Auch der Trenner am Situationsanfang der
+   Klassifizierung nutzt genau diesen Zustand: die Startgrenze einer Situation
+   IST die von beiden getragene Grenze. */
+.tw-seam[data-mark="cut"][data-owner="both"] .tw-seam-line {
+  height: 3px; border-radius: 2px;
+  background: repeating-linear-gradient(90deg,
+    var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px,
+    var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
+}
+.tw-seam[data-mark="cut"][data-owner="both"] .tw-seam-label {
+  color: var(--tw-text); font-weight: 700;
+}
+/* Grenze ohne bekannte Zuordnung (Rückfall): neutral, aber ebenfalls dick. */
+.tw-seam[data-mark="cut"]:not([data-owner="Philipp"]):not([data-owner="Lena"]):not([data-owner="both"]) .tw-seam-line {
+  background: var(--tw-text-muted); height: 3px; border-radius: 2px;
+}
+
+/* --- „unsicher" ------------------------------------------------------- */
+.tw-seam[data-mark="doubt"] { background: var(--tw-status-open-surface); }
+.tw-seam[data-mark="doubt"] .tw-seam-line {
+  background: var(--tw-status-open); height: 2px; border-top: 1px dashed var(--tw-status-open);
+}
+.tw-seam[data-mark="doubt"] .tw-seam-label {
+  background: var(--tw-status-open-surface); color: var(--tw-status-open); font-weight: 700;
+}
+
+/* --- Strittige Naht (Streitfall-Ansicht) ------------------------------- */
+/* Rot schlägt die Prüferfarbe, damit klar ist: hier ist noch nichts geklärt.
+   Die Attribut-Qualifizierer [data-mark][data-owner] sind Absicht: ohne sie
+   wäre die Prüferfarb-Regel oben spezifischer und die strittige Naht bliebe
+   türkis/rosa statt rot. */
+.tw-seam.is-disputed[data-mark][data-owner] .tw-seam-line {
+  height: 3px; background: var(--tw-status-unclear); border-radius: 2px;
+}
+.tw-seam.is-disputed[data-mark][data-owner] .tw-seam-label {
+  color: var(--tw-status-unclear); background: var(--tw-status-unclear-surface); font-weight: 700;
+}
+.tw-seam.is-disputed:hover .tw-seam-label { text-decoration: underline; }
+.tw-seam.is-disputed:focus-visible { outline: 2px solid var(--tw-status-unclear); outline-offset: 2px; }
+/* Eigene Stimme „keine Grenze": Linie tritt zurück, Beschriftung durchgestrichen. */
+.tw-seam.is-disputed[data-mark][data-owner][data-decision-state="no_cut"] .tw-seam-line {
+  height: 1px; background: var(--tw-border); border-radius: 0;
+}
+.tw-seam.is-disputed[data-mark][data-owner][data-decision-state="no_cut"] .tw-seam-label {
+  color: var(--tw-text-muted); background: var(--tw-surface); font-weight: 400; text-decoration: line-through;
+}
+
+/* --- Kompaktere Nähte im Streitfall-Kontext ---------------------------- */
+.tw-seam.is-compact { height: 30px; margin: 2px 0; }
+.tw-seam.is-compact .tw-seam-line { left: 4px; right: 4px; }
+.tw-seam.is-compact .tw-seam-label { padding: 2px 8px; font-size: 11px; top: 7px; }
+
+/* --- Trenner am Situationsanfang (Klassifizierung) --------------------- */
+/* Sitzt über der ersten Nachricht; etwas mehr Luft nach unten, sonst exakt
+   die Grenzlinien-Optik von oben (dick, Prüferfarben). */
+.tw-seam.is-opening { height: 44px; margin-bottom: 2px; }

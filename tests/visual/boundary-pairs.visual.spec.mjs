@@ -35,7 +35,7 @@ test('Doppelprüfung zeigt die Markieransicht mit Zwischenräumen', async ({ pag
 
   await expect(page.locator('#dp-sub')).toContainText('Philipp · Runde 1');
   await expect(page.locator('.dp-message-text').first()).toContainText('Kannst du heute beim Vermieter anrufen?');
-  await expect(page.locator('.dp-seam')).toHaveCount(4);
+  await expect(page.locator('.tw-seam')).toHaveCount(4);
   await expect(page.getByRole('button', { name: 'Runde abgeben' })).toBeEnabled();
 
   const screenshot = await page.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' });
@@ -69,9 +69,9 @@ test('Ein Klick auf einen Zwischenraum markiert ihn als Grenze und speichert', a
   });
 
   await page.goto('/doppelpruefung.html');
-  await page.locator('.dp-seam').first().click();
+  await page.locator('.tw-seam').first().click();
 
-  await expect(page.locator('.dp-seam').first()).toHaveAttribute('data-mark', 'cut');
+  await expect(page.locator('.tw-seam').first()).toHaveAttribute('data-mark', 'cut');
   await expect.poll(() => savedBody).not.toBeNull();
   expect(savedBody.marks).toEqual([{ seamMessageId: '102', mark: 'cut' }]);
 });

@@ -35,6 +35,9 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     otherSubmitted: false,
     // Punkt 7: zuletzt gesehener Zustands-Stempel der Situation für Polling.
     pollStamp: null,
+    // Globale Nummer der Anfangsgrenze dieser Situation — wird als Trenner
+    // ÜBER der ersten Nachricht gezeigt, nicht in der Kopfzeile.
+    startOrdinal: null,
     // Übersicht: standardmäßig nur offene Situationen, Rest über den
     // Umschalter — identisch zur Segmentierung.
     overviewShowAll: false,
@@ -122,11 +125,31 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     </div>`;
   }
 
+  /**
+   * Situationsstrom mit dem Trenner der ANFANGSGRENZE darüber. Bei einer
+   * Situation ist der Anfang die relevante Grenze — also trägt genau diese
+   * Linie die globale Nummer („Grenze 3728"), nicht die Kopfzeile und auch
+   * nicht jede Naht im Ausschnitt.
+   *
+   * Der Trenner nutzt die GEMEINSAME Grenzlinien-Komponente (seam.css,
+   * .tw-seam) — dieselbe Optik wie die Grenzlinien der Segmentierung, keine
+   * zweite Implementierung. `data-owner="both"` ist dabei die sachlich
+   * richtige Zuordnung: die Startgrenze einer Situation stammt aus der
+   * gemeinsamen Fassung, die beide Prüfer tragen.
+   */
+  function openingSeamHtml() {
+    if (state.startOrdinal == null) return '';
+    return `<div class="tw-seam is-static is-opening" data-mark="cut" data-owner="both">
+      <span class="tw-seam-line"></span>
+      <span class="tw-seam-label">Grenze ${escapeHtml(state.startOrdinal)}</span>
+    </div>`;
+  }
+
   function renderStreamInto(containerId, messages) {
     const container = $(containerId);
     if (!container) return;
     setMessageIndex(messages);
-    container.innerHTML = (messages || []).map((message) => messageHtml(message)).join('');
+    container.innerHTML = openingSeamHtml() + (messages || []).map((message) => messageHtml(message)).join('');
   }
 
   function setStatus(text, isError) {
@@ -273,9 +296,10 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     state.otherSubmitted = Boolean(payload.otherSubmitted);
     state.partnerActive = Boolean(payload.partnerActive);
 
-    $('cl-sub').textContent = payload.startOrdinal != null
-      ? `${state.reviewer} · Situation ab Grenze ${payload.startOrdinal}`
-      : `${state.reviewer} · Runde ${payload.round}, Nr. ${payload.situationIndex + 1}`;
+    state.startOrdinal = payload.startOrdinal ?? null;
+    // Kopfzeile trägt die Position in der Stichprobe; die Grenz-Nummer steht
+    // am Ort der Grenze (Trenner über der ersten Nachricht).
+    $('cl-sub').textContent = `${state.reviewer} · ${positionLabel()}`;
     $('cl-position').textContent = positionLabel();
     setStatus('', false);
     // Punkt 7: Baseline-Stempel zum Ladezeitpunkt (deckt loadSituation UND die

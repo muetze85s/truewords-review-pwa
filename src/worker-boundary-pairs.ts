@@ -522,7 +522,14 @@ async function getRound(env: Env, dataset: DatasetRow, round: number, reviewer: 
     philippSubmittedAt,
     lenaSubmittedAt,
   });
-  return json({ round, ...view });
+  // Globale Grenz-Nummern der Nähte dieses Fensters: In der Runden-Ansicht sind
+  // die Grenzen selbst der Arbeitsgegenstand, deshalb trägt jede GESETZTE
+  // Grenze ihre Nummer direkt an der Linie (nicht nur in der Kopfzeile).
+  // Naht = die Nachricht NACH der Grenze, also genügen die Message-Ordinalzahlen.
+  const ordinalMap = await messageOrdinals(env, dataset.id, messages.map((message) => message.id));
+  const ordinals: Record<string, number> = {};
+  for (const [id, ordinal] of ordinalMap) ordinals[id] = ordinal;
+  return json({ round, ...view, ordinals });
 }
 
 async function putMarks(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
