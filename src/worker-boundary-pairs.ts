@@ -386,7 +386,9 @@ async function loadRoundWindow(
   }
   // Globale Positions-Ordinalzahlen aktuell halten (billiger COUNT-Schnellpfad,
   // wenn nichts Neues) — nutzt die ohnehin geladene Folge, kein Extra-Parse.
-  await ensureMessageOrdinals(env, dataset.id, sequence);
+  // Nicht-fatal: schlägt der (append-only) Backfill fehl, lädt die Runde
+  // trotzdem; die Anzeige fällt auf die alte Nummerierung zurück.
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Runde) fehlgeschlagen — nicht fatal', caught); }
 
   let row = await env.DB.prepare(`
     SELECT dataset_id, round, first_message_id, message_count
@@ -1086,8 +1088,9 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
   // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
   // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
   // ist die Startseite nach dem Login → Nummern sind vor dem ersten
-  // Runden-Öffnen gefüllt.
-  await ensureMessageOrdinals(env, dataset.id, sequence);
+  // Runden-Öffnen gefüllt. Nicht-fatal: schlägt der Backfill fehl, lädt die
+  // Übersicht trotzdem (append-only, setzt sich beim nächsten Laden fort).
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Übersicht) fehlgeschlagen — nicht fatal', caught); }
 
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
@@ -1288,8 +1291,9 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
   // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
   // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
   // ist die Startseite nach dem Login → Nummern sind vor dem ersten
-  // Runden-Öffnen gefüllt.
-  await ensureMessageOrdinals(env, dataset.id, sequence);
+  // Runden-Öffnen gefüllt. Nicht-fatal: schlägt der Backfill fehl, lädt die
+  // Übersicht trotzdem (append-only, setzt sich beim nächsten Laden fort).
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Übersicht) fehlgeschlagen — nicht fatal', caught); }
 
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
@@ -3132,23 +3136,43 @@ export async function ensureMessageOrdinals(
   for (const row of rows.results || []) existing.add(row.message_id);
 
   let next = Number(countRow?.m || 0) + 1;
-  const inserts: D1PreparedStatement[] = [];
+  // Zu vergebende (message_id, ordinal)-Paare in globaler Reihenfolge sammeln.
+  const pending: Array<[string, number]> = [];
   for (const message of sequence) {
     const id = rawId(message);
     if (!id || existing.has(id)) continue;
     existing.add(id);
-    inserts.push(
-      env.DB.prepare(
-        `INSERT INTO review_message_ordinals (dataset_id, message_id, ordinal)
-         VALUES (?1, ?2, ?3) ON CONFLICT(dataset_id, message_id) DO NOTHING`,
-      ).bind(datasetId, id, next),
-    );
+    pending.push([id, next]);
     next += 1;
   }
-  // In Blöcken schreiben, damit ein einzelnes D1-Batch nicht zu groß wird.
-  for (let i = 0; i < inserts.length; i += 50) {
-    await env.DB.batch(inserts.slice(i, i + 50));
+  if (!pending.length) return;
+
+  // Multi-Row-INSERT statt einer Zeile je Statement: dataset_id als ?1
+  // wiederverwendet, je Zeile message_id + ordinal → 1 + 2·Zeilen gebundene
+  // Variablen. 49 Zeilen/Statement (max. 99 Binds < 100), mehrere Statements je
+  // Batch. So bleibt selbst ein sehr großer Erst-Backfill (4-Jahres-Chat, ggf.
+  // Zehntausende Nachrichten) auf wenige Dutzend D1-Roundtrips statt Tausende
+  // Einzel-Inserts beschränkt. Append-only: jeder committete Batch bleibt, ein
+  // etwaiger Abbruch setzt sich beim nächsten Aufruf fort (existing überspringt
+  // die bereits vergebenen).
+  const ROWS_PER_STMT = 49;
+  const STMTS_PER_BATCH = 20;
+  let batch: D1PreparedStatement[] = [];
+  const flush = async () => { if (batch.length) { await env.DB.batch(batch); batch = []; } };
+  for (let i = 0; i < pending.length; i += ROWS_PER_STMT) {
+    const slice = pending.slice(i, i + ROWS_PER_STMT);
+    const tuples = slice.map((_, j) => `(?1, ?${2 + j * 2}, ?${3 + j * 2})`).join(',');
+    const binds: Array<string | number> = [datasetId];
+    for (const [id, ord] of slice) binds.push(id, ord);
+    batch.push(
+      env.DB.prepare(
+        `INSERT INTO review_message_ordinals (dataset_id, message_id, ordinal) VALUES ${tuples}
+         ON CONFLICT(dataset_id, message_id) DO NOTHING`,
+      ).bind(...binds),
+    );
+    if (batch.length >= STMTS_PER_BATCH) await flush();
   }
+  await flush();
 }
 
 /**
