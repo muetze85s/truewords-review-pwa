@@ -17,8 +17,10 @@
 export const CODEBOOK_VERSION = 1;
 
 export const GROUP_LABELS = {
-  risk: 'Risikomuster',
-  positive: 'Positive Marker',
+  // Benennung folgt den Klassencodes: N… = Negativ-Marker, P… = Positiv-Marker,
+  // E… = Entschuldigung, Z… = Zuschnitt. Überschrift und Buchstabe sagen dasselbe.
+  risk: 'Negativ-Marker',
+  positive: 'Positiv-Marker',
   apology: 'Entschuldigung',
 };
 
@@ -34,7 +36,7 @@ export const GROUP_LABELS = {
  * erst dann übernimmt das LLM diese Klasse im Dauerbetrieb (PR 2).
  */
 export const CLASSIFICATION_CLASSES = [
-  // --- Risikomuster (10) ---
+  // --- Negativ-Marker (10) ---
   {
     code: 'N1',
     key: 'countercriticism_before_addressing_concern',
@@ -126,7 +128,7 @@ export const CLASSIFICATION_CLASSES = [
     hint: 'Kritik → Rechtfertigung → Kritik → … über mehrere Runden ohne Bewegung der Positionen.',
   },
 
-  // --- Positive Marker (9) ---
+  // --- Positiv-Marker (9) ---
   {
     code: 'P1',
     key: 'repair_offer',

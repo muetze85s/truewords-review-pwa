@@ -31,7 +31,7 @@ und wird bei jeder Klassifizierung mitgeschrieben (Feld `codebook_version` in
 
 ---
 
-## Risikomuster
+## Negativ-Marker
 
 ### `countercriticism_before_addressing_concern` — N1 · Gegenkritik vor Bearbeitung des Anliegens
 **Definition:** Auf eine Beschwerde/ein Anliegen wird zuerst mit einem eigenen Vorwurf geantwortet, bevor auf das ursprüngliche Anliegen überhaupt eingegangen wird.
@@ -92,9 +92,9 @@ und wird bei jeder Klassifizierung mitgeschrieben (Feld `codebook_version` in
 
 ---
 
-## Positive Marker
+## Positiv-Marker
 
-*Bewusst gleichgewichtig zu den Risikomustern ausgebaut (9 gegen 10): Der Übersetzer lernt aus Gelingen, nicht nur aus Fehlern — insbesondere aus dem Fall „kritische Sache wurde gesagt und kam trotzdem gut an".*
+*Bewusst gleichgewichtig zu den Negativ-Markern ausgebaut (9 gegen 10): Der Übersetzer lernt aus Gelingen, nicht nur aus Fehlern — insbesondere aus dem Fall „kritische Sache wurde gesagt und kam trotzdem gut an".*
 
 ### `repair_offer` — P1 · Reparaturangebot
 **Definition:** Eine Person bietet aktiv etwas an, um die Situation zu verbessern (Entschuldigung, Vorschlag, Geste), unabhängig davon, ob es angenommen wird.

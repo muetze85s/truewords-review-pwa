@@ -537,7 +537,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
   function renderKappaGroup(title, stats, withLlm) {
     if (!stats.length) return '';
     const rows = stats.map((stat) => {
-      const self = stat.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : '';
+      const self = stat.selfImplicating ? '<span class="cl-self" title="selbstimplizierend — hier besonders auf eigene Voreingenommenheit achten">⚠</span>' : '';
       const hh = kappaValue(stat.kappa, stat.n, stat.ampel);
       const extra = withLlm
         ? `<div class="cl-kappa-hl">LLM ${stat.humanLlm ? kappaValue(stat.humanLlm.kappa, stat.humanLlm.n, stat.humanLlm.ampel) : '–'}</div>
@@ -611,7 +611,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
       </div>`;
       kappaHtml = `<div class="cl-kappa">
         <div class="cl-kappa-head">Übereinstimmung je Klasse — MM = Mensch–Mensch (Cohens κ) · LLM = Mensch–LLM · α = Krippendorff (3 Kodierer)</div>
-        <div class="cl-kappa-sub">${escapeHtml(hhNote)} · ${escapeHtml(llmNote)} · ◆ = selbstimplizierend</div>
+        <div class="cl-kappa-sub">${escapeHtml(hhNote)} · ${escapeHtml(llmNote)} · <span class="cl-self">⚠</span> = selbstimplizierend (hier besonders auf eigene Voreingenommenheit achten)</div>
         ${aggLine}
         ${renderKappaGroup(GROUP_LABELS.risk, risk, true)}
         ${renderKappaGroup(GROUP_LABELS.positive, positive, true)}
@@ -798,7 +798,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
     const cards = payload.deviations.map((dev) => `
       <div class="cl-dev${dev.corrected ? ' corrected' : ''}${dev.selfImplicating ? ' self' : ''}" data-id="${dev.situationId}" data-key="${escapeHtml(dev.key)}">
         <div class="cl-dev-head">
-          <span class="cl-dev-class">${labelWithCodeHtml(dev.key, dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend">◆</span>' : ''}</span>
+          <span class="cl-dev-class">${labelWithCodeHtml(dev.key, dev.label)} ${dev.selfImplicating ? '<span class="cl-self" title="selbstimplizierend — hier besonders auf eigene Voreingenommenheit achten">⚠</span>' : ''}</span>
           <span class="cl-dev-loc">${escapeHtml(situationTag(dev))}</span>
         </div>
         <div class="cl-dev-values">Ihr (einig): <b>${dev.humanValue ? 'ja' : 'nein'}</b> · LLM: <b>${dev.llmValue ? 'ja' : 'nein'}</b></div>
@@ -808,7 +808,7 @@ import { QUALITY_FLAGS, QUALITY_FLAG_KEYS, qualityCodeByKey } from './quality-fl
         </div>
       </div>`).join('');
     body.innerHTML = `<div class="cl-overview-head"><h2>Abweichungen (LLM ≠ ihr)</h2>${back}</div>
-      <p class="dp-hint">${payload.open} offen von ${payload.count}. Selbstimplizierende Klassen (◆) zuerst — dort ist die Bias-Frage am relevantesten. Kein Zwang, jede zu bearbeiten.</p>
+      <p class="dp-hint">${payload.open} offen von ${payload.count}. Selbstimplizierende Klassen (<span class="cl-self">⚠</span>) zuerst — dort ist die Bias-Frage am relevantesten. Kein Zwang, jede zu bearbeiten.</p>
       ${cards}`;
     bindDeviationsBack();
     body.querySelectorAll('.cl-dev').forEach((card) => {

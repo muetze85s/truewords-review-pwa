@@ -21,9 +21,22 @@
 .cl-panel-title { font-weight: 700; color: var(--tw-text); }
 
 .cl-group { margin: 12px 0 6px; }
-.cl-group-title {
-  font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
-  color: var(--tw-text-muted); margin: 10px 0 4px; font-weight: 700;
+/* Gruppentitel (NEGATIV-MARKER / POSITIV-MARKER / ENTSCHULDIGUNG / ZUSCHNITT)
+   sind Trenner beim Durchscrollen — deshalb bewusst groß, kräftig und in der
+   vollen Textfarbe statt klein und blass. Auf allen Seiten identisch:
+   Kodier-Ansicht (.cl-group-title), Kappa-Übersicht (.cl-kappa-group-title)
+   und Nachschlage-Seite (.cb-group-title). */
+.cl-group-title,
+.cl-kappa-group-title,
+.cb-group-title {
+  font-size: 16px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--tw-text);
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--tw-border);
 }
 
 .cl-check-row {
@@ -146,7 +159,6 @@ body.cl[data-reviewer="Lena"] .cl-dispute-actions button.active { background: va
 }
 .cl-kappa-head { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 8px; }
 .cl-kappa-group { margin: 10px 0; }
-.cl-kappa-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tw-text-muted); font-weight: 700; margin-bottom: 2px; }
 .cl-kappa-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--tw-border); }
 .cl-kappa-row:last-child { border-bottom: none; }
 .cl-kappa-label { font-size: 13.5px; color: var(--tw-text); }
@@ -159,7 +171,10 @@ body.cl[data-reviewer="Lena"] .cl-dispute-actions button.active { background: va
 .cl-kappa-row-llm { grid-template-columns: minmax(0, 1.6fr) auto auto auto auto; gap: 6px 12px; }
 .cl-kappa-hl, .cl-kappa-alpha { font-size: 12.5px; color: var(--tw-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cl-kappa-auto { min-width: 46px; text-align: right; }
-.cl-self { color: var(--tw-lena); font-size: 11px; }
+/* Selbstimplizierende Klassen: ein gelbes Warndreieck — überall dasselbe
+   Symbol in derselben Farbe (vorher rosa Raute bei den Klassen, weiße Raute in
+   der Legende). „Hier besonders auf eigene Voreingenommenheit achten." */
+.cl-self { color: var(--tw-status-open); font-size: 13px; font-style: normal; }
 /* Punkt 9: fester Klassencode (N7/P3/E1/Z1) vor dem Klartext. */
 .cl-code { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tw-philipp); }
 .cl-auto { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; }
@@ -217,7 +232,6 @@ button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
 .cb-legend-boundary { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
 
 .cb-group { margin: 0 0 8px; }
-.cb-group-title { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--tw-text-muted); font-weight: 700; margin: 22px 0 8px; }
 
 .cb-card {
   border: 1px solid var(--tw-border); border-left: 3px solid var(--tw-border);
