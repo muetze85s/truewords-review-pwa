@@ -82,6 +82,8 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 - `0012` `segment_validation_runs` — Verlauf des Validierungs-Splits (70/30 Overfitting-Test, rein informativ)
 - `0013` Klassifizierung: `review_situations` (+`in_validation_sample`), `review_classification_marks` (+`is_correction_of_llm`, `codebook_version`, reviewer inkl. `'llm'` — in 0014 auf `'LLM'` gehoben), `review_classification_submissions` (Blind-Gate je Situation), `review_classification_resolutions` (beide-müssen-zustimmen wie 0008), `review_situation_quality_flags`/`_resolutions` (3 Zuschnitt-Flags), `app_settings` (Key-Value, u. a. `lena_classification_enabled`)
 - `0014` LLM-Dritt-Rater: `review_classification_marks` neu (reviewer `'LLM'` großgeschrieben + Spalte `rater_model`), Kosten-Ledger `ai_llm_budget`/`ai_llm_reservations`/`ai_llm_usage_events` (Zwei-Phasen-Commit, Mikro-Dollar, keine Inhalte), `review_classification_auto` (Freigabe je `pattern_key`). LLM = Anthropic/Claude über `anthropic-gateway.ts`; Secret `ANTHROPIC_API_KEY` (getrennt), Modell per `ANTHROPIC_MODEL` (Default `claude-haiku-4-5`), Deckel `ANTHROPIC_MAX_TOTAL_USD`/`ANTHROPIC_MAX_COST_PER_REQUEST_USD`.
+- `0015` `review_codebook_signoff` — Freigabe-Häkchen je Definition (Philipp/Lena) auf der Nachschlage-Seite
+- `0016` `review_message_ordinals` — global stabile Positions-Ordinalzahl je Nachricht (dataset-scoped, append-only). Basis der Grenz-Nummern in BEIDEN Werkzeugen; Vergabe/Lookup in `worker-boundary-pairs.ts` (`ensureMessageOrdinals`/`messageOrdinals`), Backfill zusätzlich über `POST /api/admin/backfill-ordinals`
 
 ### PWA (Browser)
 
@@ -94,11 +96,14 @@ werden, damit Änderungen ankommen. Hauptseiten:
 
 - `login.html` / `account-setup.html` / `reset-password.html` — Zugang
 - `review.html` — Prüfstand (Einzelsegmentierung)
-- `doppelpruefung.html` + `boundary-pairs.js`/`.css` — Doppelprüfung, Vergleich, Live-F1, Übersicht als responsives Div-Grid (kein `<table>`, kein horizontales Scrollen auf Mobile)
+- `doppelpruefung.html` + `boundary-pairs.js`/`.css` — **Segmentierung** (früher „Doppelprüfung"): Übersicht als Startansicht, Runde, Vergleich, Streitfälle
+- `klassifizierung.html` + `classification.js`/`.css`, `klassifizierung-info.html` + `codebook-render.js` — Klassifizierung und Kodierhandbuch-Nachschlage-Seite
+- `overview.css` — **gemeinsame** Übersichts-/Tabellen-Komponente beider Werkzeuge (klebende Kopfzeile, Σ/Ø-Aggregate, Spaltengruppen, mobil kompakte Überschriften). Keine zweite Fassung anlegen.
+- `seam.css` — **gemeinsame** Grenzlinien-Komponente (`.tw-seam`), genutzt von Runden-Ansicht, Streitfall-Kontext UND dem Situationstrenner der Klassifizierung. Zustand über `data-mark` (cut/doubt/leer) und `data-owner` (Philipp/Lena/both).
 - `situation-info.html`, `situation-quiz.html` — Situationskunde (nicht mehr im aktiven Login-Flow, Login springt direkt auf die Übersicht)
 - `upload.html`, `admin.html`, `analysis-import.html` — Betrieb (nur `canUpload`/Philipp)
 - `push-settings.html` — Settings, 4 Abschnitte: Gerät-Einstellungen, Push-Benachrichtigungen (zwei symmetrische Module Philipp/Lena), Optimierung (Schwellwert-Optimizer-Verlauf + „Neu trainieren"), Datenbank (`?dataset=`-Schalter)
-- `nav.js`/`nav.css` — persistente Navigation über alle Seiten (TrueWords | Übersicht | Prüfstand | Doppelprüfung | Upload | Settings), rollenbewusst; **kein** Dataset-Schalter mehr im Kopfbalken — der lebt ausschließlich auf der Settings-Seite
+- `nav.js`/`nav.css` — persistente Navigation: **Segmentierung · Klassifizierung · Upload · Settings** (zwei gleichwertige Werkzeuge, je mit eigener interner Übersicht), rollenbewusst; **kein** Dataset-Schalter im Kopfbalken — der lebt ausschließlich auf der Settings-Seite. `nav.js` veröffentlicht seine Höhe als `--tw-nav-height` für die klebenden Tabellenkopfzeilen.
 
 Reine Logik liegt in `.mjs`-Modulen (`boundary-pairs-logic.mjs`,
 `push-schedule-logic.mjs`, `push-send.mjs`, `segmentation-v4.mjs`) mit
@@ -136,71 +141,85 @@ Ereignisstrom gespeichert wird.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-18_
+_Stand: 2026-08-19_
 
-**Stand heute:** Alles deployed und grün (letzter Deploy `66d014d` inkl. D1-
-Migration 0012). Branch `claude/segmentation-v5-migration-h0syxc`, kein PR
-offen, Arbeitsverzeichnis sauber. Der Tag drehte sich um die Rückstellung der
-Rohmarkierungen für Runden 1–17, die anschließende Klärung eines
-vermeintlichen Streitfall-Problems (war keins) und das letzte Handoff-Feature
-(Validierungs-Split).
+**Stand heute:** Alles von heute ist **live** — letzter Deploy `1f27c58` (GitHub
+Actions Run #97, alle 12 Schritte grün, inkl. D1-Migration 0016 und
+Health-Check). Branch `claude/klassifizierung-musterklassen-plplo4`,
+Arbeitsverzeichnis sauber, lokal = origin. Der Tag hatte drei Blöcke: den
+Sammel-Handoff Bugfixes (9 Punkte, u. a. der D1-Blocker, der die
+Klassifizierungs-Übersicht komplett lahmgelegt hatte), die Vereinheitlichung
+von Navigation und Übersichten, und den UI-Nachtrag inkl. Grenznummer am Ort.
 
-1. **Marks-Rückstellung Runden 1–17 gebaut, angewandt, verifiziert**
-   (`63f4344` Plan, `4a25908` Apply-Endpunkt, `c6db011` Browser-Seite,
-   `66cdd4c` UI-Fix): `review_boundary_marks` in `philena-4y` wurde für die
-   Runden 1–17 zeilenweise auf den eingefrorenen Basis-Stand
-   (`philena-2026-pilot-v4-unseen`) zurückgesetzt — nötig, weil der
-   Marks-Backfill (cut→dupliziert, no_cut→gelöscht) und der behobene
-   Speicher-Race die rohen F0-Werte verfälscht hatten. `review_boundary_resolutions`
-   blieb unangetastet, GT/F1 unverändert, nur F0 zeigt wieder die echten
-   Originalwerte. Endpunkte: `GET /api/admin/marks-restore-plan` (Nur-Lese),
-   `POST /api/admin/marks-restore-apply` (Admin-Token + `confirm:'restore-rounds-1-17'`).
-   Bedienung ohne Terminal über `marks-restore.html`. **Philipp hat die
-   Rückstellung ausgeführt** — Plan zeigt jetzt 0/0/0 (nichts mehr abweichend).
-2. **Streitfall-Diagnose Runden 13–17** (`ea84cfa`, `07445c0`):
-   `GET /api/admin/dispute-check?rounds=13-17` (Nur-Lese) zeigt pro offener
-   Naht Philipps/Lenas Markierung **und** alle gespeicherten Resolution-Votes.
-   Ergebnis: Die 14 offenen Nähte über Runden 13–17 sind **kein** Bug und
-   **nicht** Folge der Rückstellung (13–15 waren von der Rückstellung gar nicht
-   betroffen). Ursache: **Lena hat bei diesen 14 Nähten nie abgestimmt** — bei
-   3 davon hat Philipp schon „cut" gevotet, es fehlt aber Lenas Zustimmung
-   (Regel: beide müssen zustimmen). Streitfälle sind **nicht** gesperrt
-   (`resolveDispute` verlangt nur beidseitige Abgabe, `philena-4y` ist nicht
-   eingefroren) — Lena kann sie jederzeit über Doppelprüfung/Übersicht klären.
-3. **Validierungs-Split (Overfitting-Test)** (`66d014d`, letzter Handoff-Punkt):
-   Migration `0012_segment_validation_runs.sql`, Endpunkte
-   `GET /api/admin/validate-split` + `/api/admin/validation-status`
-   (canUpload-only), neues Panel auf der Settings-Seite unter dem Optimizer.
-   Teilt alle beidseitig abgegebenen Runden reproduzierbar (`split_seed`,
-   mulberry32) 70/30 in Training/Validierung, wertet den besten Schwellwert
-   (letzter Optimizer-Lauf, sonst 180 min) getrennt aus → `f1_train` vs.
-   `f1_validate`. Rein informativ, ändert die Segmentierung nicht.
+1. **Sammel-Handoff Bugfixes** (`26d544a` … `7b0152c`, 9 Punkte):
+   - **P4 (Blocker):** `situation_id IN (?1…?N)` sprengte ab >100
+     Validierungssituationen D1s 100-Bind-Limit → Übersicht lud gar nicht.
+     Fix: Helper `selectBySituationIds` chunkt auf 90 Binds (4 Funktionen in
+     `worker-classification.ts`). Kein Zwilling im Grenzen-Tool.
+   - **P1:** global stabile Grenz-Nummern (Option B) — Migration `0016`,
+     `review_message_ordinals`, append-only; Anzeige „Grenze N", Situationen
+     über ihre Start-Grenze. Später gehärtet (Multi-Row-INSERT, nicht-fatal),
+     damit der Erst-Backfill den 4-Jahres-Chat in einem Durchgang schafft.
+   - **P2:** `filteredSequence`-Cache (Fingerprint aus Chunk-Anzahl + Bytelänge)
+     + inkrementelles `putMarks` (Diff statt DELETE-all). Indizes geprüft: keine
+     fehlenden.
+   - **P3/P3b:** F1 bei GT=0 und κ/α bei degenerierter Klasse sind jetzt
+     **n/a (null)**, nicht 0 bzw. 1; solche Fälle fließen nicht in die Aggregate.
+   - **P9:** feste Klassencodes N1–N10 / P1–P9 / E1 / Z1–Z3, an `pattern_key`
+     gebunden. **P7:** Polling eines billigen Zustands-Stempels (`/state`),
+     Blindheit gewahrt. **P8/P5/P6:** mobile Kopfzeile, dicke Grenzlinien,
+     iPad-Tastatur (`inputmode="numeric"`).
+2. **Vereinheitlichung Navigation & Übersichten** (`946c280`): Nav auf
+   `Segmentierung · Klassifizierung · Upload · Settings`; beide Werkzeuge mit
+   identischem Muster (Nav → Übersicht → Einheit → „Zur Übersicht"); neue
+   gemeinsame `overview.css`; Klassifizierungs-Übersicht mit
+   offene-zuerst-Filter, 25/Seite, Σ/Ø-Aggregatkopf; klebende Kopfzeilen;
+   Spaltengruppen; mobil ohne Querscrollen (bei 360/375/393px nachgemessen).
+   Dabei gefunden: `body.cl .ov-row` in `classification.css` überschrieb wegen
+   höherer Spezifität die gemeinsame Komponente — entfernt.
+3. **UI-Nachtrag + Grenznummer am Ort** (`af2e3c0`, `1f27c58`): Gruppen heißen
+   Negativ-/Positiv-Marker (passend zu N/P), Gruppentitel groß und kräftig
+   (drei Regeln zu einer zusammengeführt), selbstimplizierend überall als
+   gelbes ⚠. Grenznummer steht jetzt dort, wo die Grenze liegt: Trenner
+   „Grenze N" über der ersten Nachricht einer Situation, Nummer an jeder
+   gesetzten Grenzlinie der Runden-Ansicht, Nummer an der strittigen Linie im
+   Streitfall. Dafür neue **gemeinsame** `seam.css`; `.dp-seam` und
+   `.dp-dispute-seam` sind ersatzlos entfallen. Beim Zusammenführen behoben:
+   die Prüferfarb-Regel war spezifischer als die Streitfall-Regel — eine
+   strittige Naht wäre türkis statt rot geblieben. `dashboard.html/.css/.js`
+   entfernt (verwaist); die Weiterleitung `/dashboard.html` bleibt für alte
+   Lesezeichen.
 
 **Morgen zuerst:**
-1. **Lena klärt die 14 offenen Streitfälle** in Runden 13–17 (Doppelprüfung,
-   Runden 13/14/15/16/17 durchgehen — sie tauchen auch automatisch in der
-   Übersicht auf, da unvollständig). Danach `dispute-check?rounds=13-17`
-   erneut aufrufen: openCount sollte auf 0 fallen. **Noch nicht erledigt.**
-2. **Validierungs-Split ein paar Mal laufen lassen** (Settings → „Validierung
-   starten"): bei ~26–31 Runden ist der Validierungs-Teil nur ~8–9 Runden
-   (< 10, Tool warnt selbst) — mehrere Läufe zeigen, ob `f1_train`/`f1_validate`
-   stabil sind oder springen. Ergebnis mit Philipp einordnen.
-3. **Optimizer neu trainieren** steht weiterhin aus (Settings → „Neu
-   trainieren") — bisherige `segment_optimizer_runs` liefen z. T. mit falscher
-   Toleranz und sind nicht mehr aussagekräftig.
+1. **Live-Durchgang auf den echten Geräten** (nur Philipp/Lena können das, ich
+   habe keine Session): App öffnen (ggf. zweimal — der Service Worker liefert
+   stale-while-revalidate) und prüfen: (a) Klassifizierungs-Übersicht **lädt**
+   überhaupt wieder (das war der Blocker), (b) Trenner „Grenze N" über der
+   ersten Nachricht einer Situation, (c) Nummern an den Grenzlinien in Runden-
+   und Streitfall-Ansicht, (d) Übersichten auf dem iPhone ohne Querscrollen mit
+   klebender Kopfzeile, (e) eine Runde öffnen, Grenze setzen/zurücknehmen,
+   Streitfall ansehen — nichts kaputt.
+2. **Ordinal-Backfill gegenprüfen:** läuft automatisch beim ersten Laden der
+   Übersicht. Falls Nummern fehlen, in der Browser-Konsole als Philipp:
+   `fetch('/api/admin/backfill-ordinals',{method:'POST',credentials:'same-origin'}).then(r=>r.json()).then(console.log)`
+   → `numbered` sollte ≈ `sequenceLength` sein.
+3. **Danach erst der eigentliche Klassifizierungs-Start:** `prepare-sample` auf
+   echten Daten (Klassifizierung → „Stichprobe vorbereiten", nur Philipp).
 
 **Offene Punkte:**
-- 14 offene Streitfälle 13–17 warten auf Lenas Votes (s. o.).
-- Validierungs-Split noch nicht real ausgeführt/eingeordnet (s. o.).
-- Optimizer-Neutraining ausstehend (s. o.).
-- Push-Opt-in beider Geräte + Zustell-Test — noch nicht erfolgt (Philipp:
-  Home-Screen-Icon neu anlegen → Benachrichtigungen erlauben; Lena:
-  dasselbe auf ihrem iPad; dann wechselseitig eine Runde abgeben und prüfen).
-- Übersicht-Redesign + neues Prüfstand-Icon auf echten Geräten noch von
-  Philipp/Lena zu bestätigen.
-- Playwright-Visual-Snapshots (`tests/visual/boundary-pairs.visual.spec.mjs`)
-  brauchen nach den UI-Umbauten ein `--update-snapshots` — nicht Teil von
-  `npm run check`, daher unkritisch.
-- Backlog (kein Auftrag): adaptives Segmentierungstool für neue Paare, Konzept
-  in `KONZEPT_Adaptive_Segmentierung.md` — vier Produktentscheidungen erst zu
-  klären, eigene Sitzung wert.
+- Zwei Design-Entscheidungen warten auf Philipps Urteil (beides Einzeiler):
+  Situationstrenner nutzt `data-owner="both"` (Türkis/Rosa-Wechselmuster statt
+  einzelner Prüferfarbe); der „Öffnen"-Knopf der Segmentierung ist entfallen,
+  das Sprungfeld öffnet per Enter/Verlassen.
+- 14 offene Streitfälle in Runden 13–17 warten weiterhin auf Lenas Votes
+  (`GET /api/admin/dispute-check?rounds=13-17` zum Nachzählen).
+- Validierungs-Split und Optimizer-Neutraining weiterhin nicht ausgeführt
+  (Settings-Seite).
+- Push-Opt-in beider Geräte + Zustell-Test weiterhin offen.
+- LLM-Dritt-Rater ist gebaut, aber noch nie auf echten Daten gelaufen
+  (`ANTHROPIC_API_KEY` als Secret nötig).
+- Playwright-Visual-Snapshots brauchen nach den UI-Umbauten ein
+  `--update-snapshots` (nicht Teil von `npm run check`, daher unkritisch).
+- Kein PR offen; alles liegt auf `claude/klassifizierung-musterklassen-plplo4`.
+- Backlog (kein Auftrag): adaptives Segmentierungstool, Konzept in
+  `KONZEPT_Adaptive_Segmentierung.md`.
