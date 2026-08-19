@@ -420,9 +420,14 @@
         // Zeitdifferenz immer zeigen, auch wenn jemand hier markiert hat.
         const pause = pauseLabel(before, message);
         const label = tags.length ? `${pause} · ${tags.join(' · ')}` : pause;
-        const markedClass = seam?.philipp && seam?.lena ? ' marked-both'
-          : seam?.philipp ? ' marked-philipp'
-          : seam?.lena ? ' marked-lena' : '';
+        // Punkt 5: nur ECHTE Grenzen (cut) bekommen die dicke Prüferfarb-Linie;
+        // „unsicher" (doubt) wird über das Label gezeigt, aber nicht als Grenze
+        // hervorgehoben.
+        const pCut = seam?.philipp === 'cut';
+        const lCut = seam?.lena === 'cut';
+        const markedClass = pCut && lCut ? ' marked-both'
+          : pCut ? ' marked-philipp'
+          : lCut ? ' marked-lena' : '';
 
         if (isCentral) {
           // Eigene Stimme steuert die Anzeige (Linie + Label), nicht der noch

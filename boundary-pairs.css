@@ -160,15 +160,18 @@ body.dp {
   color: var(--tw-text-muted);
   top: 8px;
 }
+/* Punkt 5: echte Grenzen (cut) dick und in Prüferfarbe — Türkis Philipp, Rosa
+   Lena. „unsicher" (doubt) und unmarkierte Nähte bleiben dünn/andersfarbig,
+   damit nur echte Grenzen hervorstechen. */
 [data-reviewer="Philipp"] .dp-seam[data-mark="cut"] { background: var(--tw-philipp-surface); }
-[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .line { background: var(--tw-philipp); height: 2px; }
+[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .line { background: var(--tw-philipp); height: 3px; border-radius: 2px; }
 [data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .label { background: var(--tw-philipp-surface); color: var(--tw-philipp-text); font-weight: 700; }
 [data-reviewer="Lena"] .dp-seam[data-mark="cut"] { background: var(--tw-lena-surface); }
-[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .line { background: var(--tw-lena); height: 2px; }
+[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .line { background: var(--tw-lena); height: 3px; border-radius: 2px; }
 [data-reviewer="Lena"] .dp-seam[data-mark="cut"] .label { background: var(--tw-lena-surface); color: var(--tw-lena-text); font-weight: 700; }
-/* Agreement lines: dashed pattern with alternating Philipp (Türkis) and Lena (Rosa) */
+/* Agreement lines: dickes gestricheltes Muster, abwechselnd Philipp (Türkis)/Lena (Rosa) */
 .dp-seam[data-agreement="true"] .line {
-  height: 2px;
+  height: 3px;
   background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
 }
 .dp-seam[data-mark="doubt"] { background: var(--tw-status-open-surface); }
@@ -237,12 +240,15 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-seam.central .label {
   color: var(--tw-status-unclear); font-weight: 700; background: var(--tw-status-unclear-surface);
 }
-.dp-dispute-seam.marked-philipp .line { background: var(--tw-philipp); }
+/* Punkt 5: echte Grenzen (cut) im Streitfall-Kontext dick und in Prüferfarbe —
+   wie in der Runden-Ansicht. Nur cut-Marken tragen diese Klassen (siehe
+   disputeContextHtml), doubt/unmarkiert bleiben dünn. */
+.dp-dispute-seam.marked-philipp .line { background: var(--tw-philipp); height: 3px; border-radius: 2px; }
 .dp-dispute-seam.marked-philipp .label { color: var(--tw-philipp-text); background: var(--tw-philipp-surface); }
-.dp-dispute-seam.marked-lena .line { background: var(--tw-lena); }
+.dp-dispute-seam.marked-lena .line { background: var(--tw-lena); height: 3px; border-radius: 2px; }
 .dp-dispute-seam.marked-lena .label { color: var(--tw-lena-text); background: var(--tw-lena-surface); }
 .dp-dispute-seam.marked-both .line {
-  height: 2px;
+  height: 3px;
   background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
 }
 .dp-dispute-seam.marked-both .label { color: var(--tw-status-open); background: var(--tw-status-open-surface); }

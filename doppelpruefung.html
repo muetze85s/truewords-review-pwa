@@ -33,7 +33,10 @@
       <button type="button" id="dp-round-prev" class="dp-round-step" aria-label="Vorherige Runde">←</button>
       <label class="dp-round-field">
         <span>Runde</span>
-        <input type="number" id="dp-round-input" min="1" step="1" value="1">
+        <!-- Punkt 6: type="text" + inputmode="numeric" statt type="number" —
+             auf iPad/iOS-PWA öffnet type="number" die Tastatur nicht zuverlässig
+             ganz; inputmode="numeric" liefert den Ziffernblock stabil. -->
+        <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" id="dp-round-input" value="1">
       </label>
       <button type="button" id="dp-round-next" class="dp-round-step" aria-label="Nächste Runde">→</button>
     </div>
