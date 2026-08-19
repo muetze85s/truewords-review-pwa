@@ -2835,6 +2835,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/marks-backfill-plan'
     && url.pathname !== '/api/admin/marks-backfill-apply'
     && url.pathname !== '/api/admin/backfill-ordinals'
+    && url.pathname !== '/api/admin/segment-diagnose'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2914,6 +2915,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/backfill-ordinals' && request.method === 'POST') {
       if (!user.canUpload) return error('Nur der Admin darf die Ordinalzahlen backfillen.', 403);
       return await backfillOrdinals(env, dataset);
+    }
+
+    if (url.pathname === '/api/admin/segment-diagnose' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Segment-Diagnose sehen.', 403);
+      return await segmentDiagnose(env, dataset, url);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve|\/state)?$/u);
@@ -3222,6 +3228,294 @@ async function backfillOrdinals(env: Env, dataset: DatasetRow): Promise<Response
     'SELECT COUNT(*) AS c, COALESCE(MAX(ordinal), 0) AS m FROM review_message_ordinals WHERE dataset_id = ?1',
   ).bind(dataset.id).first<{ c: number; m: number }>();
   return json({ ok: true, dataset: dataset.id, sequenceLength: sequence.length, numbered: Number(row?.c || 0), maxOrdinal: Number(row?.m || 0) });
+}
+
+/**
+ * GET /api/admin/segment-diagnose — Read-only-Diagnose der Situations-Herkunft
+ * (nur canUpload). Beantwortet Block 2 der Handoff-Frage: aus welchem Grenzsatz
+ * stammen die `review_situations`, und wie viele haben eine große interne
+ * Zeitlücke (Kennzeichen einer Annotationslücke)?
+ *
+ * KEINE Datenänderung — ausschließlich SELECTs. Es wird KEIN Nachrichtentext
+ * ausgegeben (nur Ordinalzahl, Zeitstempel, Absender, Art).
+ *
+ * Grundlage: Eine Runde ist ein zusammenhängender Ausschnitt der globalen
+ * `filteredSequence`; eine Situation ist ein zusammenhängender Unterausschnitt
+ * davon. Damit ist die interne Zeitlücke einer Situation die größte Differenz
+ * zweier aufeinanderfolgender Nachrichten zwischen ihrer Start- und
+ * End-Nachricht in der globalen Folge — ohne die Runde erneut zu parsen.
+ *
+ * Übersicht (ohne Drill-down-Parameter): Verteilung der internen Maximallücken
+ *   über alle vorbereiteten Situationen (+ Validierungs-Teilmenge) und die 25
+ *   Situationen mit der größten Lücke.
+ * Drill-down (?situation=<id> | ?round=<r>&index=<i> | ?ordinal=<start-ordinal>):
+ *   alle Nachrichten der Situation mit Lücken sowie – je interner Naht – ob in
+ *   review_boundary_marks / review_boundary_resolutions etwas steht (wessen,
+ *   welcher Zustand). Leer + leer = niemand hat dort je eine Grenze gesehen
+ *   (Annotationslücke).
+ */
+async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+  const sequence = await filteredSequence(env, dataset.id);
+  const idIndex = new Map<string, number>();
+  const secs: number[] = new Array(sequence.length);
+  for (let i = 0; i < sequence.length; i += 1) {
+    idIndex.set(rawId(sequence[i]), i);
+    secs[i] = messageSeconds(sequence[i]);
+  }
+
+  const situationRows = (await env.DB.prepare(`
+    SELECT id, round, situation_index, start_message_id, end_message_id, in_validation_sample
+    FROM review_situations WHERE dataset_id = ?1 ORDER BY round, situation_index
+  `).bind(dataset.id).all<{
+    id: number; round: number; situation_index: number;
+    start_message_id: string; end_message_id: string; in_validation_sample: number;
+  }>()).results || [];
+
+  // Ordinalzahlen für Start-/End-Nachrichten (billiger indizierter Lookup).
+  const ordIds: string[] = [];
+  for (const situation of situationRows) ordIds.push(situation.start_message_id, situation.end_message_id);
+  const ordinals = await messageOrdinals(env, dataset.id, ordIds);
+
+  const OVER60 = 3600;
+  const OVER180 = 10800;
+
+  type Analyzed = {
+    id: number; round: number; situationIndex: number; inValidationSample: number;
+    startOrdinal: number | null; endOrdinal: number | null;
+    startUnix: number | null; endUnix: number | null; messageCount: number | null;
+    maxGapSeconds: number | null; maxGapAfterOrdinal: number | null; resolvable: boolean;
+  };
+
+  const analyzed: Analyzed[] = situationRows.map((situation) => {
+    const startIdx = idIndex.get(situation.start_message_id);
+    const endIdx = idIndex.get(situation.end_message_id);
+    const base: Analyzed = {
+      id: situation.id, round: situation.round, situationIndex: situation.situation_index,
+      inValidationSample: situation.in_validation_sample,
+      startOrdinal: ordinals.get(situation.start_message_id) ?? null,
+      endOrdinal: ordinals.get(situation.end_message_id) ?? null,
+      startUnix: null, endUnix: null, messageCount: null,
+      maxGapSeconds: null, maxGapAfterOrdinal: null, resolvable: false,
+    };
+    // Nicht auffindbar (z. B. additiv übertragene Runde) → nicht in die
+    // Lücken-Statistik, aber gezählt.
+    if (startIdx === undefined || endIdx === undefined || endIdx < startIdx) return base;
+    let maxGap = 0;
+    let maxAt = -1;
+    for (let i = startIdx; i < endIdx; i += 1) {
+      const gap = secs[i + 1] - secs[i];
+      if (gap > maxGap) { maxGap = gap; maxAt = i + 1; }
+    }
+    return {
+      ...base,
+      resolvable: true,
+      startUnix: secs[startIdx],
+      endUnix: secs[endIdx],
+      messageCount: endIdx - startIdx + 1,
+      maxGapSeconds: maxGap,
+      maxGapAfterOrdinal: maxAt >= 0 ? (ordinals.get(rawId(sequence[maxAt])) ?? null) : null,
+    };
+  });
+
+  // ---- Drill-down: eine einzelne Situation zerlegen -----------------------
+  const wantSituation = url.searchParams.get('situation');
+  const wantRound = url.searchParams.get('round');
+  const wantIndex = url.searchParams.get('index');
+  const wantOrdinal = url.searchParams.get('ordinal');
+  if (wantSituation || (wantRound && wantIndex) || wantOrdinal) {
+    let target: (typeof situationRows)[number] | null = null;
+    if (wantSituation) {
+      target = situationRows.find((situation) => situation.id === Number(wantSituation)) || null;
+    } else if (wantRound && wantIndex) {
+      target = situationRows.find(
+        (situation) => situation.round === Number(wantRound) && situation.situation_index === Number(wantIndex),
+      ) || null;
+    } else if (wantOrdinal) {
+      target = situationRows.find(
+        (situation) => (ordinals.get(situation.start_message_id) ?? -1) === Number(wantOrdinal),
+      ) || null;
+    }
+    if (!target) return error('Situation nicht gefunden.', 404);
+
+    const startIdx = idIndex.get(target.start_message_id);
+    const endIdx = idIndex.get(target.end_message_id);
+    if (startIdx === undefined || endIdx === undefined) {
+      return json({
+        ok: true, mode: 'situation', dataset: dataset.id, situation: { ...target },
+        note: 'Start-/End-Nachricht in der aktuellen Folge nicht auffindbar (evtl. übertragene Runde).',
+      });
+    }
+
+    // Markierungen + Auflösungen dieser Runde einmal laden, nach Naht gruppieren.
+    const markRows = (await env.DB.prepare(`
+      SELECT reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, target.round).all<{ reviewer: string; seam_message_id: string; mark: string }>()).results || [];
+    const resRows = (await env.DB.prepare(`
+      SELECT seam_message_id, decision, note, decided_by FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, target.round).all<{ seam_message_id: string; decision: string; note: string | null; decided_by: string }>()).results || [];
+    const marksBySeam = new Map<string, Array<{ reviewer: string; mark: string }>>();
+    for (const mark of markRows) {
+      const list = marksBySeam.get(mark.seam_message_id) || [];
+      list.push({ reviewer: mark.reviewer, mark: mark.mark });
+      marksBySeam.set(mark.seam_message_id, list);
+    }
+    const resBySeam = new Map<string, Array<{ decidedBy: string; decision: string; note: string | null }>>();
+    for (const res of resRows) {
+      const list = resBySeam.get(res.seam_message_id) || [];
+      list.push({ decidedBy: res.decided_by, decision: res.decision, note: res.note });
+      resBySeam.set(res.seam_message_id, list);
+    }
+
+    const messages: unknown[] = [];
+    const seams: unknown[] = [];
+    for (let i = startIdx; i <= endIdx; i += 1) {
+      const id = rawId(sequence[i]);
+      const view = toView(sequence[i]);
+      messages.push({
+        ordinal: ordinals.get(id) ?? null,
+        unix: secs[i],
+        iso: secs[i] ? new Date(secs[i] * 1000).toISOString() : null,
+        from: view.from,
+        kind: view.kind,
+        gapBeforeSeconds: i > startIdx ? secs[i] - secs[i - 1] : null,
+      });
+      if (i > startIdx) {
+        const seamMarks = marksBySeam.get(id) || [];
+        const seamRes = resBySeam.get(id) || [];
+        seams.push({
+          seamMessageId: id,
+          afterOrdinal: ordinals.get(id) ?? null,
+          gapSeconds: secs[i] - secs[i - 1],
+          marks: seamMarks,
+          resolutions: seamRes,
+          // Kein Cut in der kombinierten Fassung ⇒ beide leer = Annotationslücke
+          // (niemand hat hier je eine Grenze gesehen); markiert+aufgelöst-no_cut
+          // = bewusst zusammengelassen.
+          annotationGap: seamMarks.length === 0 && seamRes.length === 0,
+        });
+      }
+    }
+    const analyzedTarget = analyzed.find((entry) => entry.id === target!.id) || null;
+    return json({
+      ok: true, mode: 'situation', dataset: dataset.id,
+      situation: {
+        id: target.id, round: target.round, situationIndex: target.situation_index,
+        inValidationSample: target.in_validation_sample,
+        startOrdinal: ordinals.get(target.start_message_id) ?? null,
+        endOrdinal: ordinals.get(target.end_message_id) ?? null,
+        maxGapSeconds: analyzedTarget?.maxGapSeconds ?? null,
+      },
+      messages,
+      seams,
+    });
+  }
+
+  // ---- Übersicht: Verteilung der internen Maximallücken -------------------
+  const distribution = (subset: Analyzed[]) => {
+    const resolvable = subset.filter((entry) => entry.resolvable);
+    const over60 = resolvable.filter((entry) => (entry.maxGapSeconds ?? 0) > OVER60).length;
+    const over180 = resolvable.filter((entry) => (entry.maxGapSeconds ?? 0) > OVER180).length;
+    const n = resolvable.length;
+    return {
+      prepared: subset.length,
+      resolvable: n,
+      unresolvable: subset.length - n,
+      over60min: over60,
+      over60minShare: n ? over60 / n : null,
+      over180min: over180,
+      over180minShare: n ? over180 / n : null,
+    };
+  };
+
+  const worst = analyzed
+    .filter((entry) => entry.resolvable)
+    .sort((a, b) => (b.maxGapSeconds ?? 0) - (a.maxGapSeconds ?? 0))
+    .slice(0, 25)
+    .map((entry) => ({
+      id: entry.id, round: entry.round, situationIndex: entry.situationIndex,
+      inValidationSample: entry.inValidationSample,
+      startOrdinal: entry.startOrdinal, endOrdinal: entry.endOrdinal,
+      messageCount: entry.messageCount,
+      startIso: entry.startUnix ? new Date(entry.startUnix * 1000).toISOString() : null,
+      endIso: entry.endUnix ? new Date(entry.endUnix * 1000).toISOString() : null,
+      maxGapSeconds: entry.maxGapSeconds,
+      maxGapMinutes: entry.maxGapSeconds !== null ? Math.round(entry.maxGapSeconds / 60) : null,
+      maxGapAfterOrdinal: entry.maxGapAfterOrdinal,
+    }));
+
+  // ---- 2.3: Segmentlängen + Lücken zwischen aufeinanderfolgenden Segmenten -
+  const quantiles = (values: number[]) => {
+    if (!values.length) return { n: 0, min: null, q1: null, median: null, q3: null, max: null };
+    const sorted = [...values].sort((a, b) => a - b);
+    const at = (p: number) => {
+      const idx = (sorted.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      if (lo === hi) return sorted[lo];
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+    };
+    return { n: sorted.length, min: sorted[0], q1: at(0.25), median: at(0.5), q3: at(0.75), max: sorted[sorted.length - 1] };
+  };
+  const countOver = (values: number[], threshold: number) => values.filter((value) => value > threshold).length;
+  const shareOver = (values: number[], threshold: number) => (values.length ? countOver(values, threshold) / values.length : null);
+
+  const resolvableSegs = analyzed.filter((entry) => entry.resolvable);
+  const lengthMessages = resolvableSegs.map((entry) => entry.messageCount as number);
+  const lengthSeconds = resolvableSegs.map((entry) => (entry.endUnix as number) - (entry.startUnix as number));
+
+  // Lücke zwischen zwei aufeinanderfolgenden Segmenten DERSELBEN Runde = der
+  // Zeitabstand an der von den Prüfern gesetzten Grenze (die Segmente einer
+  // Runde partitionieren sie zusammenhängend). So misst die Verteilung genau
+  // die Abstände AN den gezogenen Schnitten.
+  const byRound = new Map<number, Analyzed[]>();
+  for (const entry of resolvableSegs) {
+    const list = byRound.get(entry.round) || [];
+    list.push(entry);
+    byRound.set(entry.round, list);
+  }
+  const interSegmentGaps: number[] = [];
+  for (const list of byRound.values()) {
+    list.sort((a, b) => a.situationIndex - b.situationIndex);
+    for (let i = 1; i < list.length; i += 1) {
+      interSegmentGaps.push((list[i].startUnix as number) - (list[i - 1].endUnix as number));
+    }
+  }
+  const H6 = 21600;
+  const H12 = 43200;
+  const H24 = 86400;
+  const H72 = 259200;
+
+  return json({
+    ok: true, mode: 'overview', dataset: dataset.id,
+    sequenceLength: sequence.length,
+    origin:
+      'review_situations stammen aus combinedBoundaryForRound → compareReviewers(review_boundary_marks) '
+      + '+ agreeResolutions(review_boundary_resolutions); deriveSituations ist ein reiner Positions-Split '
+      + 'ohne Zeit-/Schwellwertlogik. Große interne Lücken sind daher Annotationslücken (menschliche Grenzen), '
+      + 'kein Parameterfehler eines Algorithmus.',
+    internalGap: {
+      all: distribution(analyzed),
+      validationSample: distribution(analyzed.filter((entry) => entry.inValidationSample === 1)),
+      worst,
+    },
+    // 2.3 — Grundlage für die Ketten-Schwellen in Block 3 (rein informativ).
+    segments: {
+      count: resolvableSegs.length,
+      lengthMessages: quantiles(lengthMessages),
+      lengthSeconds: quantiles(lengthSeconds),
+      interSegmentGapSeconds: {
+        ...quantiles(interSegmentGaps),
+        over6h: countOver(interSegmentGaps, H6),
+        over6hShare: shareOver(interSegmentGaps, H6),
+        over12h: countOver(interSegmentGaps, H12),
+        over12hShare: shareOver(interSegmentGaps, H12),
+        over24h: countOver(interSegmentGaps, H24),
+        over24hShare: shareOver(interSegmentGaps, H24),
+        over72h: countOver(interSegmentGaps, H72),
+        over72hShare: shareOver(interSegmentGaps, H72),
+      },
+    },
+  });
 }
 
 export default {
