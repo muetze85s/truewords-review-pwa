@@ -12,7 +12,7 @@ Doppelprüfung vergleicht ihre Grenzen und misst die Übereinstimmung.
 - **Assets:** statische Dateien aus `./dist`, Binding `ASSETS`, SPA-Fallback, `run_worker_first: true`.
 - **Sprachen:** TypeScript 5.9 (Worker) + reines JavaScript (Browser) + `.mjs`-Logikmodule mit `.d.mts`-Typdeklarationen (in Node testbar, vom Worker importiert).
 - **Build/Deploy:** Wrangler ^4.92 (`wrangler.jsonc`).
-- **Abhängigkeiten:** `embla-carousel` 8.6 (Karussell). Dev: `@cloudflare/workers-types`, `@playwright/test`, `typescript`, `wrangler`.
+- **Abhängigkeiten:** `embla-carousel` 8.6 (Karussell). Dev: `@cloudflare/workers-types`, `typescript`, `wrangler`.
 - **Web-Push:** VAPID (ES256-JWT), RFC 8291/8188 `aes128gcm`-Payload-Verschlüsselung, ECDH P-256, HKDF — alles über Web Crypto (`crypto.subtle`), ohne externe Bibliothek (`push-send.mjs`).
 - **Zeitzonen:** über `Intl.DateTimeFormat` (Europe/Berlin mit Auto-Sommerzeit, Asia/Bangkok fix +7). Zeiten werden als „HH:MM in Zeitzone" gespeichert, nie als feste UTC-Zahl.
 
@@ -218,8 +218,6 @@ von Navigation und Übersichten, und den UI-Nachtrag inkl. Grenznummer am Ort.
 - Push-Opt-in beider Geräte + Zustell-Test weiterhin offen.
 - LLM-Dritt-Rater ist gebaut, aber noch nie auf echten Daten gelaufen
   (`ANTHROPIC_API_KEY` als Secret nötig).
-- Playwright-Visual-Snapshots brauchen nach den UI-Umbauten ein
-  `--update-snapshots` (nicht Teil von `npm run check`, daher unkritisch).
 - Kein PR offen; alles liegt auf `claude/klassifizierung-musterklassen-plplo4`.
 - Backlog (kein Auftrag): adaptives Segmentierungstool, Konzept in
   `KONZEPT_Adaptive_Segmentierung.md`.
