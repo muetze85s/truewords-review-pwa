@@ -82,7 +82,13 @@ export function cohenKappaBinary(pairs) {
   const pA = (n11 + n10) / n;
   const pB = (n11 + n01) / n;
   const pe = pA * pB + (1 - pA) * (1 - pB);
-  const kappa = pe >= 1 ? 1 : (po - pe) / (1 - pe);
+  // Punkt 3b: pe >= 1 heißt beide Prüfer sind konstant UND gleich (beide immer
+  // „nein" = Klasse kommt nie vor, oder beide immer „ja"). Kappa ist dann 0/0,
+  // also unbestimmt → n/a (null), NICHT 1. So verschwindet die Klasse aus den
+  // Ampeln/Aggregaten, statt eine Scheingenauigkeit von κ=1 vorzutäuschen.
+  // (Nur EIN Prüfer konstant, der andere mit Varianz, ist ein echter Wert —
+  // meist κ=0 — und bleibt erhalten.)
+  const kappa = pe >= 1 ? null : (po - pe) / (1 - pe);
   // Keine Varianz bei mindestens einem Prüfer → Kappa ohne Aussagekraft.
   const degenerate = pA === 0 || pA === 1 || pB === 0 || pB === 1;
   return { n, agreement: po, kappa, degenerate, n11, n10, n01, n00, aPositives: n11 + n10, bPositives: n11 + n01 };
@@ -202,7 +208,10 @@ export function agreeClassificationResolutions(rows, keyField = 'pattern_key') {
  *
  *   α = 1 − D_o / D_e,   D_o = (o01+o10)/n,   D_e = 2·n0·n1 / (n·(n−1))
  *
- * Ohne Varianz (alle gleich) ist α nicht definiert → 1 zurück, degenerate=true.
+ * Ohne Varianz (alle gleich, z. B. Klasse kommt nie vor) ist α 0/0 und damit
+ * nicht definiert → n/a (null), degenerate=true. (Punkt-3b-konsistent zur
+ * Kappa-Behandlung: keine Scheingenauigkeit von α=1 für eine nie auftretende
+ * Klasse.)
  */
 export function krippendorffAlphaBinary(units) {
   const o = [[0, 0], [0, 0]];
@@ -223,9 +232,9 @@ export function krippendorffAlphaBinary(units) {
   const n0 = o[0][0] + o[0][1];
   const n1 = o[1][0] + o[1][1];
   const observedDisagreement = o[0][1] + o[1][0]; // = Do·n
-  if (n0 === 0 || n1 === 0) return { alpha: 1, n, degenerate: true };
+  if (n0 === 0 || n1 === 0) return { alpha: null, n, degenerate: true };
   const expectedDisagreement = (2 * n0 * n1) / (n - 1); // = De·n
-  if (expectedDisagreement === 0) return { alpha: 1, n, degenerate: true };
+  if (expectedDisagreement === 0) return { alpha: null, n, degenerate: true };
   return { alpha: 1 - observedDisagreement / expectedDisagreement, n, degenerate: false };
 }
 

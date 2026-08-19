@@ -86,9 +86,10 @@ const KEYS = ['whataboutism_candidate', 'topic_shift', 'repair_offer'];
 }
 
 {
-  // Keine Varianz (alle 0) → nicht definiert, als 1/degenerate gemeldet.
+  // Keine Varianz (alle 0, Klasse kommt nie vor) → 0/0, α n/a (null).
   const a = krippendorffAlphaBinary([[0, 0, 0], [0, 0]]);
   assert.equal(a.degenerate, true);
+  assert.equal(a.alpha, null, 'Punkt 3b: α ist n/a (null), nicht 1');
 }
 
 {

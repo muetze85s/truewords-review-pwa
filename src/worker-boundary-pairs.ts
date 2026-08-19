@@ -761,7 +761,8 @@ async function buildAgreementPayload(
       vsPhilipp: { agreementF1: agreementF1(vsPhilipp), kappa: cohensKappa(vsPhilipp, totalSeams) },
       vsLena: { agreementF1: agreementF1(vsLena), kappa: cohensKappa(vsLena, totalSeams) },
       // F1 = Automatik vs. GT (F0-Paare + geklärte Streitfälle) dieser Runde.
-      vsCombined: { f1: agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
+      // Punkt 3: ohne Grenz-Wahrheit (GT=0) ist F1 n/a (null), nicht 0.
+      vsCombined: { f1: combined.cuts.length === 0 ? null : agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
     },
     // Roh-Diagnose: wie viele Grenzen die Automatik überhaupt gesetzt hat, unabhängig
     // vom Vergleich. 0 bei >0 menschlichen Grenzen erklärt sofort eine 0.00-Übereinstimmung.
@@ -972,9 +973,14 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalPairs += comparison.pairs.length;
     totalOnlyPhilipp += comparison.onlyA.length;
     totalOnlyLena += comparison.onlyB.length;
-    totalAutoPairs += vsCombined.pairs.length;
-    totalAutoOnlyAuto += vsCombined.onlyA.length;
-    totalAutoOnlyCombined += vsCombined.onlyB.length;
+    // Punkt 3: Runden ohne Grenz-Wahrheit (GT=0) fließen NICHT ins F1-Aggregat
+    // ein (sonst zählte die Automatik dort nur „Fehltreffer" gegen eine leere
+    // Wahrheit). F0/GT-Summe bleiben davon unberührt.
+    if (combined.cuts.length > 0) {
+      totalAutoPairs += vsCombined.pairs.length;
+      totalAutoOnlyAuto += vsCombined.onlyA.length;
+      totalAutoOnlyCombined += vsCombined.onlyB.length;
+    }
     totalAutomaticBoundaries += automaticResult.boundaries.length;
     gtTotal += combined.cuts.length;
 
@@ -1149,14 +1155,19 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
           .map((b: { beforeEventId: string }) => positions.get(b.beforeEventId))
           .filter((p: number | undefined): p is number => p !== undefined);
         const vsCombined = pairSeams(autoPositions, combined.cuts, tolerance);
-        f1 = agreementF1(vsCombined);
+        // Punkt 3: Ohne Grenz-Wahrheit (GT=0) ist F1 nicht definiert → n/a
+        // (null), NICHT 0. Solche Runden zählen auch nicht ins F1-Aggregat.
+        // GT>0 und die Automatik trifft nichts = echte 0 (bleibt).
+        f1 = gtSize === 0 ? null : agreementF1(vsCombined);
 
         pooledPairs += comparison.pairs.length;
         pooledOnlyPhilipp += comparison.onlyA.length;
         pooledOnlyLena += comparison.onlyB.length;
-        pooledAutoPairs += vsCombined.pairs.length;
-        pooledAutoOnlyAuto += vsCombined.onlyA.length;
-        pooledAutoOnlyCombined += vsCombined.onlyB.length;
+        if (gtSize > 0) {
+          pooledAutoPairs += vsCombined.pairs.length;
+          pooledAutoOnlyAuto += vsCombined.onlyA.length;
+          pooledAutoOnlyCombined += vsCombined.onlyB.length;
+        }
         gtTotal += gtSize;
 
         const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));

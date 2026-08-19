@@ -59,10 +59,25 @@ import { QUALITY_FLAG_KEYS, isValidQualityFlag } from '../quality-flags.mjs';
 }
 
 {
-  // Beide sagen immer „nein" → keine Varianz, Kappa nicht aussagekräftig.
+  // Beide sagen immer „nein" (Klasse kommt nie vor) → 0/0, Kappa n/a.
   const stat = cohenKappaBinary([[0, 0], [0, 0], [0, 0]]);
   assert.equal(stat.agreement, 1, 'roh stimmen sie überein');
   assert.equal(stat.degenerate, true, 'aber ohne Varianz als degeneriert markiert');
+  assert.equal(stat.kappa, null, 'Punkt 3b: κ ist n/a (null), nicht 1');
+}
+
+{
+  // Beide sagen immer „ja" → ebenfalls 0/0, Kappa n/a.
+  const stat = cohenKappaBinary([[1, 1], [1, 1]]);
+  assert.equal(stat.kappa, null, 'Punkt 3b: konstant-gleich → κ n/a');
+  assert.equal(stat.degenerate, true);
+}
+
+{
+  // Nur EIN Prüfer konstant (A nie, B mit Varianz) → echter Wert (κ=0), bleibt.
+  const stat = cohenKappaBinary([[0, 1], [0, 0], [0, 1], [0, 0]]);
+  assert.ok(stat.kappa !== null, 'gemischt ist kein 0/0');
+  assert.ok(Math.abs(stat.kappa - 0) < 1e-9, 'A nie, B halb → κ=0');
 }
 
 {
