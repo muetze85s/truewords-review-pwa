@@ -265,6 +265,9 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .tw-set legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
 .tw-switch { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
 .tw-device { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+/* Begründung, warum der Testknopf aus ist — gleiche Optik wie die Gerätezeile. */
+.tw-test-hint { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+.tw-test-hint[hidden] { display: none; }
 
 /* Aufgabe 4: Live-F1-Leiste im Kopf der Doppelprüfung */
 .dp-live-f1 {

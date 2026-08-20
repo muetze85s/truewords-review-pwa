@@ -46,6 +46,28 @@
     $('philipp-device').textContent = dev.philippSubscribed
       ? 'Philipps Gerät(e): ✓ mindestens ein Gerät ist eingerichtet.'
       : 'Philipps Gerät(e): ✕ noch keins eingerichtet.';
+
+    // Ehrlicher Testknopf: Der Test geht an die registrierten Geräte der
+    // angemeldeten Person (die Seite steuert nur Philipp). Ist kein Gerät
+    // registriert, kann nichts ankommen — dann ist der Knopf aus und sagt,
+    // warum, statt einen Klick anzunehmen, der folgenlos bleibt.
+    setTestAvailability(Boolean(dev.philippSubscribed));
+  }
+
+  // Ob überhaupt ein Gerät registriert ist — der Testknopf richtet sich danach.
+  let testAvailable = false;
+
+  /** Testknopf an/aus + Begründung. Eine Stelle, damit Knopf und Text nie auseinanderlaufen. */
+  function setTestAvailability(hasDevice) {
+    testAvailable = Boolean(hasDevice);
+    const btn = $('test-push');
+    const hint = $('test-unavailable');
+    if (!btn || !hint) return;
+    btn.disabled = !hasDevice;
+    hint.hidden = hasDevice;
+    hint.textContent = hasDevice
+      ? ''
+      : 'Für dieses Konto ist noch kein Gerät für Push eingerichtet — zum Testen zuerst oben unter „Gerät-Einstellungen" die Benachrichtigungen auf diesem Gerät erlauben.';
   }
 
   async function load() {
@@ -207,6 +229,7 @@
   $('test-push').addEventListener('click', async () => {
     const btn = $('test-push');
     const result = $('test-result');
+    if (btn.disabled) return;
     btn.disabled = true;
     btn.textContent = 'Wird gesendet …';
     result.textContent = '';
@@ -221,8 +244,9 @@
       result.textContent = err.message || 'Fehler beim Senden.';
       result.style.color = 'var(--tw-status-unclear)';
     } finally {
-      btn.disabled = false;
       btn.textContent = 'Test-Push senden';
+      // Nicht blind wieder aktivieren: bleibt aus, solange kein Gerät registriert ist.
+      btn.disabled = !testAvailable;
     }
   });
 

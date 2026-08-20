@@ -45,7 +45,7 @@
         <div class="tw-push-modules">
           <fieldset class="tw-set tw-push-module">
             <legend>Philipp · Asia/Bangkok</legend>
-            <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> Benachrichtigungen Philipp aktiv</label>
+            <label class="tw-switch"><input type="checkbox" id="reminders_philipp_enabled"> Tägliche Erinnerungen Philipp aktiv</label>
             <div class="grid">
               <label class="tw-timefield">
                 <span><input type="checkbox" class="tw-time-on" data-for="philipp_time_1"> Zeit 1</span>
@@ -64,7 +64,7 @@
 
           <fieldset class="tw-set tw-push-module">
             <legend>Lena · Europe/Berlin</legend>
-            <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> Benachrichtigungen Lena aktiv</label>
+            <label class="tw-switch"><input type="checkbox" id="reminders_lena_enabled"> Tägliche Erinnerungen Lena aktiv</label>
             <div class="grid">
               <label class="tw-timefield">
                 <span><input type="checkbox" class="tw-time-on" data-for="lena_time_1"> Zeit 1</span>
@@ -89,13 +89,15 @@
             <li>Eine Benachrichtigung erscheint <b>nur, wenn an diesem Tag noch keine Runde abgegeben wurde</b> — es ist keine feste tägliche Erinnerung. Wer seine Runde schon abgegeben hat, wird an dem Tag nicht mehr erinnert.</li>
             <li>Erreicht die Ortszeit eine angehakte Zeit und die Runde ist noch offen, geht die Erinnerung <b>einmalig</b> raus (pro Zeit und Tag genau einmal).</li>
             <li>Die Streitfall-Schwelle gilt für beide gemeinsam — jede Person kann den Alarm für sich einzeln an- oder abschalten.</li>
+            <li><b>Es gibt derzeit keinen Hauptschalter.</b> Jeder Anlass wird einzeln geschaltet: tägliche Erinnerung, Benachrichtigung bei Abgabe, Streitfall-Alarm. Wer gar nichts bekommen möchte, schaltet alle drei ab — oder entfernt die Push-Erlaubnis auf dem Gerät.</li>
           </ul>
         </div>
 
         <fieldset class="tw-set" id="test-box">
           <legend>Test</legend>
-          <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Schickt eine Test-Benachrichtigung an alle deine registrierten Geräte.</p>
-          <button type="button" id="test-push" class="primary">Test-Push senden</button>
+          <p style="font-size:13px;color:var(--tw-text-muted);margin:0 0 8px">Schickt eine Test-Benachrichtigung an alle deine registrierten Geräte. Der Test geht unabhängig von den Anlass-Schaltern oben raus — er prüft nur die Zustellung.</p>
+          <button type="button" id="test-push" class="primary" disabled>Test-Push senden</button>
+          <p id="test-unavailable" class="tw-test-hint" hidden></p>
           <p id="test-result" style="font-size:13px;margin:6px 0 0"></p>
         </fieldset>
       </section>
