@@ -3885,7 +3885,7 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
   // Öffentlich gelten engere Klemmen — die Route ist ohne Login erreichbar.
   const maxBins = publicLimits ? 120 : 300;
   const maxKCap = publicLimits ? 4 : 8;
-  const maxIterCap = publicLimits ? 300 : 2000;
+  const maxIterCap = publicLimits ? 300 : 1000;
   const requestedBins = Number(url.searchParams.get('bins'));
   const bins = Number.isFinite(requestedBins) && requestedBins >= 5 && requestedBins <= maxBins
     ? Math.floor(requestedBins) : 60;
@@ -3896,8 +3896,13 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
   const maxIterations = Number.isFinite(requestedIterations) && requestedIterations >= 10 && requestedIterations <= maxIterCap
     ? Math.floor(requestedIterations) : 300;
 
+  const scopeParam = url.searchParams.get('scope');
+  const yearParam = url.searchParams.get('year');
+  const onlyYear = yearParam && /^\d{4}$/u.test(yearParam) ? yearParam : null;
+  const overallOnly = scopeParam === 'overall';
+
   const fingerprint = await sequenceFingerprint(env, dataset.id);
-  const cacheKey = `${dataset.id}|${bins}|${maxK}|${maxIterations}|${wantsHtml ? 'html' : 'json'}`;
+  const cacheKey = `${dataset.id}|${bins}|${maxK}|${maxIterations}|${overallOnly ? 'overall' : (onlyYear || 'all')}|${wantsHtml ? 'html' : 'json'}`;
   const cached = gapMixtureCache.get(cacheKey);
   if (cached && cached.fingerprint === fingerprint) {
     return new Response(cached.body, { status: 200, headers: cached.html ? HTML_HEADERS : JSON_HEADERS });
@@ -3923,8 +3928,13 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     byYearValues.set(year, list);
   }
 
-  const overall = mixtureBlock(overallGaps.values, bins, maxK, maxIterations);
-  const years = [...byYearValues.keys()].sort();
+  // Zuschnitt: nur ein Jahr → Gesamtblock überspringen; nur Gesamt → Jahre
+  // überspringen. So bleibt auch ein Lauf mit hohem Iterationslimit im
+  // CPU-Budget eines einzelnen Worker-Aufrufs.
+  const overall = onlyYear
+    ? mixtureBlock([], bins, 1, 1)
+    : mixtureBlock(overallGaps.values, bins, maxK, maxIterations);
+  const years = overallOnly ? [] : [...byYearValues.keys()].sort().filter((year) => !onlyYear || year === onlyYear);
   const byYear = years.map((year) => ({
     year,
     ...mixtureBlock(byYearValues.get(year) || [], bins, maxK, maxIterations),
@@ -4044,10 +4054,10 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
         die einzigen Schwellen, die aus den Daten selbst kommen.</p>
     </div>
 
-    ${section('Alle Jahre', overall)}
+    ${onlyYear ? '' : `${section('Alle Jahre', overall)}
 
     <h3>Histogramm (${bins} Bins über log₁₀, Beschriftung = Beginn des Bins)</h3>
-    ${histogramBars(overall)}
+    ${histogramBars(overall)}`}
 
     ${byYear.map((block) => section(`Kalenderjahr ${block.year}`, block)).join('')}
 

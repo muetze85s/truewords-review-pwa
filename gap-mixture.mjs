@@ -85,7 +85,11 @@ function quantileSorted(sorted, p) {
  */
 export function fitGaussianMixture(values, k, options = {}) {
   const maxIterations = options.maxIterations ?? 300;
-  const tolerance = options.tolerance ?? 1e-8;
+  // Relative Toleranz: konvergiert, wenn sich die Log-Likelihood um weniger
+  // als tolerance·max(1, |logL|) ändert. Eine absolute Schwelle (früher 1e-8)
+  // ist bei |logL| in den Zehntausenden nie erreichbar — die Fits liefen dann
+  // grundlos bis zum Iterationslimit und galten als „nicht konvergiert".
+  const tolerance = options.tolerance ?? 1e-7;
   const n = values.length;
   if (!n || k < 1) {
     return { k, weights: [], means: [], sigmas: [], logLikelihood: NaN, bic: NaN, aic: NaN, iterations: 0, converged: false, n };
@@ -117,10 +121,10 @@ export function fitGaussianMixture(values, k, options = {}) {
     let nextLogLikelihood = 0;
     const logWeights = weights.map((weight) => Math.log(Math.max(weight, Number.MIN_VALUE)));
     const logSigmas = sigmas.map((sigma) => Math.log(sigma));
+    const logs = new Float64Array(k); // wiederverwendet — keine Allokation je Punkt
     for (let index = 0; index < n; index += 1) {
       const value = values[index];
       let maxLog = -Infinity;
-      const logs = new Array(k);
       for (let component = 0; component < k; component += 1) {
         const z = (value - means[component]) / sigmas[component];
         const log = logWeights[component] - logSigmas[component] - 0.5 * LOG_2PI - 0.5 * z * z;
@@ -162,7 +166,8 @@ export function fitGaussianMixture(values, k, options = {}) {
       sigmas[component] = Math.max(Math.sqrt(weightedVariance / mass), MIN_SIGMA);
     }
 
-    if (Number.isFinite(logLikelihood) && Math.abs(nextLogLikelihood - logLikelihood) < tolerance) {
+    const threshold = tolerance * Math.max(1, Math.abs(nextLogLikelihood));
+    if (Number.isFinite(logLikelihood) && Math.abs(nextLogLikelihood - logLikelihood) < threshold) {
       logLikelihood = nextLogLikelihood;
       converged = true;
       iterations += 1;
