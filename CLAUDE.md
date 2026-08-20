@@ -127,6 +127,18 @@ Gilt auch für Betriebs-Endpunkte, die bisher JSON zurückgeben: sobald ihre
 Ausgabe jemand lesen soll, bekommen sie einen HTML-Zweig. Ausgenommen sind nur
 Endpunkte, die ausschließlich von Skripten aufgerufen werden.
 
+**Links immer im Code-Fenster ausgeben.** Jede URL, die Philipp oder Lena
+anklicken oder kopieren sollen, steht in einem eigenen Markdown-Codeblock —
+nie als Fließtext-Link, nie als eingebettete Verlinkung. Auf dem iPad lässt
+sich Fließtext nicht zuverlässig markieren, ein Codeblock dagegen mit einem
+Tipp kopieren. Immer die **vollständige** Adresse inklusive
+`https://truewords-review-sync.das-sind-meine.workers.dev`, nie nur der Pfad —
+ein relativer Pfad ist auf dem Gerät nicht aufrufbar.
+
+    ```
+    https://truewords-review-sync.das-sind-meine.workers.dev/api/admin/segment-diagnose
+    ```
+
 Reine Logik liegt in `.mjs`-Modulen (`boundary-pairs-logic.mjs`,
 `push-schedule-logic.mjs`, `push-send.mjs`, `segmentation-v4.mjs`) mit
 zugehörigen `.d.mts` — in Node testbar, vom Worker wie von der Seite importierbar.
