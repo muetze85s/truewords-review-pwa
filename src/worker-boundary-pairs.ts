@@ -2838,6 +2838,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/backfill-ordinals'
     && url.pathname !== '/api/admin/segment-diagnose'
     && url.pathname !== '/api/admin/gap-mixture'
+    && url.pathname !== '/api/public/gap-mixture'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2849,6 +2850,25 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   }
   if (url.pathname === '/api/admin/marks-restore-apply' && request.method === 'POST') {
     return await applyMarksRestore(request, env);
+  }
+
+  // Öffentliche Aggregat-Route (bewusste Entscheidung, 2026-08-20): dieselbe
+  // Abstandsanalyse wie /api/admin/gap-mixture, ohne Login abrufbar. Gibt
+  // ausschließlich Aggregate aus (Histogrammzählungen, GMM-Parameter) — keine
+  // Nachricht, kein Zeitstempel, kein Text, keine Namen. Ein ?key=-Token wäre
+  // hier nur Scheinsicherheit: das Repository ist öffentlich, ein im Code oder
+  // in wrangler.jsonc hinterlegter Schlüssel damit auch. Gegen Rechenzeit-
+  // Missbrauch sind die Parameter härter geklemmt und das Ergebnis wird je
+  // Datenstand zwischengespeichert.
+  if (url.pathname === '/api/public/gap-mixture' && request.method === 'GET') {
+    const dataset = await activeDataset(env, url.searchParams.get('dataset'));
+    if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
+    try {
+      return await gapMixture(env, dataset, url, request, true);
+    } catch (caught) {
+      console.error('Public gap-mixture failed', caught);
+      return error('Die Abstandsanalyse konnte nicht berechnet werden.', 500);
+    }
   }
 
   const user = await sessionUser(request, env);
@@ -3851,20 +3871,37 @@ function mixtureBlock(values: number[], bins: number, maxK: number, maxIteration
   };
 }
 
-async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+// Fertige Antworten je (Datenstand, Parameter, Format) — die Rechnung ist mit
+// Abstand das Teuerste an der Route; für die öffentliche Variante zugleich die
+// Missbrauchsbremse. Invalidiert sich selbst über den Sequenz-Fingerprint.
+const gapMixtureCache = new Map<string, { fingerprint: string; body: string; html: boolean }>();
+const GAP_MIXTURE_CACHE_MAX = 12;
+
+async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request, publicLimits = false): Promise<Response> {
   const format = url.searchParams.get('format');
   const wantsHtml = format === 'html'
     || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
 
+  // Öffentlich gelten engere Klemmen — die Route ist ohne Login erreichbar.
+  const maxBins = publicLimits ? 120 : 300;
+  const maxKCap = publicLimits ? 4 : 8;
+  const maxIterCap = publicLimits ? 300 : 2000;
   const requestedBins = Number(url.searchParams.get('bins'));
-  const bins = Number.isFinite(requestedBins) && requestedBins >= 5 && requestedBins <= 300
+  const bins = Number.isFinite(requestedBins) && requestedBins >= 5 && requestedBins <= maxBins
     ? Math.floor(requestedBins) : 60;
   const requestedMaxK = Number(url.searchParams.get('maxK'));
-  const maxK = Number.isFinite(requestedMaxK) && requestedMaxK >= 1 && requestedMaxK <= 8
+  const maxK = Number.isFinite(requestedMaxK) && requestedMaxK >= 1 && requestedMaxK <= maxKCap
     ? Math.floor(requestedMaxK) : 4;
   const requestedIterations = Number(url.searchParams.get('maxIterations'));
-  const maxIterations = Number.isFinite(requestedIterations) && requestedIterations >= 10 && requestedIterations <= 2000
+  const maxIterations = Number.isFinite(requestedIterations) && requestedIterations >= 10 && requestedIterations <= maxIterCap
     ? Math.floor(requestedIterations) : 300;
+
+  const fingerprint = await sequenceFingerprint(env, dataset.id);
+  const cacheKey = `${dataset.id}|${bins}|${maxK}|${maxIterations}|${wantsHtml ? 'html' : 'json'}`;
+  const cached = gapMixtureCache.get(cacheKey);
+  if (cached && cached.fingerprint === fingerprint) {
+    return new Response(cached.body, { status: 200, headers: cached.html ? HTML_HEADERS : JSON_HEADERS });
+  }
 
   const sequence = await filteredSequence(env, dataset.id);
   const seconds = sequence.map((message) => messageSeconds(message));
@@ -3908,7 +3945,19 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     byYear,
   };
 
-  if (!wantsHtml) return json(payload);
+  const remember = (body: string, html: boolean): void => {
+    if (!gapMixtureCache.has(cacheKey) && gapMixtureCache.size >= GAP_MIXTURE_CACHE_MAX) {
+      const oldest = gapMixtureCache.keys().next().value;
+      if (oldest !== undefined) gapMixtureCache.delete(oldest);
+    }
+    gapMixtureCache.set(cacheKey, { fingerprint, body, html });
+  };
+
+  if (!wantsHtml) {
+    const body = JSON.stringify(payload);
+    remember(body, false);
+    return new Response(body, { status: 200, headers: JSON_HEADERS });
+  }
 
   const bicTable = (block: MixtureBlock) => `<div class="wrap"><table>
     <thead><tr><th class="num">k</th><th class="num">log L</th><th class="num">BIC</th>
@@ -3969,7 +4018,7 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     <h3>Entscheidungsgrenzen</h3>
     ${boundaryList(block)}`;
 
-  return diagnosePage('Δt-Mischverteilung', `
+  const page = diagnosePage('Δt-Mischverteilung', `
     <style>
       h3 { font-size: 15px; margin: 18px 0 6px; color: #cfd6de; }
       .hist { margin: 8px 0 0; }
@@ -4005,6 +4054,9 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     <p class="note"><a href="?format=json">Rohdaten als JSON</a>
       · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
   `);
+  const body = await page.text();
+  remember(body, true);
+  return new Response(body, { status: 200, headers: HTML_HEADERS });
 }
 
 export default {
