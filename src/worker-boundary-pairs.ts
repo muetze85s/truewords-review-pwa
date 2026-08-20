@@ -2840,6 +2840,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/segment-diagnose'
     && url.pathname !== '/api/admin/gap-mixture'
     && url.pathname !== '/api/public/gap-mixture'
+    && url.pathname !== '/api/public/hourly'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2868,6 +2869,20 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     } catch (caught) {
       console.error('Public gap-mixture failed', caught);
       return error('Die Abstandsanalyse konnte nicht ausgeliefert werden.', 500);
+    }
+  }
+
+  // Tagesrhythmus einzeln (für externe Abrufer, die nur diesen Ausschnitt
+  // brauchen): derselbe abgelegte Datenstand wie /api/public/gap-mixture,
+  // nur das dailyRhythm-Feld — reine Zählungen, ein D1-Read, kein Login.
+  if (url.pathname === '/api/public/hourly' && request.method === 'GET') {
+    const dataset = await activeDataset(env, url.searchParams.get('dataset'));
+    if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
+    try {
+      return await publicHourly(env, dataset, url, request);
+    } catch (caught) {
+      console.error('Public hourly failed', caught);
+      return error('Die Tagesrhythmus-Aggregate konnten nicht ausgeliefert werden.', 500);
     }
   }
 
@@ -4020,6 +4035,76 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
 }
 
 
+/** Tagesrhythmus als Tabelle — genutzt von der Gesamtseite UND /api/public/hourly. */
+function dailyRhythmSectionHtml(rhythm: NonNullable<GapMixturePayload['dailyRhythm']>): string {
+  const senders = Object.keys(rhythm.msgPerHourBySender).sort();
+  const classes = rhythm.gapStartHour.classes;
+  const rows = Array.from({ length: 24 }, (_, hour) => `<tr>
+    <td class="num">${String(hour).padStart(2, '0')}</td>
+    ${senders.map((sender) => `<td class="num">${rhythm.msgPerHourBySender[sender][hour]}</td>`).join('')}
+    <td class="num">${classes['1-4h'].counts[hour]}</td>
+    <td class="num">${classes['4-12h'].counts[hour]}</td>
+    <td class="num">${classes.over12h.counts[hour]}</td>
+  </tr>`).join('');
+  return `<h2>Tagesrhythmus</h2>
+  <p class="note">${escapeHtml(rhythm.timezoneNote)} Pausen zählen ab &gt; 1 h,
+    eingetragen bei der Stunde, in der die Pause beginnt (letzte Nachricht davor).</p>
+  <div class="wrap"><table>
+    <thead><tr><th class="num">Stunde</th>
+      ${senders.map((sender) => `<th class="num">${escapeHtml(sender)}</th>`).join('')}
+      <th class="num">Pausen 1–4 h</th><th class="num">4–12 h</th><th class="num">&gt; 12 h</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+/**
+ * GET /api/public/hourly — nur der Tagesrhythmus-Ausschnitt des abgelegten
+ * Dokuments (msgPerHourBySender + gapStartHour). Reiner D1-Read, kein Login,
+ * reine Zählungen. Rechnet nie selbst; fehlt die Ablage (oder stammt sie von
+ * vor der Tagesrhythmus-Erweiterung), sagt die Antwort, wie sie erneuert wird.
+ */
+async function publicHourly(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?1')
+    .bind(gapMixtureStoreKey(dataset.id)).first<{ value: string }>();
+  const stored = row?.value ? JSON.parse(row.value) as GapMixturePayload : null;
+  if (!stored?.dailyRhythm) {
+    const hint = stored
+      ? 'Die Ablage stammt von vor der Tagesrhythmus-Erweiterung — /api/admin/gap-mixture einmal als Admin neu aufrufen.'
+      : 'Noch kein Ergebnis abgelegt — /api/admin/gap-mixture einmal als Admin aufrufen.';
+    if (wantsHtml) {
+      return diagnosePage('Tagesrhythmus', `
+        <h1>Tagesrhythmus</h1>
+        <p class="sub">Datensatz ${escapeHtml(dataset.id)}</p>
+        <div class="card"><b class="flag">Noch keine Tagesrhythmus-Daten abgelegt.</b>
+          <p class="note">${escapeHtml(hint)}</p></div>
+      `);
+    }
+    return error(hint, 503);
+  }
+
+  if (!wantsHtml) {
+    return json({
+      ok: true,
+      dataset: stored.dataset,
+      computedAt: stored.computedAt,
+      messages: stored.messages,
+      ...stored.dailyRhythm,
+    });
+  }
+  return diagnosePage('Tagesrhythmus', `
+    <h1>Tagesrhythmus</h1>
+    <p class="sub">Datensatz ${escapeHtml(stored.dataset)} · ${stored.messages} Nachrichten ·
+      berechnet ${escapeHtml(humanTime(Math.floor(Date.parse(stored.computedAt) / 1000)))}</p>
+    ${dailyRhythmSectionHtml(stored.dailyRhythm)}
+    <p class="note"><a href="?format=json">Rohdaten als JSON</a>
+      · <a href="/api/public/gap-mixture">Gesamtanalyse</a></p>
+  `);
+}
+
 /**
  * Öffentliche Auslieferung des gespeicherten Ergebnisses — reiner D1-Read.
  * Kein Fit, kein Chunk-Parsing; Query-Parameter außer ?dataset= und ?format=
@@ -4153,27 +4238,7 @@ function renderGapMixturePage(payload: GapMixturePayload): Response {
 
     ${payload.byYear.map((entry) => section(`Kalenderjahr ${entry.year}`, entry)).join('')}
 
-    ${!payload.dailyRhythm ? '' : (() => {
-      const rhythm = payload.dailyRhythm;
-      const senders = Object.keys(rhythm.msgPerHourBySender).sort();
-      const classes = rhythm.gapStartHour.classes;
-      const rows = Array.from({ length: 24 }, (_, hour) => `<tr>
-        <td class="num">${String(hour).padStart(2, '0')}</td>
-        ${senders.map((sender) => `<td class="num">${rhythm.msgPerHourBySender[sender][hour]}</td>`).join('')}
-        <td class="num">${classes['1-4h'].counts[hour]}</td>
-        <td class="num">${classes['4-12h'].counts[hour]}</td>
-        <td class="num">${classes.over12h.counts[hour]}</td>
-      </tr>`).join('');
-      return `<h2>Tagesrhythmus</h2>
-      <p class="note">${escapeHtml(rhythm.timezoneNote)} Pausen zählen ab &gt; 1 h,
-        eingetragen bei der Stunde, in der die Pause beginnt (letzte Nachricht davor).</p>
-      <div class="wrap"><table>
-        <thead><tr><th class="num">Stunde</th>
-          ${senders.map((sender) => `<th class="num">${escapeHtml(sender)}</th>`).join('')}
-          <th class="num">Pausen 1–4 h</th><th class="num">4–12 h</th><th class="num">&gt; 12 h</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
-    })()}
+    ${!payload.dailyRhythm ? '' : dailyRhythmSectionHtml(payload.dailyRhythm)}
 
     <p class="note"><a href="?format=json">Rohdaten als JSON</a>
       · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
