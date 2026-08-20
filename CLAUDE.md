@@ -106,6 +106,27 @@ werden, damit Änderungen ankommen. Hauptseiten:
 - `push-settings.html` — Settings, 4 Abschnitte: Gerät-Einstellungen, Push-Benachrichtigungen (zwei symmetrische Module Philipp/Lena), Optimierung (Schwellwert-Optimizer-Verlauf + „Neu trainieren"), Datenbank (`?dataset=`-Schalter)
 - `nav.js`/`nav.css` — persistente Navigation: **Segmentierung · Klassifizierung · Upload · Settings** (zwei gleichwertige Werkzeuge, je mit eigener interner Übersicht), rollenbewusst; **kein** Dataset-Schalter im Kopfbalken — der lebt ausschließlich auf der Settings-Seite. `nav.js` veröffentlicht seine Höhe als `--tw-nav-height` für die klebenden Tabellenkopfzeilen.
 
+### Ausgaben für Menschen, nicht für die Konsole (verbindlich)
+
+**Jede Auswertung, Diagnose oder Kennzahl, die Philipp oder Lena ansehen sollen,
+wird als lesbare Seite ausgeliefert — niemals als JSON zum Kopieren.** Gearbeitet
+wird auf iPad und iPhone; dort ist die Browser-Konsole nicht bedienbar und JSON
+lässt sich nicht sinnvoll markieren. Ein Endpunkt, dessen Antwort ein Mensch
+lesen soll, rendert deshalb bei Seitenaufruf (`Accept: text/html`) HTML und
+liefert Rohdaten nur auf ausdrückliches `?format=json`.
+
+Vorbild und Muster: `GET /api/admin/segment-diagnose` in
+`worker-boundary-pairs.ts` — serverseitig gerendert über `diagnosePage()` mit
+den Helfern `escapeHtml`/`humanDuration`/`humanShare`/`humanTime`. Serverseitig
+gerendert, damit keine zweite Seite plus Skript in die Asset-Liste muss und der
+Service Worker keine veraltete Fassung ausliefern kann. Zahlen deutsch
+formatiert (Komma, „4 h 01 min"), Tabellen in `.wrap` mit `overflow-x`, damit
+mobil nichts quer scrollt.
+
+Gilt auch für Betriebs-Endpunkte, die bisher JSON zurückgeben: sobald ihre
+Ausgabe jemand lesen soll, bekommen sie einen HTML-Zweig. Ausgenommen sind nur
+Endpunkte, die ausschließlich von Skripten aufgerufen werden.
+
 Reine Logik liegt in `.mjs`-Modulen (`boundary-pairs-logic.mjs`,
 `push-schedule-logic.mjs`, `push-send.mjs`, `segmentation-v4.mjs`) mit
 zugehörigen `.d.mts` — in Node testbar, vom Worker wie von der Seite importierbar.

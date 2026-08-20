@@ -2919,7 +2919,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
 
     if (url.pathname === '/api/admin/segment-diagnose' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf die Segment-Diagnose sehen.', 403);
-      return await segmentDiagnose(env, dataset, url);
+      return await segmentDiagnose(env, dataset, url, request);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve|\/state)?$/u);
@@ -3230,6 +3230,96 @@ async function backfillOrdinals(env: Env, dataset: DatasetRow): Promise<Response
   return json({ ok: true, dataset: dataset.id, sequenceLength: sequence.length, numbered: Number(row?.c || 0), maxOrdinal: Number(row?.m || 0) });
 }
 
+
+// ---- Diagnose als lesbare Seite -------------------------------------------
+//
+// Die Diagnose muss auf dem iPad lesbar sein, ohne JSON zu kopieren. Deshalb
+// rendert derselbe Endpunkt bei Seitenaufruf (Accept: text/html) eine schlichte
+// Seite; `?format=json` liefert weiterhin die Rohdaten. Serverseitig gerendert,
+// damit keine zweite Seite plus Skript in die Asset-Liste muss.
+
+const HTML_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'no-store, max-age=0',
+  'x-content-type-options': 'nosniff',
+};
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;').replace(/'/gu, '&#39;');
+}
+
+/** Sekunden als „4 h 01 min" / „13 min" / „–". */
+function humanDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '–';
+  const total = Math.max(0, Math.round(seconds));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days} d ${String(hours).padStart(2, '0')} h`;
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, '0')} min`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${total} s`;
+}
+
+/** Anteil als „12,3 %" (deutsche Schreibweise), null → „–". */
+function humanShare(share: number | null | undefined): string {
+  if (share === null || share === undefined || !Number.isFinite(share)) return '–';
+  return `${(share * 100).toFixed(1).replace('.', ',')} %`;
+}
+
+/** Zeitpunkt als „So, 03.05.2026, 14:03" in Europe/Berlin. */
+function humanTime(unix: number | null | undefined): string {
+  if (!unix) return '–';
+  try {
+    return new Intl.DateTimeFormat('de-DE', {
+      timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(new Date(unix * 1000));
+  } catch {
+    return '–';
+  }
+}
+
+function diagnosePage(title: string, body: string): Response {
+  // Bewusst eigenständig und ohne Abhängigkeit auf die App-Stylesheets: die
+  // Seite soll auch dann lesbar sein, wenn der Service Worker eine alte Fassung
+  // der CSS-Dateien ausliefert. Dunkel wie der Rest der App, mobil zuerst.
+  const html = `<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>${escapeHtml(title)}</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #14171c; color: #e8eaed;
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 24px 0 8px; color: #9fe3d9; }
+  p.sub { color: #9aa3ad; margin: 0 0 20px; font-size: 14px; }
+  .card { background: #1c2027; border: 1px solid #2b313a; border-radius: 12px;
+          padding: 14px; margin: 0 0 14px; }
+  .big { font-size: 30px; font-weight: 700; line-height: 1.2; }
+  .big small { font-size: 14px; font-weight: 400; color: #9aa3ad; display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #2b313a; }
+  th { color: #9aa3ad; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .flag { color: #ffb4a8; font-weight: 600; }
+  .ok { color: #9fe3d9; }
+  a { color: #9fe3d9; }
+  .note { font-size: 13px; color: #9aa3ad; }
+</style>
+</head><body>
+${body}
+</body></html>`;
+  return new Response(html, { status: 200, headers: HTML_HEADERS });
+}
+
 /**
  * GET /api/admin/segment-diagnose — Read-only-Diagnose der Situations-Herkunft
  * (nur canUpload). Beantwortet Block 2 der Handoff-Frage: aus welchem Grenzsatz
@@ -3254,7 +3344,11 @@ async function backfillOrdinals(env: Env, dataset: DatasetRow): Promise<Response
  *   welcher Zustand). Leer + leer = niemand hat dort je eine Grenze gesehen
  *   (Annotationslücke).
  */
-async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL): Promise<Response> {
+async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  // Seitenaufruf im Browser → lesbare Seite; ?format=json → Rohdaten.
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
   const sequence = await filteredSequence(env, dataset.id);
   const idIndex = new Map<string, number>();
   const secs: number[] = new Array(sequence.length);
@@ -3396,6 +3490,65 @@ async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL): Promise
       }
     }
     const analyzedTarget = analyzed.find((entry) => entry.id === target!.id) || null;
+    if (wantsHtml) {
+      type Msg = { ordinal: number | null; unix: number; from: string; kind: string; gapBeforeSeconds: number | null };
+      type Seam = { afterOrdinal: number | null; gapSeconds: number; marks: Array<{ reviewer: string; mark: string }>;
+        resolutions: Array<{ decidedBy: string; decision: string; note: string | null }>; annotationGap: boolean };
+      const msgList = messages as Msg[];
+      const seamList = seams as Seam[];
+      const seamByOrdinal = new Map<number | null, Seam>(seamList.map((seam) => [seam.afterOrdinal, seam]));
+      const rows = msgList.map((message) => {
+        const seam = seamByOrdinal.get(message.ordinal);
+        const gap = message.gapBeforeSeconds;
+        // Nur wirklich große Abstände hervorheben — das ist die Frage hier.
+        const loud = gap !== null && gap > 3600;
+        const grenze = !seam
+          ? '—'
+          : (seam.marks.length === 0 && seam.resolutions.length === 0
+            ? '<span class="flag">niemand</span>'
+            : escapeHtml([
+              ...seam.marks.map((mark) => `${mark.reviewer}: ${mark.mark}`),
+              ...seam.resolutions.map((res) => `${res.decidedBy} → ${res.decision}`),
+            ].join(' · ')));
+        return `<tr>
+          <td class="num">${message.ordinal ?? '–'}</td>
+          <td>${escapeHtml(humanTime(message.unix))}</td>
+          <td class="num${loud ? ' flag' : ''}">${gap === null ? '' : escapeHtml(humanDuration(gap))}</td>
+          <td>${escapeHtml(message.from)}</td>
+          <td>${escapeHtml(message.kind)}</td>
+          <td>${grenze}</td>
+        </tr>`;
+      }).join('');
+      const offen = seamList.filter((seam) => seam.annotationGap && seam.gapSeconds > 3600);
+      const startOrd = ordinals.get(target.start_message_id) ?? null;
+      const endOrd = ordinals.get(target.end_message_id) ?? null;
+      return diagnosePage(`Situation ${target.id} · Diagnose`, `
+        <h1>Situation ${target.id}</h1>
+        <p class="sub">Runde ${target.round} · Situation-Index ${target.situation_index}
+          · Grenze ${startOrd ?? '–'} bis ${endOrd ?? '–'} · ${msgList.length} Nachrichten
+          · ${target.in_validation_sample === 1 ? 'in der Stichprobe' : 'nicht in der Stichprobe'}</p>
+        <div class="card">
+          <div class="big">${escapeHtml(humanDuration(analyzedTarget?.maxGapSeconds ?? null))}
+            <small>größte Lücke innerhalb dieser Situation</small></div>
+        </div>
+        <div class="card">
+          <b>${offen.length === 0
+            ? '<span class="ok">Keine unmarkierte Lücke über 1 Stunde.</span>'
+            : `<span class="flag">${offen.length} Lücke(n) über 1 Stunde, an denen niemand eine Grenze gesetzt hat.</span>`}</b>
+          <p class="note">„niemand" in der Spalte Grenze heißt: an dieser Naht steht weder eine Markierung
+            (review_boundary_marks) noch eine Streitfall-Auflösung (review_boundary_resolutions) —
+            also eine Annotationslücke, kein Parameterfehler.</p>
+        </div>
+        <h2>Nachrichten dieser Situation</h2>
+        <div class="wrap"><table>
+          <thead><tr><th class="num">Grenze</th><th>Zeit (Berlin)</th><th class="num">Abstand davor</th>
+            <th>Von</th><th>Art</th><th>Grenze gesetzt?</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <p class="note"><a href="/api/admin/segment-diagnose">← zur Übersicht</a>
+          · <a href="?situation=${target.id}&amp;format=json">Rohdaten</a></p>
+      `);
+    }
     return json({
       ok: true, mode: 'situation', dataset: dataset.id,
       situation: {
@@ -3484,6 +3637,103 @@ async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL): Promise
   const H12 = 43200;
   const H24 = 86400;
   const H72 = 259200;
+
+  if (wantsHtml) {
+    const allDist = distribution(analyzed);
+    const sampleDist = distribution(analyzed.filter((entry) => entry.inValidationSample === 1));
+    const q = (stats: ReturnType<typeof quantiles>, asDuration: boolean) => {
+      const f = (value: number | null) => (value === null
+        ? '–'
+        : (asDuration ? humanDuration(value) : String(Math.round(value))));
+      return `<tr><td>${asDuration ? 'Dauer' : 'Nachrichten'}</td>
+        <td class="num">${escapeHtml(f(stats.min))}</td>
+        <td class="num">${escapeHtml(f(stats.q1))}</td>
+        <td class="num"><b>${escapeHtml(f(stats.median))}</b></td>
+        <td class="num">${escapeHtml(f(stats.q3))}</td>
+        <td class="num">${escapeHtml(f(stats.max))}</td></tr>`;
+    };
+    const gapStats = quantiles(interSegmentGaps);
+    const worstRows = worst.map((entry) => `<tr>
+      <td class="num"><a href="?situation=${entry.id}">${entry.id}</a></td>
+      <td class="num">${entry.round}</td>
+      <td class="num">${entry.startOrdinal ?? '–'}</td>
+      <td class="num">${entry.messageCount ?? '–'}</td>
+      <td class="num flag">${escapeHtml(humanDuration(entry.maxGapSeconds))}</td>
+      <td>${entry.inValidationSample === 1 ? 'ja' : '—'}</td>
+    </tr>`).join('');
+
+    return diagnosePage('Segment-Diagnose', `
+      <h1>Segment-Diagnose</h1>
+      <p class="sub">Datensatz ${escapeHtml(dataset.id)} · ${sequence.length} Nachrichten in der Folge
+        · ${allDist.prepared} vorbereitete Situationen</p>
+
+      <div class="card">
+        <b>Herkunft der Situationen: Annotationslücke, kein Parameterfehler.</b>
+        <p class="note">review_situations entstehen in deriveSituationsForRound aus
+          combinedBoundaryForRound — also aus den Markierungen von Philipp und Lena plus den
+          beidseitig aufgelösten Streitfällen. deriveSituations teilt danach nur noch nach
+          Positionen; es gibt in diesem Pfad keine Zeit- oder Schwellwertlogik. Große Lücken
+          innerhalb einer Situation heißen deshalb: dort hat niemand geschnitten.</p>
+      </div>
+
+      <h2>Interne Lücken — wie oft bleibt eine große Pause ungeschnitten?</h2>
+      <div class="grid">
+        <div class="card"><div class="big">${allDist.over60min}
+          <small>Situationen mit Lücke &gt; 60 min<br>${escapeHtml(humanShare(allDist.over60minShare))} von ${allDist.resolvable}</small></div></div>
+        <div class="card"><div class="big">${allDist.over180min}
+          <small>davon &gt; 180 min<br>${escapeHtml(humanShare(allDist.over180minShare))} von ${allDist.resolvable}</small></div></div>
+      </div>
+      <div class="card">
+        <b>Nur die Validierungsstichprobe</b>
+        <p class="note">${sampleDist.resolvable} Situationen ·
+          &gt; 60 min: ${sampleDist.over60min} (${escapeHtml(humanShare(sampleDist.over60minShare))}) ·
+          &gt; 180 min: ${sampleDist.over180min} (${escapeHtml(humanShare(sampleDist.over180minShare))})</p>
+        ${allDist.unresolvable > 0
+          ? `<p class="note">${allDist.unresolvable} Situationen nicht auswertbar (Start-/End-Nachricht nicht in der aktuellen Folge, z. B. übertragene Runden).</p>`
+          : ''}
+      </div>
+
+      <h2>Segmentlängen</h2>
+      <div class="wrap"><table>
+        <thead><tr><th></th><th class="num">Min</th><th class="num">25 %</th><th class="num">Median</th><th class="num">75 %</th><th class="num">Max</th></tr></thead>
+        <tbody>${q(quantiles(lengthMessages), false)}${q(quantiles(lengthSeconds), true)}</tbody>
+      </table></div>
+
+      <h2>Lücken zwischen aufeinanderfolgenden Segmenten</h2>
+      <p class="note">Gemessen an den gesetzten Schnitten innerhalb einer Runde
+        (${interSegmentGaps.length} Übergänge). Über Rundengrenzen hinweg gibt es keinen
+        definierten Abstand — die Runden sind Fenster, keine lückenlose Zerlegung.</p>
+      <div class="wrap"><table>
+        <thead><tr><th></th><th class="num">Min</th><th class="num">25 %</th><th class="num">Median</th><th class="num">75 %</th><th class="num">Max</th></tr></thead>
+        <tbody><tr><td>Abstand</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.min))}</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.q1))}</td>
+          <td class="num"><b>${escapeHtml(humanDuration(gapStats.median))}</b></td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.q3))}</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.max))}</td></tr></tbody>
+      </table></div>
+      <div class="wrap"><table>
+        <thead><tr><th>Schwelle</th><th class="num">Anzahl</th><th class="num">Anteil</th></tr></thead>
+        <tbody>
+          <tr><td>&gt; 6 h</td><td class="num">${countOver(interSegmentGaps, H6)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H6)))}</td></tr>
+          <tr><td>&gt; 12 h</td><td class="num">${countOver(interSegmentGaps, H12)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H12)))}</td></tr>
+          <tr><td>&gt; 24 h</td><td class="num">${countOver(interSegmentGaps, H24)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H24)))}</td></tr>
+          <tr><td>&gt; 72 h</td><td class="num">${countOver(interSegmentGaps, H72)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H72)))}</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Die 25 Situationen mit der größten internen Lücke</h2>
+      <p class="note">Nummer antippen öffnet die Situation mit allen Nachrichten und dem
+        Grenzstatus je Naht.</p>
+      <div class="wrap"><table>
+        <thead><tr><th class="num">Situation</th><th class="num">Runde</th><th class="num">ab Grenze</th>
+          <th class="num">Nachr.</th><th class="num">größte Lücke</th><th>Stichprobe</th></tr></thead>
+        <tbody>${worstRows}</tbody>
+      </table></div>
+
+      <p class="note"><a href="?format=json">Rohdaten als JSON</a></p>
+    `);
+  }
 
   return json({
     ok: true, mode: 'overview', dataset: dataset.id,
