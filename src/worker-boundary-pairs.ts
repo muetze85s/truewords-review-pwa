@@ -2852,22 +2852,21 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     return await applyMarksRestore(request, env);
   }
 
-  // Öffentliche Aggregat-Route (bewusste Entscheidung, 2026-08-20): dieselbe
-  // Abstandsanalyse wie /api/admin/gap-mixture, ohne Login abrufbar. Gibt
-  // ausschließlich Aggregate aus (Histogrammzählungen, GMM-Parameter) — keine
-  // Nachricht, kein Zeitstempel, kein Text, keine Namen. Ein ?key=-Token wäre
-  // hier nur Scheinsicherheit: das Repository ist öffentlich, ein im Code oder
-  // in wrangler.jsonc hinterlegter Schlüssel damit auch. Gegen Rechenzeit-
-  // Missbrauch sind die Parameter härter geklemmt und das Ergebnis wird je
-  // Datenstand zwischengespeichert.
+  // Öffentliche Aggregat-Route (bewusste Entscheidung, 2026-08-20): ohne Login
+  // abrufbar, ausschließlich Aggregate (Histogrammzählungen, GMM-Parameter) —
+  // keine Nachricht, kein Zeitstempel, kein Text, keine Namen. Rechnet NIE
+  // selbst: sie liefert nur das Ergebnis aus, das ein Admin-Aufruf von
+  // /api/admin/gap-mixture einmalig in app_settings abgelegt hat. Die Daten
+  // sind statisch (4 Jahre Historie) — einmal rechnen reicht, die Antwort hier
+  // ist ein einzelner D1-Read (<1 s) statt Minuten EM-Fit.
   if (url.pathname === '/api/public/gap-mixture' && request.method === 'GET') {
     const dataset = await activeDataset(env, url.searchParams.get('dataset'));
     if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
     try {
-      return await gapMixture(env, dataset, url, request, true);
+      return await publicGapMixture(env, dataset, url, request);
     } catch (caught) {
       console.error('Public gap-mixture failed', caught);
-      return error('Die Abstandsanalyse konnte nicht berechnet werden.', 500);
+      return error('Die Abstandsanalyse konnte nicht ausgeliefert werden.', 500);
     }
   }
 
@@ -3822,6 +3821,22 @@ function describeSeconds(seconds: number): {
 
 type MixtureBlock = ReturnType<typeof mixtureBlock>;
 
+type GapMixturePayload = {
+  ok: boolean; dataset: string; messages: number; gaps: number;
+  clampedToOneSecond: number; minSeconds: number; maxSeconds: number;
+  bins: number; maxK: number; maxIterations: number;
+  scope: string; computedAt: string;
+  overall: MixtureBlock;
+  byYear: Array<{ year: string } & MixtureBlock>;
+};
+
+// Schlüssel, unter dem das fertig gerechnete kanonische Ergebnis (Standard-
+// Parameter, alle Jahre) je Datensatz in app_settings liegt. Die öffentliche
+// Route liest NUR diesen Eintrag — sie rechnet nie selbst.
+function gapMixtureStoreKey(datasetId: string): string {
+  return `gap_mixture_result:${datasetId}`;
+}
+
 /** Fit + Kennzahlen für eine Wertemenge (alle Jahre oder ein Kalenderjahr). */
 function mixtureBlock(values: number[], bins: number, maxK: number, maxIterations: number) {
   const { fits, bestK } = fitRange(values, { maxK, maxIterations });
@@ -3940,7 +3955,7 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     ...mixtureBlock(byYearValues.get(year) || [], bins, maxK, maxIterations),
   }));
 
-  const payload = {
+  const payload: GapMixturePayload = {
     ok: true,
     dataset: dataset.id,
     messages: sequence.length,
@@ -3951,9 +3966,26 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     bins,
     maxK,
     maxIterations,
+    scope: overallOnly ? 'overall' : (onlyYear || 'all'),
+    computedAt: new Date().toISOString(),
     overall,
     byYear,
   };
+
+  // Kanonisches Ergebnis (Standardparameter, alle Jahre) einmal gerechnet →
+  // fertig in D1 ablegen. Die Daten sind statisch (4 Jahre Historie); die
+  // öffentliche Route liefert danach nur noch dieses gespeicherte Dokument.
+  // Nicht-fatal: schlägt das Schreiben fehl, funktioniert die Antwort trotzdem.
+  if (payload.scope === 'all' && bins === 60 && maxK === 4 && maxIterations === 300) {
+    try {
+      await env.DB.prepare(`
+        INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).bind(gapMixtureStoreKey(dataset.id), JSON.stringify(payload), payload.computedAt).run();
+    } catch (caught) {
+      console.error('gap-mixture: Ablage in app_settings fehlgeschlagen — nicht fatal', caught);
+    }
+  }
 
   const remember = (body: string, html: boolean): void => {
     if (!gapMixtureCache.has(cacheKey) && gapMixtureCache.size >= GAP_MIXTURE_CACHE_MAX) {
@@ -3969,6 +4001,54 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     return new Response(body, { status: 200, headers: JSON_HEADERS });
   }
 
+  const page = renderGapMixturePage(payload);
+  const body = await page.text();
+  remember(body, true);
+  return new Response(body, { status: 200, headers: HTML_HEADERS });
+}
+
+
+/**
+ * Öffentliche Auslieferung des gespeicherten Ergebnisses — reiner D1-Read.
+ * Kein Fit, kein Chunk-Parsing; Query-Parameter außer ?dataset= und ?format=
+ * werden ignoriert (das Dokument ist fix). Liegt noch nichts vor, sagt die
+ * Antwort, wie es erzeugt wird, statt selbst zu rechnen.
+ */
+async function publicGapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?1')
+    .bind(gapMixtureStoreKey(dataset.id)).first<{ value: string }>();
+  if (!row?.value) {
+    if (wantsHtml) {
+      return diagnosePage('Δt-Mischverteilung', `
+        <h1>Δt-Mischverteilung</h1>
+        <p class="sub">Datensatz ${escapeHtml(dataset.id)}</p>
+        <div class="card"><b class="flag">Noch kein Ergebnis abgelegt.</b>
+          <p class="note">Das Ergebnis wird einmalig erzeugt, indem Philipp (angemeldet)
+            /api/admin/gap-mixture aufruft — dabei wird es gespeichert und liegt danach
+            hier dauerhaft bereit.</p></div>
+      `);
+    }
+    return error('Noch kein Ergebnis abgelegt — /api/admin/gap-mixture einmal als Admin aufrufen.', 503);
+  }
+
+  if (!wantsHtml) {
+    return new Response(row.value, { status: 200, headers: JSON_HEADERS });
+  }
+  const payload = JSON.parse(row.value) as GapMixturePayload;
+  return renderGapMixturePage(payload);
+}
+
+/**
+ * Lesbare Seite aus einem (frisch gerechneten ODER gespeicherten) Ergebnis.
+ * Bewusst von der Berechnung getrennt: die öffentliche Route rendert damit
+ * das in app_settings abgelegte Dokument, ohne je selbst zu fitten.
+ */
+function renderGapMixturePage(payload: GapMixturePayload): Response {
+  const isYearScope = payload.scope !== 'all' && payload.scope !== 'overall';
   const bicTable = (block: MixtureBlock) => `<div class="wrap"><table>
     <thead><tr><th class="num">k</th><th class="num">log L</th><th class="num">BIC</th>
       <th class="num">ΔBIC</th><th class="num">Iter.</th></tr></thead>
@@ -4039,34 +4119,32 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
       .hcount { text-align: right; color: #9aa3ad; font-variant-numeric: tabular-nums; }
     </style>
     <h1>Δt-Mischverteilung</h1>
-    <p class="sub">Datensatz ${escapeHtml(dataset.id)} · ${sequence.length} Nachrichten ·
-      ${overallGaps.values.length} Abstände · kleinster ${escapeHtml(humanDuration(overallGaps.minSeconds))} ·
-      größter ${escapeHtml(humanDuration(overallGaps.maxSeconds))} ·
-      ${overallGaps.clamped} Abstände unter 1 s auf 1 s angehoben</p>
+    <p class="sub">Datensatz ${escapeHtml(payload.dataset)} · ${payload.messages} Nachrichten ·
+      ${payload.gaps} Abstände · kleinster ${escapeHtml(humanDuration(payload.minSeconds))} ·
+      größter ${escapeHtml(humanDuration(payload.maxSeconds))} ·
+      ${payload.clampedToOneSecond} Abstände unter 1 s auf 1 s angehoben · berechnet ${escapeHtml(humanTime(Math.floor(Date.parse(payload.computedAt) / 1000)))}</p>
 
     <div class="card">
       <b>Was hier gerechnet wird.</b>
       <p class="note">Alle Abstände zwischen benachbarten Nachrichten, logarithmiert
-        (log₁₀ der Sekunden), angepasst mit Gauß-Mischungen für k = 1…${maxK}. Gewählt wird
+        (log₁₀ der Sekunden), angepasst mit Gauß-Mischungen für k = 1…${payload.maxK}. Gewählt wird
         das k mit dem kleinsten BIC. Wählt BIC k = 1, hat die Pausenverteilung keine
         natürliche Struktur — dann gibt es keine datengestützte Zeitschwelle, und jede
         Schwelle wäre gesetzt statt gefunden. Bei k &gt; 1 sind die Entscheidungsgrenzen
         die einzigen Schwellen, die aus den Daten selbst kommen.</p>
     </div>
 
-    ${onlyYear ? '' : `${section('Alle Jahre', overall)}
+    ${isYearScope ? '' : `${section('Alle Jahre', payload.overall)}
 
-    <h3>Histogramm (${bins} Bins über log₁₀, Beschriftung = Beginn des Bins)</h3>
-    ${histogramBars(overall)}`}
+    <h3>Histogramm (${payload.bins} Bins über log₁₀, Beschriftung = Beginn des Bins)</h3>
+    ${histogramBars(payload.overall)}`}
 
-    ${byYear.map((block) => section(`Kalenderjahr ${block.year}`, block)).join('')}
+    ${payload.byYear.map((entry) => section(`Kalenderjahr ${entry.year}`, entry)).join('')}
 
     <p class="note"><a href="?format=json">Rohdaten als JSON</a>
       · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
   `);
-  const body = await page.text();
-  remember(body, true);
-  return new Response(body, { status: 200, headers: HTML_HEADERS });
+  return page;
 }
 
 export default {
