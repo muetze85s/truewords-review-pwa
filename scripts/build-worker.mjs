@@ -64,7 +64,16 @@ const files = [
   'upload.js',
   'doppelpruefung.html',
   'boundary-pairs.css',
+  'overview.css',
+  'seam.css',
   'boundary-pairs.js',
+  'klassifizierung.html',
+  'classification.css',
+  'classification.js',
+  'klassifizierung-info.html',
+  'codebook-render.js',
+  'classification-classes.mjs',
+  'quality-flags.mjs',
   'migration-check.html',
   'migration-check.js',
   'marks-backfill.html',
@@ -73,9 +82,6 @@ const files = [
   'marks-restore.js',
   'nav.css',
   'nav.js',
-  'dashboard.html',
-  'dashboard.css',
-  'dashboard.js',
   'segmentation-v4.mjs',
   'portal.css',
   'manifest.webmanifest',
@@ -103,6 +109,11 @@ await cp(
   resolve(root, 'node_modules/embla-carousel/embla-carousel.umd.js'),
   resolve(dist, 'vendor/embla-carousel.umd.js'),
 );
+
+// Kodierhandbuch als Asset ausliefern — einzige Quelle für die Nachschlage-Seite
+// (klassifizierung-info.html rendert es zur Laufzeit). Liegt in docs/, wird aber
+// als /CODEBOOK.md ausgeliefert.
+await cp(resolve(root, 'docs/CODEBOOK.md'), resolve(dist, 'CODEBOOK.md'));
 
 await writeFile(resolve(dist, '.assetsignore'), '*.map\n', 'utf8');
 console.log(`Worker assets prepared in ${dist}`);

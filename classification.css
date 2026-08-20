@@ -1,0 +1,307 @@
+/* Klassifizierung — baut auf boundary-pairs.css (dp-*, ov-*) und den
+   Theme-Tokens auf. Nur das Zusätzliche (Checkbox-Panel, Kappa-Anzeige,
+   Streitfall-Karten je Klasse, Übersicht-Spalten) lebt hier. Farben/Rollen
+   (Philipp Türkis, Lena Rosa) kommen unverändert aus truewords-ui-theme.css. */
+
+.cl-weg { display: none !important; }
+
+/* ------------------------------------------------------- Situationsansicht */
+
+.cl-position { font-size: 13px; color: var(--tw-text-muted); min-width: 120px; text-align: center; }
+.cl-section-heading { font-size: 15px; margin: 20px 0 10px; color: var(--tw-text); }
+
+.cl-panel {
+  margin-top: 14px;
+  background: var(--tw-surface);
+  border: 1px solid var(--tw-border);
+  border-radius: 12px;
+  padding: 14px 14px 16px;
+}
+.cl-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cl-panel-title { font-weight: 700; color: var(--tw-text); }
+
+.cl-group { margin: 12px 0 6px; }
+/* Gruppentitel (NEGATIV-MARKER / POSITIV-MARKER / ENTSCHULDIGUNG / ZUSCHNITT)
+   sind Trenner beim Durchscrollen — deshalb bewusst groß, kräftig und in der
+   vollen Textfarbe statt klein und blass. Auf allen Seiten identisch:
+   Kodier-Ansicht (.cl-group-title), Kappa-Übersicht (.cl-kappa-group-title)
+   und Nachschlage-Seite (.cb-group-title). */
+.cl-group-title,
+.cl-kappa-group-title,
+.cb-group-title {
+  font-size: 16px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--tw-text);
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--tw-border);
+}
+
+.cl-check-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "check info" "hint hint";
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--tw-border);
+}
+.cl-check-row:last-child { border-bottom: none; }
+.cl-check { grid-area: check; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.cl-check input { width: 20px; height: 20px; flex: 0 0 auto; cursor: pointer; accent-color: var(--tw-philipp); }
+.dp-message[data-speaker] ~ * .cl-check input { accent-color: inherit; }
+body.cl[data-reviewer="Lena"] .cl-check input { accent-color: var(--tw-lena); }
+.cl-check-label { font-size: 14.5px; color: var(--tw-text); line-height: 1.3; }
+
+.cl-info-dot {
+  grid-area: info;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--tw-button-border);
+  background: var(--tw-button-bg); color: var(--tw-button-text);
+  font-size: 12px; font-style: italic; font-weight: 700; line-height: 1;
+  cursor: pointer;
+}
+.cl-info-dot:hover { background: var(--tw-button-hover); }
+.cl-info-dot.cl-info-dot-inline { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+span.cl-info-dot { display: inline-flex; align-items: center; justify-content: center; }
+
+.cl-hint {
+  grid-area: hint;
+  font-size: 13px; color: var(--tw-text-muted); line-height: 1.4;
+  background: var(--tw-surface-secondary, rgba(0,0,0,.03));
+  border-radius: 8px; padding: 8px 10px; margin: 2px 0 4px;
+}
+
+.cl-flags-divider {
+  display: flex; align-items: center; gap: 10px; margin: 18px 0 6px;
+  color: var(--tw-text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
+}
+.cl-flags-divider::before, .cl-flags-divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--tw-border);
+}
+
+/* ------------------------------------------------------- Abgegeben / eigene Auswahl */
+
+.cl-own-summary { margin-top: 12px; }
+.cl-own-list { margin: 4px 0 0; padding-left: 20px; color: var(--tw-text); font-size: 14px; }
+.cl-own-list li { margin: 2px 0; }
+
+/* ------------------------------------------------------- Vergleich / Streitfälle */
+
+.cl-dispute {
+  background: var(--tw-surface);
+  border: 1px solid var(--tw-status-unclear);
+  border-radius: 10px;
+  padding: 12px;
+  margin: 0 0 10px;
+}
+.cl-dispute.geklaert { border-color: var(--tw-status-confirmed); background: var(--tw-status-confirmed-surface); }
+.cl-dispute-label { font-size: 14.5px; font-weight: 700; color: var(--tw-text); margin-bottom: 3px; }
+.cl-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
+
+.cl-vote-badge { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.cl-vote-badge.einig { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cl-vote-badge.uneinig { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+.cl-vote-badge.offen { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+
+.cl-dispute-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-dispute-actions button {
+  border: 1px solid var(--tw-button-border);
+  background: var(--tw-button-bg);
+  color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.cl-dispute-actions button:hover { background: var(--tw-button-hover); }
+.cl-dispute-actions button.active {
+  background: var(--tw-philipp); color: #fff; border-color: transparent; font-weight: 700;
+}
+body.cl[data-reviewer="Lena"] .cl-dispute-actions button.active { background: var(--tw-lena); }
+.cl-dispute-status { font-size: 12px; color: var(--tw-text-muted); margin-top: 6px; min-height: 1em; }
+
+.cl-agree-yes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.cl-agree-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed);
+}
+
+/* ------------------------------------------------------- Übersicht */
+
+.cl-overview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.cl-overview-head h2 { margin: 0; font-size: 20px; }
+.cl-info-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 999px; padding: 7px 14px; font-size: 13.5px; text-decoration: none; font-weight: 600;
+}
+.cl-info-btn:hover { background: var(--tw-button-hover); }
+
+.cl-progress-line { font-size: 13.5px; color: var(--tw-text-muted); margin: 4px 0 14px; }
+
+.cl-prepare {
+  margin-top: 16px; padding: 12px; border: 1px dashed var(--tw-border); border-radius: 10px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.cl-prepare label { font-size: 13px; color: var(--tw-text-muted); display: flex; align-items: center; gap: 6px; }
+.cl-prepare input { width: 84px; padding: 6px 8px; border: 1px solid var(--tw-border); border-radius: 8px; background: var(--tw-surface-raised); color: var(--tw-text); }
+.cl-prepare button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 14px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+}
+.cl-prepare button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-prepare button:disabled { opacity: .5; cursor: default; }
+
+/* Kappa-Zusammenfassung */
+.cl-kappa {
+  border: 1px solid var(--tw-border); border-radius: 12px; background: var(--tw-surface-raised, var(--tw-surface));
+  padding: 12px 14px; margin: 0 0 16px;
+}
+.cl-kappa-head { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 8px; }
+.cl-kappa-group { margin: 10px 0; }
+.cl-kappa-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--tw-border); }
+.cl-kappa-row:last-child { border-bottom: none; }
+.cl-kappa-label { font-size: 13.5px; color: var(--tw-text); }
+.cl-kappa-value { font-size: 13px; color: var(--tw-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-kappa-muted { font-size: 12.5px; color: var(--tw-text-muted); }
+.cl-kappa-n { color: var(--tw-text-muted); font-size: 12px; }
+
+.cl-kappa-sub { font-size: 12px; color: var(--tw-text-muted); margin-bottom: 8px; }
+/* Erweiterte Kappa-Zeile mit LLM- und Alpha-Spalten (PR 2). */
+.cl-kappa-row-llm { grid-template-columns: minmax(0, 1.6fr) auto auto auto auto; gap: 6px 12px; }
+.cl-kappa-hl, .cl-kappa-alpha { font-size: 12.5px; color: var(--tw-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-kappa-auto { min-width: 46px; text-align: right; }
+/* Selbstimplizierende Klassen: ein gelbes Warndreieck — überall dasselbe
+   Symbol in derselben Farbe (vorher rosa Raute bei den Klassen, weiße Raute in
+   der Legende). „Hier besonders auf eigene Voreingenommenheit achten." */
+.cl-self { color: var(--tw-status-open); font-size: 13px; font-style: normal; }
+/* Punkt 9: fester Klassencode (N7/P3/E1/Z1) vor dem Klartext. */
+.cl-code { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--tw-philipp); }
+.cl-auto { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+.cl-auto-on { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cl-auto-elig { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
+.cl-auto-off { background: var(--tw-surface-secondary, rgba(0,0,0,.05)); color: var(--tw-text-muted); }
+button.cl-auto-toggle { border: 1px solid var(--tw-border); cursor: pointer; font-family: inherit; }
+button.cl-auto-toggle:hover:not(:disabled) { filter: brightness(0.97); }
+button.cl-auto-toggle:disabled { opacity: .5; cursor: default; }
+
+/* LLM-Rating als Datenpunkt in der Streitfall-Karte. */
+.cl-llm-badge { display: inline-block; padding: 1px 6px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: var(--tw-status-corrected-surface); color: var(--tw-status-corrected); }
+
+/* LLM-Steuerung auf der Übersicht. */
+.cl-llm-control { border: 1px solid var(--tw-border); border-radius: 12px; padding: 10px 12px; margin: 0 0 14px; background: var(--tw-surface-raised, var(--tw-surface)); }
+.cl-llm-status { font-size: 13px; color: var(--tw-text-muted); margin-bottom: 8px; }
+.cl-llm-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.cl-llm-actions button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 7px 14px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+}
+.cl-llm-actions button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-llm-actions button:disabled { opacity: .5; cursor: default; }
+
+/* Abweichungskarten. */
+.cl-dev { border: 1px solid var(--tw-border); border-radius: 10px; padding: 12px; margin: 0 0 10px; background: var(--tw-surface); }
+.cl-dev.self { border-left: 3px solid var(--tw-lena); }
+.cl-dev.corrected { opacity: .6; }
+.cl-dev-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cl-dev-class { font-weight: 700; color: var(--tw-text); }
+.cl-dev-loc { font-size: 12px; color: var(--tw-text-muted); font-variant-numeric: tabular-nums; }
+.cl-dev-values { font-size: 13px; color: var(--tw-text-muted); margin: 4px 0 8px; }
+.cl-dev-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-dev-actions button {
+  border: 1px solid var(--tw-button-border); background: var(--tw-button-bg); color: var(--tw-button-text);
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.cl-dev-actions button:hover:not(:disabled) { background: var(--tw-button-hover); }
+.cl-dev-actions button:disabled { opacity: .5; cursor: default; }
+
+.cl-ampel { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.cl-ampel-green { background: var(--tw-status-confirmed); }
+.cl-ampel-yellow { background: var(--tw-status-open); }
+.cl-ampel-red { background: var(--tw-status-unclear); }
+.cl-ampel-insufficient, .cl-ampel-none { background: var(--tw-border); }
+
+.cl-broken { display: inline-block; font-size: 12px; font-weight: 700; color: var(--tw-status-open); }
+
+/* Nachschlage-Seite (Kodierhandbuch) — strukturierte Karten je Klasse. */
+.cb-intro { margin: 4px 0 16px; }
+.cb-summary { font-size: 14px; font-weight: 700; color: var(--tw-text); margin: 0 0 8px; }
+.cb-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.cb-legend-item { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.cb-legend-example { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
+.cb-legend-boundary { background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
+
+.cb-group { margin: 0 0 8px; }
+
+.cb-card {
+  border: 1px solid var(--tw-border); border-left: 3px solid var(--tw-border);
+  border-radius: 12px; background: var(--tw-surface-raised, var(--tw-surface));
+  padding: 12px 14px; margin: 0 0 12px;
+}
+.cb-card.freigegeben { border-left-color: var(--tw-status-confirmed); }
+.cb-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+/* Deutsche Bezeichnung — hervorgehoben (fett + farbige Unterstreichung).
+   Kein englischer Schlüssel mehr im Kopf. */
+.cb-label {
+  font-size: 16.5px; font-weight: 700; color: var(--tw-text); line-height: 1.3; margin: 0;
+  border-bottom: 2px solid var(--tw-philipp); display: inline; padding-bottom: 1px;
+}
+.cb-badge { font-size: 11.5px; font-weight: 700; color: var(--tw-status-confirmed); white-space: nowrap; }
+/* Verweis auf eine andere Klasse — deutsche Bezeichnung, hervorgehoben. */
+.cb-ref { font-weight: 700; color: var(--tw-philipp-text); }
+
+.cb-fields { display: flex; flex-direction: column; gap: 7px; }
+.cb-field { border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+.cb-field-label {
+  display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; margin-right: 8px; vertical-align: baseline; opacity: .85;
+}
+.cb-field-text { font-size: 14.5px; }
+
+/* Definition: neutral, prominent. */
+.cb-definition { background: var(--tw-surface-secondary, rgba(0,0,0,.04)); }
+.cb-definition .cb-field-label { color: var(--tw-text-muted); }
+/* Beispiel: grüner Hintergrund („so zählt es"). */
+.cb-example { background: var(--tw-status-confirmed-surface); }
+.cb-example .cb-field-label { color: var(--tw-status-confirmed); }
+.cb-example .cb-field-text { color: var(--tw-text); }
+/* Grenzfall: roter Hintergrund („zählt NICHT"). */
+.cb-boundary { background: var(--tw-status-unclear-surface); }
+.cb-boundary .cb-field-label { color: var(--tw-status-unclear); }
+.cb-boundary .cb-field-text { color: var(--tw-text); }
+/* Abgrenzung / Hinweis: dezent. */
+.cb-delimit, .cb-note { background: transparent; border: 1px dashed var(--tw-border); }
+.cb-delimit .cb-field-label, .cb-note .cb-field-label { color: var(--tw-text-muted); }
+
+.cb-field code {
+  background: rgba(0,0,0,.06); border-radius: 5px; padding: 1px 5px; font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:root[data-theme="dark"] .cb-field code, :root:not([data-theme="light"]) .cb-field code { background: rgba(255,255,255,.08); }
+
+.cb-signoff {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--tw-border);
+}
+.cb-signoff-hint { font-size: 12.5px; color: var(--tw-text-muted); }
+.cb-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.cb-check input { width: 20px; height: 20px; }
+.cb-check.own { font-weight: 700; color: var(--tw-text); cursor: pointer; }
+.cb-check.own input { accent-color: var(--tw-status-confirmed); cursor: pointer; }
+.cb-check.other { color: var(--tw-text-muted); }
+
+/* Die Übersichts-Tabelle (Spalten, Kopfzeile, Mobil-Verhalten) kommt
+   vollständig aus der gemeinsamen overview.css — hier bewusst KEINE
+   eigene Fassung mehr. Die frühere Sonderlösung (eigenes Spaltenraster
+   plus Kartenlayout auf schmalen Geräten) hat die gemeinsame Komponente
+   überschrieben und ist deshalb ersatzlos entfallen. */
+
+/* Aggregat-Zeile über der Kappa-Tabelle: Ø über den gesamten Bestand
+   (n/a-/nicht belastbare Klassen ausgenommen) — Gegenstück zu den Σ/Ø-Werten
+   in der Kopfzeile der Situationsliste. */
+.cl-kappa-agg {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+  margin: 6px 0 10px; font-size: 12.5px; color: var(--tw-text-muted);
+}
+.cl-kappa-agg b { color: var(--tw-text); font-variant-numeric: tabular-nums; }
+.cl-kappa-agg-note { font-size: 11.5px; opacity: .85; }

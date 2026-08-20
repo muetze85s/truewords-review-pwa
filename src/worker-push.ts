@@ -1,10 +1,11 @@
-import baseWorker, {
+import baseWorker from './worker-classification';
+import {
   activeDatasetRow,
   reviewerSubmissionTimes,
   openDisputeTotal,
 } from './worker-boundary-pairs';
 import { sendPush } from '../push-send.mjs';
-import { localYmd, localParts, dueReminderSlots, disputeAlertDue, parseHhmm } from '../push-schedule-logic.mjs';
+import { localYmd, localParts, dueReminderSlots, disputeAlertDue, parseHhmm, pushAllowedFor } from '../push-schedule-logic.mjs';
 
 /**
  * Oberste Worker-Schicht: Web-Push. Fängt ausschließlich /api/push/* und die
@@ -72,6 +73,10 @@ async function sessionReviewer(request: Request, env: Env): Promise<Role | null>
 // ------------------------------------------------------------- Einstellungen
 
 type Settings = {
+  // Hauptschalter je Person (Migration 0017): 0 = an diese Person geht
+  // KEINERLEI Push, ausnahmslos. Die Anlass-Schalter darunter sind Feinsteuerung.
+  push_enabled_philipp: number;
+  push_enabled_lena: number;
   reminders_lena_enabled: number;
   reminders_philipp_enabled: number;
   lena_time_1: string;
@@ -92,6 +97,8 @@ async function loadSettings(env: Env): Promise<Settings> {
   const row = await env.DB.prepare('SELECT * FROM push_settings WHERE id = 1').first<Settings>();
   // Die Migration legt die Zeile an; als Sicherheitsnetz Defaults, falls nicht.
   return row ?? {
+    push_enabled_philipp: 1,
+    push_enabled_lena: 1,
     reminders_lena_enabled: 1,
     reminders_philipp_enabled: 1,
     lena_time_1: '09:00',
@@ -195,8 +202,13 @@ async function saveSettings(request: Request, env: Env): Promise<Response> {
   const nextDisputePhilipp = bool(body.dispute_alert_philipp_enabled);
   const nextDisputeLena = bool(body.dispute_alert_lena_enabled);
   const next: Settings = {
-    reminders_lena_enabled: bool(body.reminders_lena_enabled),
-    reminders_philipp_enabled: bool(body.reminders_philipp_enabled),
+    push_enabled_philipp: bool(body.push_enabled_philipp),
+    push_enabled_lena: bool(body.push_enabled_lena),
+    // Nicht mehr von der Oberfläche gesteuert: die beiden Zeiten haben je ein
+    // eigenes Häkchen, ein dritter Schalter darüber war doppelt. Spalte bleibt
+    // (additiv), wird aber nicht mehr gelesen — deshalb unverändert durchreichen.
+    reminders_lena_enabled: current.reminders_lena_enabled,
+    reminders_philipp_enabled: current.reminders_philipp_enabled,
     lena_time_1: time(body.lena_time_1, current.lena_time_1),
     lena_time_2: time(body.lena_time_2, current.lena_time_2),
     philipp_time_1: time(body.philipp_time_1, current.philipp_time_1),
@@ -213,14 +225,14 @@ async function saveSettings(request: Request, env: Env): Promise<Response> {
   };
   await env.DB.prepare(`
     UPDATE push_settings SET
-      reminders_lena_enabled = ?1, reminders_philipp_enabled = ?2,
+      push_enabled_philipp = ?1, push_enabled_lena = ?2,
       lena_time_1 = ?3, lena_time_2 = ?4, philipp_time_1 = ?5, philipp_time_2 = ?6,
       notify_philipp_on_lena_submit = ?7, notify_lena_on_philipp_submit = ?8,
       dispute_alert_enabled = ?9, dispute_alert_philipp_enabled = ?10, dispute_alert_lena_enabled = ?11,
       dispute_threshold = ?12, updated_at = ?13
     WHERE id = 1
   `).bind(
-    next.reminders_lena_enabled, next.reminders_philipp_enabled,
+    next.push_enabled_philipp, next.push_enabled_lena,
     next.lena_time_1, next.lena_time_2, next.philipp_time_1, next.philipp_time_2,
     next.notify_philipp_on_lena_submit, next.notify_lena_on_philipp_submit,
     next.dispute_alert_enabled, next.dispute_alert_philipp_enabled, next.dispute_alert_lena_enabled,
@@ -251,7 +263,16 @@ async function handlePushApi(request: Request, env: Env): Promise<Response> {
   }
   if (url.pathname === '/api/push/test' && request.method === 'POST') {
     if (reviewer !== 'Philipp') return error('Nur Philipp darf testen.', 403);
-    await notifyReviewer(env, reviewer, 'TrueWords Test', 'Push funktioniert!');
+    // Läuft durch dieselbe zentrale Prüfung wie jeder andere Anlass: steht der
+    // Hauptschalter auf „aus", wird auch per direktem POST nichts zugestellt.
+    const sent = await notifyReviewer(env, reviewer, 'TrueWords Test', 'Push funktioniert!');
+    if (!sent) {
+      return json({
+        ok: true,
+        sent: false,
+        reason: 'Benachrichtigungen sind für diese Person ausgeschaltet — zum Testen zuerst einschalten.',
+      });
+    }
     return json({ ok: true, sent: true });
   }
   return error('Endpunkt nicht gefunden.', 404);
@@ -266,10 +287,24 @@ function vapidFrom(env: Env): VapidConfig | null {
   return { publicKey: env.VAPID_PUBLIC, privateKey: env.VAPID_PRIVATE, subject: env.VAPID_SUBJECT };
 }
 
-/** Schickt eine Nachricht an alle Geräte einer Person; räumt tote Abos ab. */
-async function notifyReviewer(env: Env, reviewer: Role, title: string, bodyText: string): Promise<void> {
+/**
+ * EINZIGE Stelle, an der Web-Push das Haus verlässt. Hier — und nur hier —
+ * wird der Hauptschalter der Zielperson durchgesetzt: steht er auf „aus",
+ * geht nichts raus, egal welcher Anlass (Test, Zeit 1, Zeit 2, Streitfall,
+ * Abgabe des Partners). Die Anlass-Schalter der Aufrufer sind Feinsteuerung
+ * UNTER dieser Prüfung, kein Ersatz für sie.
+ *
+ * Schickt an alle Geräte der Person und räumt tote Abos ab.
+ *
+ * @returns true, wenn zugestellt werden durfte und ein Versand versucht wurde;
+ *          false, wenn der Hauptschalter aus ist oder VAPID fehlt.
+ */
+async function notifyReviewer(env: Env, reviewer: Role, title: string, bodyText: string): Promise<boolean> {
   const vapid = vapidFrom(env);
-  if (!vapid) return;
+  if (!vapid) return false;
+  // Hauptschalter — zentral, serverseitig, ohne Ausnahme.
+  const settings = await loadSettings(env);
+  if (!pushAllowedFor(settings, reviewer)) return false;
   const rows = await env.DB.prepare(`
     SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE reviewer = ?1
   `).bind(reviewer).all<{ endpoint: string; p256dh: string; auth: string }>();
@@ -284,6 +319,7 @@ async function notifyReviewer(env: Env, reviewer: Role, title: string, bodyText:
       console.error('Push send failed', caught);
     }
   }
+  return true;
 }
 
 async function alreadySent(env: Env, reviewer: Role, kind: string, ymd: string): Promise<boolean> {
@@ -323,8 +359,8 @@ async function maybeNotifyOnSubmit(env: Env, round: number, request: Request, re
 
     // Dedup je Runde (ymd fix '-'), damit ein erneutes Abgeben nicht doppelt meldet.
     if (await alreadySent(env, notifyTo, `${fromWho}:${round}`, '-')) return;
-    await markSent(env, notifyTo, `${fromWho}:${round}`, '-');
-    await notifyReviewer(env, notifyTo, 'TrueWords', `${fromText} ${round} abgegeben.`);
+    const sent = await notifyReviewer(env, notifyTo, 'TrueWords', `${fromText} ${round} abgegeben.`);
+    if (sent) await markSent(env, notifyTo, `${fromWho}:${round}`, '-');
   } catch (caught) {
     console.error('Submit notify failed', caught);
   }
@@ -353,14 +389,16 @@ async function runScheduled(env: Env): Promise<void> {
       reviewer: 'Lena',
       tz: settings.lena_tz,
       times: [settings.lena_time_1, settings.lena_time_2],
-      enabled: Boolean(settings.reminders_lena_enabled),
+      // Kein eigener Erinnerungs-Schalter mehr: eine leere Zeit ist die
+      // Abschaltung dieser Zeit, der Hauptschalter greift zentral im Versand.
+      enabled: true,
       disputeAlertEnabled: Boolean(settings.dispute_alert_lena_enabled),
     },
     {
       reviewer: 'Philipp',
       tz: settings.philipp_tz,
       times: [settings.philipp_time_1, settings.philipp_time_2],
-      enabled: Boolean(settings.reminders_philipp_enabled),
+      enabled: true,
       disputeAlertEnabled: Boolean(settings.dispute_alert_philipp_enabled),
     },
   ];
@@ -398,8 +436,10 @@ async function runScheduled(env: Env): Promise<void> {
     for (const slot of dueSlots) {
       const kind = `reminder:${slot}`;
       if (await alreadySent(env, config.reviewer, kind, ymd)) continue;
-      await markSent(env, config.reviewer, kind, ymd);
-      await notifyReviewer(env, config.reviewer, 'TrueWords', 'Erinnerung: Deine Runde wartet.');
+      // Erst zustellen, dann abhaken: was der Hauptschalter unterdrückt hat,
+      // darf nicht als „heute schon erinnert" gelten.
+      const sent = await notifyReviewer(env, config.reviewer, 'TrueWords', 'Erinnerung: Deine Runde wartet.');
+      if (sent) await markSent(env, config.reviewer, kind, ymd);
     }
 
     // Streitfall-Warnung — je Person einzeln abschaltbar, einmal je Ortstag.
@@ -412,8 +452,8 @@ async function runScheduled(env: Env): Promise<void> {
       nowMinutesOfDay: nowLocal.minutesOfDay,
       earliestMinutes: earliestDisputeMinutes,
     })) {
-      await markSent(env, config.reviewer, 'dispute', ymd);
-      await notifyReviewer(env, config.reviewer, 'TrueWords', `${openDisputes} offene Streitfälle warten auf euch.`);
+      const sent = await notifyReviewer(env, config.reviewer, 'TrueWords', `${openDisputes} offene Streitfälle warten auf euch.`);
+      if (sent) await markSent(env, config.reviewer, 'dispute', ymd);
     }
   }
 }

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TW Klassen">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="robots" content="noindex,nofollow">
+<title>Klassen nachschlagen · TrueWords</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./truewords-theme.css">
+<link rel="stylesheet" href="./truewords-ui-theme.css">
+<link rel="stylesheet" href="./boundary-pairs.css">
+<link rel="stylesheet" href="./overview.css">
+<link rel="stylesheet" href="./classification.css">
+<link rel="stylesheet" href="./nav.css">
+<script src="./truewords-user-theme.js" defer></script>
+<script src="./nav.js" defer></script>
+</head>
+<body class="dp cl">
+
+<header class="dp-top">
+  <div class="dp-top-inner">
+    <div class="dp-brand"><strong>Klassen nachschlagen</strong><span>Kodierhandbuch — Definitionen, Beispiele, Grenzfälle</span></div>
+  </div>
+</header>
+
+<main class="dp-wrap">
+  <div class="cl-overview-head">
+    <a class="cl-info-btn" href="./klassifizierung.html">← Zurück zur Übersicht</a>
+    <span class="dp-hint" id="cb-version"></span>
+  </div>
+
+  <div class="cb-intro">
+    <p class="cb-summary" id="cb-summary">Wird geladen …</p>
+    <div class="cb-legend">
+      <span class="cb-legend-item cb-legend-example">Beispiel = so zählt es</span>
+      <span class="cb-legend-item cb-legend-boundary">Grenzfall = zählt NICHT</span>
+    </div>
+    <p class="dp-hint">Hake ab, was du gegengelesen hast und mitträgst. Sind <strong>beide</strong> Haken gesetzt, gilt die Definition als freigegeben. Du kannst nur deinen eigenen Haken setzen.</p>
+  </div>
+
+  <div id="cb-content" class="cl-codebook">
+    <p class="dp-hint">Wird geladen …</p>
+  </div>
+</main>
+
+<script src="./codebook-render.js" defer></script>
+</body>
+</html>

@@ -14,6 +14,8 @@ import {
   agreeResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
+import { logGapsFromTimestamps, fitRange, decisionBoundaries, histogram } from '../gap-mixture.mjs';
+import { hourlyAggregates } from '../daily-rhythm.mjs';
 import type { SegmentationOptions } from '../segmentation-v4.d.mts';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
 
@@ -307,8 +309,39 @@ async function filteredSequenceUsing(
   return out;
 }
 
+// Modul-Cache der geparsten, gefilterten Nachrichtenfolge je Datensatz (Punkt 2).
+// Der teure Teil von filteredSequence ist das Lesen + JSON.parse ALLER Chunks —
+// das lief bisher bei jedem Runden-/Übersichts-/Streitfall-/Klassifizierungs-
+// Aufruf neu. Der Cache lebt im Worker-Isolate und wird gegen einen billigen
+// Fingerprint (Chunk-Anzahl + Gesamt-Bytelänge) validiert: ändert sich nichts
+// (kein Import), wird die geparste Folge wiederverwendet, sonst neu geladen.
+// Die Folge wird nur gelesen (slice/findIndex/map) und nie mutiert, daher ist
+// das Teilen derselben Referenz über Aufrufe hinweg sicher.
+type SequenceCacheEntry = { fingerprint: string; sequence: RawMessage[] };
+const sequenceCache = new Map<string, SequenceCacheEntry>();
+const SEQUENCE_CACHE_MAX = 3;
+
+async function sequenceFingerprint(env: Env, datasetId: string): Promise<string> {
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(messages_json)), 0) AS bytes FROM review_chat_chunks WHERE dataset_id = ?1',
+  ).bind(datasetId).first<{ c: number; bytes: number }>();
+  return `${Number(row?.c || 0)}:${Number(row?.bytes || 0)}`;
+}
+
 async function filteredSequence(env: Env, datasetId: string): Promise<RawMessage[]> {
-  return filteredSequenceUsing(env, datasetId, isReviewable);
+  const fingerprint = await sequenceFingerprint(env, datasetId);
+  const cached = sequenceCache.get(datasetId);
+  if (cached && cached.fingerprint === fingerprint) return cached.sequence;
+
+  const sequence = await filteredSequenceUsing(env, datasetId, isReviewable);
+  // Speicher begrenzen: bei Überlauf den am längsten nicht neu geschriebenen
+  // Eintrag (ältester Insert-Platz) verwerfen. In der Praxis 1–2 Datensätze.
+  if (!sequenceCache.has(datasetId) && sequenceCache.size >= SEQUENCE_CACHE_MAX) {
+    const oldest = sequenceCache.keys().next().value;
+    if (oldest !== undefined) sequenceCache.delete(oldest);
+  }
+  sequenceCache.set(datasetId, { fingerprint, sequence });
+  return sequence;
 }
 
 // Datensätze, in denen keine NEUEN Runden mehr angelegt werden dürfen.
@@ -353,6 +386,11 @@ async function loadRoundWindow(
   if (sequence.length < ROUND_WINDOW_SIZE) {
     throw new Error('Die gefilterte Nachrichtenfolge ist kürzer als eine Runde.');
   }
+  // Globale Positions-Ordinalzahlen aktuell halten (billiger COUNT-Schnellpfad,
+  // wenn nichts Neues) — nutzt die ohnehin geladene Folge, kein Extra-Parse.
+  // Nicht-fatal: schlägt der (append-only) Backfill fehl, lädt die Runde
+  // trotzdem; die Anzeige fällt auf die alte Nummerierung zurück.
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Runde) fehlgeschlagen — nicht fatal', caught); }
 
   let row = await env.DB.prepare(`
     SELECT dataset_id, round, first_message_id, message_count
@@ -486,7 +524,14 @@ async function getRound(env: Env, dataset: DatasetRow, round: number, reviewer: 
     philippSubmittedAt,
     lenaSubmittedAt,
   });
-  return json({ round, ...view });
+  // Globale Grenz-Nummern der Nähte dieses Fensters: In der Runden-Ansicht sind
+  // die Grenzen selbst der Arbeitsgegenstand, deshalb trägt jede GESETZTE
+  // Grenze ihre Nummer direkt an der Linie (nicht nur in der Kopfzeile).
+  // Naht = die Nachricht NACH der Grenze, also genügen die Message-Ordinalzahlen.
+  const ordinalMap = await messageOrdinals(env, dataset.id, messages.map((message) => message.id));
+  const ordinals: Record<string, number> = {};
+  for (const [id, ordinal] of ordinalMap) ordinals[id] = ordinal;
+  return json({ round, ...view, ordinals });
 }
 
 async function putMarks(request: Request, env: Env, dataset: DatasetRow, round: number, reviewer: Role): Promise<Response> {
@@ -520,21 +565,40 @@ async function putMarks(request: Request, env: Env, dataset: DatasetRow, round: 
     clean.push({ seamMessageId, mark });
   }
 
+  // Inkrementell speichern (Punkt 2): nur den Unterschied schreiben, statt bei
+  // jedem (debounced) Speichern ALLE Markierungen der Runde zu löschen und neu
+  // einzufügen. Ein typisches Speichern kippt eine einzige Naht → eine einzige
+  // Insert-/Update-/Delete-Zeile statt „DELETE alle + bis zu 60 INSERTs".
+  const existingRows = await loadMarks(env, dataset.id, round, reviewer);
+  const existing = new Map(existingRows.map((row) => [row.seam_message_id, row.mark]));
+  const desired = new Map(clean.map((entry) => [entry.seamMessageId, entry.mark]));
+
+  const toUpsert = clean.filter((entry) => existing.get(entry.seamMessageId) !== entry.mark);
+  const toDelete = [...existing.keys()].filter((id) => !desired.has(id));
+
   const now = new Date().toISOString();
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3')
-      .bind(dataset.id, round, reviewer),
-  ];
-  for (const entry of clean) {
+  const statements: D1PreparedStatement[] = [];
+  if (toDelete.length) {
+    // ≤ MAX_MARKS_PER_ROUND (60) IDs + 3 feste Binds ⇒ sicher unter D1s 100er-Limit.
+    const placeholders = toDelete.map((_, index) => `?${index + 4}`).join(',');
+    statements.push(
+      env.DB.prepare(
+        `DELETE FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2 AND reviewer = ?3 AND seam_message_id IN (${placeholders})`,
+      ).bind(dataset.id, round, reviewer, ...toDelete),
+    );
+  }
+  for (const entry of toUpsert) {
     statements.push(
       env.DB.prepare(`
         INSERT INTO review_boundary_marks
           (dataset_id, round, reviewer, seam_message_id, mark, created_at, updated_at)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+        ON CONFLICT(dataset_id, round, reviewer, seam_message_id) DO UPDATE SET
+          mark = excluded.mark, updated_at = excluded.updated_at
       `).bind(dataset.id, round, reviewer, entry.seamMessageId, entry.mark, now),
     );
   }
-  await env.DB.batch(statements);
+  if (statements.length) await env.DB.batch(statements);
 
   return json({ ok: true, saved: clean.length });
 }
@@ -551,6 +615,28 @@ async function submitRound(env: Env, dataset: DatasetRow, round: number, reviewe
   `).bind(dataset.id, round, reviewer, now).run();
 
   return json({ ok: true, submitted: true, submittedAt: now });
+}
+
+/**
+ * Punkt 7: billiger „Zustands-Stempel" einer Runde für leichtgewichtiges
+ * Polling. Ändert sich der Stempel, hat sich beim Partner etwas getan (Abgabe
+ * oder Streitfall-Stimme) → die Seite lädt die Runde neu (über den normalen,
+ * blind-gegateten Endpunkt, Blindheit bleibt gewahrt). Bewusst OHNE
+ * filteredSequence/Runden-Fenster — nur zwei indizierte Zählungen/Max über
+ * Abgaben und Streitfall-Entscheidungen dieser Runde. Marks fließen NICHT ein
+ * (blind bis zur Abgabe; ihre Änderung soll keine Reaktion auslösen).
+ */
+async function getRoundState(env: Env, dataset: DatasetRow, round: number): Promise<Response> {
+  const [sub, res] = await Promise.all([
+    env.DB.prepare(
+      "SELECT COUNT(*) AS c, COALESCE(MAX(submitted_at), '') AS m FROM review_round_submissions WHERE dataset_id = ?1 AND round = ?2",
+    ).bind(dataset.id, round).first<{ c: number; m: string }>(),
+    env.DB.prepare(
+      "SELECT COUNT(*) AS c, COALESCE(MAX(decided_at), '') AS m FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2",
+    ).bind(dataset.id, round).first<{ c: number; m: string }>(),
+  ]);
+  const stamp = `${Number(sub?.c || 0)}:${sub?.m || ''}|${Number(res?.c || 0)}:${res?.m || ''}`;
+  return json({ ok: true, stamp });
 }
 
 /**
@@ -665,9 +751,16 @@ async function buildAgreementPayload(
     ...comparison.onlyB.map((position) => disputeEntry(position, 'Lena')),
   ];
 
-  // Stabile Nummerierung nach Position (Konversationsreihenfolge), unabhängig
-  // vom Klärungsstatus — bleibt fix, auch wenn während der Sitzung ein
-  // Streitfall geklärt wird und in der Anzeige ans Ende rutscht.
+  // Global stabile Grenz-Nummer je Streitfall = Ordinalzahl der Naht-Nachricht
+  // (Punkt 1). Ersetzt die frühere runden-lokale 1..k-Zählung, die in jeder
+  // Runde bei 1 neu begann und sich beim Klären verschob. Fallback auf die
+  // runden-lokale Reihenfolge nur, falls die Ordinalzahlen für diese Naht noch
+  // nicht gebackfillt sind — dann bleibt die Anzeige wenigstens nicht leer.
+  const disputeOrdinals = await messageOrdinals(
+    env,
+    dataset.id,
+    disputeEntries.map((entry) => entry.seamMessageId),
+  );
   const numberByPosition = new Map(
     [...disputeEntries].sort((a, b) => a.position - b.position).map((entry, index) => [entry.position, index + 1]),
   );
@@ -675,7 +768,11 @@ async function buildAgreementPayload(
   // Offene Streitfälle zuerst, geklärte ans Ende — serverseitig sortiert,
   // damit beide Partner exakt dieselbe Reihenfolge sehen.
   const disputes = disputeEntries
-    .map((entry) => ({ ...entry, number: numberByPosition.get(entry.position) }))
+    .map((entry) => ({
+      ...entry,
+      // Globale Grenz-Nummer (bevorzugt) bzw. runden-lokaler Fallback.
+      number: disputeOrdinals.get(entry.seamMessageId) ?? numberByPosition.get(entry.position) ?? null,
+    }))
     .sort((a, b) => {
       const aResolved = a.decision !== 'open' ? 1 : 0;
       const bResolved = b.decision !== 'open' ? 1 : 0;
@@ -697,7 +794,8 @@ async function buildAgreementPayload(
       vsPhilipp: { agreementF1: agreementF1(vsPhilipp), kappa: cohensKappa(vsPhilipp, totalSeams) },
       vsLena: { agreementF1: agreementF1(vsLena), kappa: cohensKappa(vsLena, totalSeams) },
       // F1 = Automatik vs. GT (F0-Paare + geklärte Streitfälle) dieser Runde.
-      vsCombined: { f1: agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
+      // Punkt 3: ohne Grenz-Wahrheit (GT=0) ist F1 n/a (null), nicht 0.
+      vsCombined: { f1: combined.cuts.length === 0 ? null : agreementF1(vsCombined), kappa: cohensKappa(vsCombined, totalSeams) },
     },
     // Roh-Diagnose: wie viele Grenzen die Automatik überhaupt gesetzt hat, unabhängig
     // vom Vergleich. 0 bei >0 menschlichen Grenzen erklärt sofort eine 0.00-Übereinstimmung.
@@ -908,9 +1006,14 @@ async function getSummary(env: Env, dataset: DatasetRow, reviewer: Role, url: UR
     totalPairs += comparison.pairs.length;
     totalOnlyPhilipp += comparison.onlyA.length;
     totalOnlyLena += comparison.onlyB.length;
-    totalAutoPairs += vsCombined.pairs.length;
-    totalAutoOnlyAuto += vsCombined.onlyA.length;
-    totalAutoOnlyCombined += vsCombined.onlyB.length;
+    // Punkt 3: Runden ohne Grenz-Wahrheit (GT=0) fließen NICHT ins F1-Aggregat
+    // ein (sonst zählte die Automatik dort nur „Fehltreffer" gegen eine leere
+    // Wahrheit). F0/GT-Summe bleiben davon unberührt.
+    if (combined.cuts.length > 0) {
+      totalAutoPairs += vsCombined.pairs.length;
+      totalAutoOnlyAuto += vsCombined.onlyA.length;
+      totalAutoOnlyCombined += vsCombined.onlyB.length;
+    }
     totalAutomaticBoundaries += automaticResult.boundaries.length;
     gtTotal += combined.cuts.length;
 
@@ -990,6 +1093,13 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
       'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
     ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
+
+  // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
+  // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
+  // ist die Startseite nach dem Login → Nummern sind vor dem ersten
+  // Runden-Öffnen gefüllt. Nicht-fatal: schlägt der Backfill fehl, lädt die
+  // Übersicht trotzdem (append-only, setzt sich beim nächsten Laden fort).
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Übersicht) fehlgeschlagen — nicht fatal', caught); }
 
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
@@ -1079,14 +1189,19 @@ async function getOverview(env: Env, dataset: DatasetRow, reviewer: Role, url: U
           .map((b: { beforeEventId: string }) => positions.get(b.beforeEventId))
           .filter((p: number | undefined): p is number => p !== undefined);
         const vsCombined = pairSeams(autoPositions, combined.cuts, tolerance);
-        f1 = agreementF1(vsCombined);
+        // Punkt 3: Ohne Grenz-Wahrheit (GT=0) ist F1 nicht definiert → n/a
+        // (null), NICHT 0. Solche Runden zählen auch nicht ins F1-Aggregat.
+        // GT>0 und die Automatik trifft nichts = echte 0 (bleibt).
+        f1 = gtSize === 0 ? null : agreementF1(vsCombined);
 
         pooledPairs += comparison.pairs.length;
         pooledOnlyPhilipp += comparison.onlyA.length;
         pooledOnlyLena += comparison.onlyB.length;
-        pooledAutoPairs += vsCombined.pairs.length;
-        pooledAutoOnlyAuto += vsCombined.onlyA.length;
-        pooledAutoOnlyCombined += vsCombined.onlyB.length;
+        if (gtSize > 0) {
+          pooledAutoPairs += vsCombined.pairs.length;
+          pooledAutoOnlyAuto += vsCombined.onlyA.length;
+          pooledAutoOnlyCombined += vsCombined.onlyB.length;
+        }
         gtTotal += gtSize;
 
         const resolvedSeams = new Set(agreed.filter((entry) => entry.resolved).map((entry) => entry.seam_message_id));
@@ -1181,6 +1296,13 @@ async function getDisputeCheck(env: Env, dataset: DatasetRow, url: URL): Promise
       'SELECT round, seam_message_id, decided_by, decision FROM review_boundary_resolutions WHERE dataset_id = ?1',
     ).bind(dataset.id).all<{ round: number; seam_message_id: string; decided_by: string; decision: string }>(),
   ]);
+
+  // Globale Positions-Ordinalzahlen aktuell halten, solange die Folge ohnehin
+  // geladen ist (billiger COUNT-Schnellpfad, wenn nichts Neues). Die Übersicht
+  // ist die Startseite nach dem Login → Nummern sind vor dem ersten
+  // Runden-Öffnen gefüllt. Nicht-fatal: schlägt der Backfill fehl, lädt die
+  // Übersicht trotzdem (append-only, setzt sich beim nächsten Laden fort).
+  try { await ensureMessageOrdinals(env, dataset.id, sequence); } catch (caught) { console.error('Ordinal-Backfill (Übersicht) fehlgeschlagen — nicht fatal', caught); }
 
   const seqIndex = new Map<string, number>();
   for (let index = 0; index < sequence.length; index += 1) seqIndex.set(rawId(sequence[index]), index);
@@ -2714,6 +2836,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/validation-status'
     && url.pathname !== '/api/admin/marks-backfill-plan'
     && url.pathname !== '/api/admin/marks-backfill-apply'
+    && url.pathname !== '/api/admin/backfill-ordinals'
+    && url.pathname !== '/api/admin/segment-diagnose'
+    && url.pathname !== '/api/admin/gap-mixture'
+    && url.pathname !== '/api/public/gap-mixture'
+    && url.pathname !== '/api/public/hourly'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2725,6 +2852,38 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
   }
   if (url.pathname === '/api/admin/marks-restore-apply' && request.method === 'POST') {
     return await applyMarksRestore(request, env);
+  }
+
+  // Öffentliche Aggregat-Route (bewusste Entscheidung, 2026-08-20): ohne Login
+  // abrufbar, ausschließlich Aggregate (Histogrammzählungen, GMM-Parameter) —
+  // keine Nachricht, kein Zeitstempel, kein Text, keine Namen. Rechnet NIE
+  // selbst: sie liefert nur das Ergebnis aus, das ein Admin-Aufruf von
+  // /api/admin/gap-mixture einmalig in app_settings abgelegt hat. Die Daten
+  // sind statisch (4 Jahre Historie) — einmal rechnen reicht, die Antwort hier
+  // ist ein einzelner D1-Read (<1 s) statt Minuten EM-Fit.
+  if (url.pathname === '/api/public/gap-mixture' && request.method === 'GET') {
+    const dataset = await activeDataset(env, url.searchParams.get('dataset'));
+    if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
+    try {
+      return await publicGapMixture(env, dataset, url, request);
+    } catch (caught) {
+      console.error('Public gap-mixture failed', caught);
+      return error('Die Abstandsanalyse konnte nicht ausgeliefert werden.', 500);
+    }
+  }
+
+  // Tagesrhythmus einzeln (für externe Abrufer, die nur diesen Ausschnitt
+  // brauchen): derselbe abgelegte Datenstand wie /api/public/gap-mixture,
+  // nur das dailyRhythm-Feld — reine Zählungen, ein D1-Read, kein Login.
+  if (url.pathname === '/api/public/hourly' && request.method === 'GET') {
+    const dataset = await activeDataset(env, url.searchParams.get('dataset'));
+    if (!dataset) return error('Kein aktiver Prüfdatenbestand.', 404);
+    try {
+      return await publicHourly(env, dataset, url, request);
+    } catch (caught) {
+      console.error('Public hourly failed', caught);
+      return error('Die Tagesrhythmus-Aggregate konnten nicht ausgeliefert werden.', 500);
+    }
   }
 
   const user = await sessionUser(request, env);
@@ -2790,12 +2949,28 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
       return await getMarksBackfillPlan(env);
     }
 
-    const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve)?$/u);
+    if (url.pathname === '/api/admin/backfill-ordinals' && request.method === 'POST') {
+      if (!user.canUpload) return error('Nur der Admin darf die Ordinalzahlen backfillen.', 403);
+      return await backfillOrdinals(env, dataset);
+    }
+
+    if (url.pathname === '/api/admin/segment-diagnose' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Segment-Diagnose sehen.', 403);
+      return await segmentDiagnose(env, dataset, url, request);
+    }
+
+    if (url.pathname === '/api/admin/gap-mixture' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Abstandsanalyse sehen.', 403);
+      return await gapMixture(env, dataset, url, request);
+    }
+
+    const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve|\/state)?$/u);
     if (!match) return error('Endpunkt nicht gefunden.', 404);
     const round = Number(match[1]);
     if (!Number.isInteger(round) || round < 1) return error('Ungültige Runde.', 422);
     const suffix = match[2] || '';
 
+    if (suffix === '/state' && request.method === 'GET') return await getRoundState(env, dataset, round);
     if (suffix === '' && request.method === 'GET') return await getRound(env, dataset, round, user.role);
     if (suffix === '/marks' && request.method === 'PUT') return await putMarks(request, env, dataset, round, user.role);
     if (suffix === '/submit' && request.method === 'POST') return await submitRound(env, dataset, round, user.role);
@@ -2878,6 +3053,1197 @@ export async function openDisputeTotal(
     open += Math.max(0, disputeCount - resolvedCount);
   }
   return open;
+}
+
+// ---- Geteilt mit der Klassifizierungs-Schicht (worker-classification.ts) ---
+
+/** Anzeigenachricht einer Runde — wie sie die Klassifizierung zum Rendern braucht. */
+export type ClassificationViewMessage = ViewMessage;
+
+export interface RoundCombinedResult {
+  /** Nachrichten des Rundenfensters, in Reihenfolge. */
+  messages: ViewMessage[];
+  /** IDs in Reihenfolge (Bequemlichkeit für deriveSituations). */
+  messageIds: string[];
+  /** Gemeinsame Grenzpositionen (combinedBoundary.cuts) — Start jeder neuen Situation. */
+  cutPositions: number[];
+  /** Haben beide Prüfer diese Runde (Grenzen) abgegeben? */
+  bothSubmitted: boolean;
+  /** Offene Grenz-Streitfälle dieser Runde (nach 0008-Regel). 0 = vollständig geklärt. */
+  openDisputes: number;
+}
+
+/**
+ * Die gemeinsame Grenzfassung einer Runde plus Klärungsstand — exakt die
+ * Pipeline aus buildAgreementPayload (compareReviewers → agreeResolutions →
+ * combinedBoundary), aber ohne Automatik-Vergleich und Streitfall-Aufbereitung.
+ * Genutzt von worker-classification.ts, um Situationen (Spannen zwischen zwei
+ * Grenzen) abzuleiten und zu prüfen, ob eine Runde für die Klassifizierung
+ * freigegeben ist (beide abgegeben UND keine offenen Grenz-Streitfälle).
+ */
+export async function combinedBoundaryForRound(
+  env: Env,
+  dataset: DatasetRow,
+  round: number,
+  tolerance = 1,
+  doubtMode: DoubtMode = 'skip',
+): Promise<RoundCombinedResult> {
+  const { messages } = await loadRoundWindow(env, dataset, round);
+  const positions = seamPositions(messages);
+  const totalSeams = Math.max(0, messages.length - 1);
+
+  const [philippMarks, lenaMarks, philippSubmitted, lenaSubmitted, resolutionRows] = await Promise.all([
+    loadMarks(env, dataset.id, round, 'Philipp'),
+    loadMarks(env, dataset.id, round, 'Lena'),
+    submittedAt(env, dataset.id, round, 'Philipp'),
+    submittedAt(env, dataset.id, round, 'Lena'),
+    env.DB.prepare(`
+      SELECT seam_message_id, decision, note, decided_by, decided_at
+      FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, round).all<ResolutionRow>(),
+  ]);
+
+  const comparison = compareReviewers(
+    toPositionalMarks(philippMarks, positions),
+    toPositionalMarks(lenaMarks, positions),
+    { totalSeams, tolerance, doubtMode },
+  );
+  const agreed = agreeResolutions(resolutionRows.results || []);
+  const combined = combinedBoundary(comparison, toPositionalResolutions(agreed, positions));
+  const resolvedCount = agreed.filter((entry) => entry.resolved).length;
+  const disputeCount = comparison.onlyA.length + comparison.onlyB.length;
+
+  return {
+    messages,
+    messageIds: messages.map((message) => message.id),
+    cutPositions: combined.cuts,
+    bothSubmitted: Boolean(philippSubmitted && lenaSubmitted),
+    openDisputes: Math.max(0, disputeCount - resolvedCount),
+  };
+}
+
+/** Aktiver bzw. per ?dataset= gewählter Datenbestand — für die Klassifizierungs-Schicht. */
+export async function resolveDatasetRow(env: Env, requestedId?: string | null): Promise<DatasetRow | null> {
+  return activeDataset(env, requestedId);
+}
+
+/** Alle Runden, die (Grenzen) beidseitig abgegeben wurden — Kandidaten für die Klassifizierung. */
+export async function bothSubmittedRounds(env: Env, datasetId: string): Promise<number[]> {
+  const rows = await env.DB.prepare(`
+    SELECT round, reviewer FROM review_round_submissions WHERE dataset_id = ?1
+  `).bind(datasetId).all<{ round: number; reviewer: Role }>();
+  const byRound = new Map<number, Set<Role>>();
+  for (const row of rows.results || []) {
+    if (!byRound.has(row.round)) byRound.set(row.round, new Set());
+    byRound.get(row.round)?.add(row.reviewer);
+  }
+  return [...byRound.entries()]
+    .filter(([, reviewers]) => reviewers.has('Philipp') && reviewers.has('Lena'))
+    .map(([round]) => round)
+    .sort((a, b) => a - b);
+}
+
+// ------------------------------------------ Globale Grenz-/Situations-Nummern
+//
+// Runden-lokale Nummern ("Streitfall 3", situation_index) sind mehrdeutig und
+// verschieben sich. Stattdessen bekommt jede Nachricht EINE global stabile
+// Positions-Ordinalzahl: ihren 1-basierten Platz in der globalen Chronologie
+// (= filteredSequence-/Chunk-Reihenfolge, das ist die Telegram-Export-Reihen-
+// folge). Eine Grenze/Naht wird über die ihr folgende Nachricht
+// (seam_message_id) benannt → "Grenze N" = Ordinalzahl dieser Nachricht. Eine
+// Situation über ihre Start-Grenze → "Situation ab Grenze N" = Ordinalzahl von
+// start_message_id. EINE Nummerierungslogik, für Grenzen wie für Situationen.
+//
+// Persistiert (review_message_ordinals, Migration 0016), damit die Nummern
+// unveränderlich sind (Neuimporte hängen nur hinten an) UND die billigen
+// Übersichts-Pfade sie per indiziertem Lookup holen, ohne den Chat zu parsen.
+
+/**
+ * Stellt sicher, dass jede Nachricht der (bereits geladenen) globalen Folge eine
+ * persistente Ordinalzahl hat. Idempotent und append-only: schon vergebene
+ * Nummern bleiben, neue Nachrichten bekommen fortlaufend die nächste Nummer
+ * hinter der bisher höchsten. Normalfall (nichts Neues) = eine COUNT-Abfrage,
+ * kein Schreiben. Aufgerufen dort, wo `sequence` ohnehin schon geladen ist
+ * (loadRoundWindow, getOverview, Backfill-Endpunkt) — kein Extra-Parse.
+ */
+export async function ensureMessageOrdinals(
+  env: Env,
+  datasetId: string,
+  sequence: RawMessage[],
+): Promise<void> {
+  const countRow = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(MAX(ordinal), 0) AS m FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(datasetId).first<{ c: number; m: number }>();
+  const stored = Number(countRow?.c || 0);
+  // Schnellpfad: mindestens so viele Nummern vergeben wie es nummerierbare
+  // (id-tragende) Nachrichten gibt → nichts Neues (Append-only). Kein Diff,
+  // kein Schreiben. Gegen die Zahl der id-tragenden Nachrichten geprüft (nicht
+  // sequence.length), damit id-lose Einträge den Schnellpfad nicht dauerhaft
+  // blockieren.
+  let numberable = 0;
+  for (const message of sequence) if (rawId(message)) numberable += 1;
+  if (stored >= numberable) return;
+
+  const existing = new Set<string>();
+  const rows = await env.DB.prepare(
+    'SELECT message_id FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(datasetId).all<{ message_id: string }>();
+  for (const row of rows.results || []) existing.add(row.message_id);
+
+  let next = Number(countRow?.m || 0) + 1;
+  // Zu vergebende (message_id, ordinal)-Paare in globaler Reihenfolge sammeln.
+  const pending: Array<[string, number]> = [];
+  for (const message of sequence) {
+    const id = rawId(message);
+    if (!id || existing.has(id)) continue;
+    existing.add(id);
+    pending.push([id, next]);
+    next += 1;
+  }
+  if (!pending.length) return;
+
+  // Multi-Row-INSERT statt einer Zeile je Statement: dataset_id als ?1
+  // wiederverwendet, je Zeile message_id + ordinal → 1 + 2·Zeilen gebundene
+  // Variablen. 49 Zeilen/Statement (max. 99 Binds < 100), mehrere Statements je
+  // Batch. So bleibt selbst ein sehr großer Erst-Backfill (4-Jahres-Chat, ggf.
+  // Zehntausende Nachrichten) auf wenige Dutzend D1-Roundtrips statt Tausende
+  // Einzel-Inserts beschränkt. Append-only: jeder committete Batch bleibt, ein
+  // etwaiger Abbruch setzt sich beim nächsten Aufruf fort (existing überspringt
+  // die bereits vergebenen).
+  const ROWS_PER_STMT = 49;
+  const STMTS_PER_BATCH = 20;
+  let batch: D1PreparedStatement[] = [];
+  const flush = async () => { if (batch.length) { await env.DB.batch(batch); batch = []; } };
+  for (let i = 0; i < pending.length; i += ROWS_PER_STMT) {
+    const slice = pending.slice(i, i + ROWS_PER_STMT);
+    const tuples = slice.map((_, j) => `(?1, ?${2 + j * 2}, ?${3 + j * 2})`).join(',');
+    const binds: Array<string | number> = [datasetId];
+    for (const [id, ord] of slice) binds.push(id, ord);
+    batch.push(
+      env.DB.prepare(
+        `INSERT INTO review_message_ordinals (dataset_id, message_id, ordinal) VALUES ${tuples}
+         ON CONFLICT(dataset_id, message_id) DO NOTHING`,
+      ).bind(...binds),
+    );
+    if (batch.length >= STMTS_PER_BATCH) await flush();
+  }
+  await flush();
+}
+
+/**
+ * Globale Ordinalzahlen für die angegebenen Nachrichten-IDs — billiger,
+ * indizierter Lookup ohne Chat-Parsing. Fehlt für eine ID noch eine Nummer
+ * (Ordinalzahlen noch nicht gebackfillt), fehlt der Eintrag in der Map (der
+ * Aufrufer fällt dann auf eine Ersatzanzeige zurück). Chunked auf ≤90 gebundene
+ * Variablen, damit D1s 100er-Limit nie überschritten wird.
+ */
+export async function messageOrdinals(
+  env: Env,
+  datasetId: string,
+  messageIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const unique = [...new Set(messageIds.filter(Boolean))];
+  const CHUNK = 90;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const batch = unique.slice(i, i + CHUNK);
+    // dataset_id = ?1, IDs = ?2..?N+1.
+    const placeholders = batch.map((_, index) => `?${index + 2}`).join(',');
+    const rows = await env.DB.prepare(
+      `SELECT message_id, ordinal FROM review_message_ordinals WHERE dataset_id = ?1 AND message_id IN (${placeholders})`,
+    ).bind(datasetId, ...batch).all<{ message_id: string; ordinal: number }>();
+    for (const row of rows.results || []) out.set(row.message_id, Number(row.ordinal));
+  }
+  return out;
+}
+
+/**
+ * POST /api/admin/backfill-ordinals — vergibt (einmalig, danach No-Op) die
+ * globalen Ordinalzahlen für alle Nachrichten des Datensatzes. Nur canUpload.
+ * Nicht zwingend nötig (loadRoundWindow/getOverview backfillen ohnehin beim
+ * ersten Zugriff), aber praktisch, um direkt nach Deploy/Migration zu füllen.
+ */
+async function backfillOrdinals(env: Env, dataset: DatasetRow): Promise<Response> {
+  const sequence = await filteredSequence(env, dataset.id);
+  await ensureMessageOrdinals(env, dataset.id, sequence);
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS c, COALESCE(MAX(ordinal), 0) AS m FROM review_message_ordinals WHERE dataset_id = ?1',
+  ).bind(dataset.id).first<{ c: number; m: number }>();
+  return json({ ok: true, dataset: dataset.id, sequenceLength: sequence.length, numbered: Number(row?.c || 0), maxOrdinal: Number(row?.m || 0) });
+}
+
+
+// ---- Diagnose als lesbare Seite -------------------------------------------
+//
+// Die Diagnose muss auf dem iPad lesbar sein, ohne JSON zu kopieren. Deshalb
+// rendert derselbe Endpunkt bei Seitenaufruf (Accept: text/html) eine schlichte
+// Seite; `?format=json` liefert weiterhin die Rohdaten. Serverseitig gerendert,
+// damit keine zweite Seite plus Skript in die Asset-Liste muss.
+
+const HTML_HEADERS = {
+  'content-type': 'text/html; charset=utf-8',
+  'cache-control': 'no-store, max-age=0',
+  'x-content-type-options': 'nosniff',
+};
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;').replace(/'/gu, '&#39;');
+}
+
+/** Sekunden als „4 h 01 min" / „13 min" / „–". */
+function humanDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '–';
+  const total = Math.max(0, Math.round(seconds));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days} d ${String(hours).padStart(2, '0')} h`;
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, '0')} min`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${total} s`;
+}
+
+/** Anteil als „12,3 %" (deutsche Schreibweise), null → „–". */
+function humanShare(share: number | null | undefined): string {
+  if (share === null || share === undefined || !Number.isFinite(share)) return '–';
+  return `${(share * 100).toFixed(1).replace('.', ',')} %`;
+}
+
+/** Zeitpunkt als „So, 03.05.2026, 14:03" in Europe/Berlin. */
+function humanTime(unix: number | null | undefined): string {
+  if (!unix) return '–';
+  try {
+    return new Intl.DateTimeFormat('de-DE', {
+      timeZone: 'Europe/Berlin', weekday: 'short', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(new Date(unix * 1000));
+  } catch {
+    return '–';
+  }
+}
+
+function diagnosePage(title: string, body: string): Response {
+  // Bewusst eigenständig und ohne Abhängigkeit auf die App-Stylesheets: die
+  // Seite soll auch dann lesbar sein, wenn der Service Worker eine alte Fassung
+  // der CSS-Dateien ausliefert. Dunkel wie der Rest der App, mobil zuerst.
+  const html = `<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>${escapeHtml(title)}</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #14171c; color: #e8eaed;
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 24px 0 8px; color: #9fe3d9; }
+  p.sub { color: #9aa3ad; margin: 0 0 20px; font-size: 14px; }
+  .card { background: #1c2027; border: 1px solid #2b313a; border-radius: 12px;
+          padding: 14px; margin: 0 0 14px; }
+  .big { font-size: 30px; font-weight: 700; line-height: 1.2; }
+  .big small { font-size: 14px; font-weight: 400; color: #9aa3ad; display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #2b313a; }
+  th { color: #9aa3ad; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .flag { color: #ffb4a8; font-weight: 600; }
+  .ok { color: #9fe3d9; }
+  a { color: #9fe3d9; }
+  .note { font-size: 13px; color: #9aa3ad; }
+</style>
+</head><body>
+${body}
+</body></html>`;
+  return new Response(html, { status: 200, headers: HTML_HEADERS });
+}
+
+/**
+ * GET /api/admin/segment-diagnose — Read-only-Diagnose der Situations-Herkunft
+ * (nur canUpload). Beantwortet Block 2 der Handoff-Frage: aus welchem Grenzsatz
+ * stammen die `review_situations`, und wie viele haben eine große interne
+ * Zeitlücke (Kennzeichen einer Annotationslücke)?
+ *
+ * KEINE Datenänderung — ausschließlich SELECTs. Es wird KEIN Nachrichtentext
+ * ausgegeben (nur Ordinalzahl, Zeitstempel, Absender, Art).
+ *
+ * Grundlage: Eine Runde ist ein zusammenhängender Ausschnitt der globalen
+ * `filteredSequence`; eine Situation ist ein zusammenhängender Unterausschnitt
+ * davon. Damit ist die interne Zeitlücke einer Situation die größte Differenz
+ * zweier aufeinanderfolgender Nachrichten zwischen ihrer Start- und
+ * End-Nachricht in der globalen Folge — ohne die Runde erneut zu parsen.
+ *
+ * Übersicht (ohne Drill-down-Parameter): Verteilung der internen Maximallücken
+ *   über alle vorbereiteten Situationen (+ Validierungs-Teilmenge) und die 25
+ *   Situationen mit der größten Lücke.
+ * Drill-down (?situation=<id> | ?round=<r>&index=<i> | ?ordinal=<start-ordinal>):
+ *   alle Nachrichten der Situation mit Lücken sowie – je interner Naht – ob in
+ *   review_boundary_marks / review_boundary_resolutions etwas steht (wessen,
+ *   welcher Zustand). Leer + leer = niemand hat dort je eine Grenze gesehen
+ *   (Annotationslücke).
+ */
+async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  // Seitenaufruf im Browser → lesbare Seite; ?format=json → Rohdaten.
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+  const sequence = await filteredSequence(env, dataset.id);
+  const idIndex = new Map<string, number>();
+  const secs: number[] = new Array(sequence.length);
+  for (let i = 0; i < sequence.length; i += 1) {
+    idIndex.set(rawId(sequence[i]), i);
+    secs[i] = messageSeconds(sequence[i]);
+  }
+
+  const situationRows = (await env.DB.prepare(`
+    SELECT id, round, situation_index, start_message_id, end_message_id, in_validation_sample
+    FROM review_situations WHERE dataset_id = ?1 ORDER BY round, situation_index
+  `).bind(dataset.id).all<{
+    id: number; round: number; situation_index: number;
+    start_message_id: string; end_message_id: string; in_validation_sample: number;
+  }>()).results || [];
+
+  // Ordinalzahlen für Start-/End-Nachrichten (billiger indizierter Lookup).
+  const ordIds: string[] = [];
+  for (const situation of situationRows) ordIds.push(situation.start_message_id, situation.end_message_id);
+  const ordinals = await messageOrdinals(env, dataset.id, ordIds);
+
+  const OVER60 = 3600;
+  const OVER180 = 10800;
+
+  type Analyzed = {
+    id: number; round: number; situationIndex: number; inValidationSample: number;
+    startOrdinal: number | null; endOrdinal: number | null;
+    startUnix: number | null; endUnix: number | null; messageCount: number | null;
+    maxGapSeconds: number | null; maxGapAfterOrdinal: number | null; resolvable: boolean;
+  };
+
+  const analyzed: Analyzed[] = situationRows.map((situation) => {
+    const startIdx = idIndex.get(situation.start_message_id);
+    const endIdx = idIndex.get(situation.end_message_id);
+    const base: Analyzed = {
+      id: situation.id, round: situation.round, situationIndex: situation.situation_index,
+      inValidationSample: situation.in_validation_sample,
+      startOrdinal: ordinals.get(situation.start_message_id) ?? null,
+      endOrdinal: ordinals.get(situation.end_message_id) ?? null,
+      startUnix: null, endUnix: null, messageCount: null,
+      maxGapSeconds: null, maxGapAfterOrdinal: null, resolvable: false,
+    };
+    // Nicht auffindbar (z. B. additiv übertragene Runde) → nicht in die
+    // Lücken-Statistik, aber gezählt.
+    if (startIdx === undefined || endIdx === undefined || endIdx < startIdx) return base;
+    let maxGap = 0;
+    let maxAt = -1;
+    for (let i = startIdx; i < endIdx; i += 1) {
+      const gap = secs[i + 1] - secs[i];
+      if (gap > maxGap) { maxGap = gap; maxAt = i + 1; }
+    }
+    return {
+      ...base,
+      resolvable: true,
+      startUnix: secs[startIdx],
+      endUnix: secs[endIdx],
+      messageCount: endIdx - startIdx + 1,
+      maxGapSeconds: maxGap,
+      maxGapAfterOrdinal: maxAt >= 0 ? (ordinals.get(rawId(sequence[maxAt])) ?? null) : null,
+    };
+  });
+
+  // ---- Drill-down: eine einzelne Situation zerlegen -----------------------
+  const wantSituation = url.searchParams.get('situation');
+  const wantRound = url.searchParams.get('round');
+  const wantIndex = url.searchParams.get('index');
+  const wantOrdinal = url.searchParams.get('ordinal');
+  if (wantSituation || (wantRound && wantIndex) || wantOrdinal) {
+    let target: (typeof situationRows)[number] | null = null;
+    if (wantSituation) {
+      target = situationRows.find((situation) => situation.id === Number(wantSituation)) || null;
+    } else if (wantRound && wantIndex) {
+      target = situationRows.find(
+        (situation) => situation.round === Number(wantRound) && situation.situation_index === Number(wantIndex),
+      ) || null;
+    } else if (wantOrdinal) {
+      target = situationRows.find(
+        (situation) => (ordinals.get(situation.start_message_id) ?? -1) === Number(wantOrdinal),
+      ) || null;
+    }
+    if (!target) return error('Situation nicht gefunden.', 404);
+
+    const startIdx = idIndex.get(target.start_message_id);
+    const endIdx = idIndex.get(target.end_message_id);
+    if (startIdx === undefined || endIdx === undefined) {
+      return json({
+        ok: true, mode: 'situation', dataset: dataset.id, situation: { ...target },
+        note: 'Start-/End-Nachricht in der aktuellen Folge nicht auffindbar (evtl. übertragene Runde).',
+      });
+    }
+
+    // Markierungen + Auflösungen dieser Runde einmal laden, nach Naht gruppieren.
+    const markRows = (await env.DB.prepare(`
+      SELECT reviewer, seam_message_id, mark FROM review_boundary_marks WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, target.round).all<{ reviewer: string; seam_message_id: string; mark: string }>()).results || [];
+    const resRows = (await env.DB.prepare(`
+      SELECT seam_message_id, decision, note, decided_by FROM review_boundary_resolutions WHERE dataset_id = ?1 AND round = ?2
+    `).bind(dataset.id, target.round).all<{ seam_message_id: string; decision: string; note: string | null; decided_by: string }>()).results || [];
+    const marksBySeam = new Map<string, Array<{ reviewer: string; mark: string }>>();
+    for (const mark of markRows) {
+      const list = marksBySeam.get(mark.seam_message_id) || [];
+      list.push({ reviewer: mark.reviewer, mark: mark.mark });
+      marksBySeam.set(mark.seam_message_id, list);
+    }
+    const resBySeam = new Map<string, Array<{ decidedBy: string; decision: string; note: string | null }>>();
+    for (const res of resRows) {
+      const list = resBySeam.get(res.seam_message_id) || [];
+      list.push({ decidedBy: res.decided_by, decision: res.decision, note: res.note });
+      resBySeam.set(res.seam_message_id, list);
+    }
+
+    const messages: unknown[] = [];
+    const seams: unknown[] = [];
+    for (let i = startIdx; i <= endIdx; i += 1) {
+      const id = rawId(sequence[i]);
+      const view = toView(sequence[i]);
+      messages.push({
+        ordinal: ordinals.get(id) ?? null,
+        unix: secs[i],
+        iso: secs[i] ? new Date(secs[i] * 1000).toISOString() : null,
+        from: view.from,
+        kind: view.kind,
+        gapBeforeSeconds: i > startIdx ? secs[i] - secs[i - 1] : null,
+      });
+      if (i > startIdx) {
+        const seamMarks = marksBySeam.get(id) || [];
+        const seamRes = resBySeam.get(id) || [];
+        seams.push({
+          seamMessageId: id,
+          afterOrdinal: ordinals.get(id) ?? null,
+          gapSeconds: secs[i] - secs[i - 1],
+          marks: seamMarks,
+          resolutions: seamRes,
+          // Kein Cut in der kombinierten Fassung ⇒ beide leer = Annotationslücke
+          // (niemand hat hier je eine Grenze gesehen); markiert+aufgelöst-no_cut
+          // = bewusst zusammengelassen.
+          annotationGap: seamMarks.length === 0 && seamRes.length === 0,
+        });
+      }
+    }
+    const analyzedTarget = analyzed.find((entry) => entry.id === target!.id) || null;
+    if (wantsHtml) {
+      type Msg = { ordinal: number | null; unix: number; from: string; kind: string; gapBeforeSeconds: number | null };
+      type Seam = { afterOrdinal: number | null; gapSeconds: number; marks: Array<{ reviewer: string; mark: string }>;
+        resolutions: Array<{ decidedBy: string; decision: string; note: string | null }>; annotationGap: boolean };
+      const msgList = messages as Msg[];
+      const seamList = seams as Seam[];
+      const seamByOrdinal = new Map<number | null, Seam>(seamList.map((seam) => [seam.afterOrdinal, seam]));
+      const rows = msgList.map((message) => {
+        const seam = seamByOrdinal.get(message.ordinal);
+        const gap = message.gapBeforeSeconds;
+        // Nur wirklich große Abstände hervorheben — das ist die Frage hier.
+        const loud = gap !== null && gap > 3600;
+        const grenze = !seam
+          ? '—'
+          : (seam.marks.length === 0 && seam.resolutions.length === 0
+            ? '<span class="flag">niemand</span>'
+            : escapeHtml([
+              ...seam.marks.map((mark) => `${mark.reviewer}: ${mark.mark}`),
+              ...seam.resolutions.map((res) => `${res.decidedBy} → ${res.decision}`),
+            ].join(' · ')));
+        return `<tr>
+          <td class="num">${message.ordinal ?? '–'}</td>
+          <td>${escapeHtml(humanTime(message.unix))}</td>
+          <td class="num${loud ? ' flag' : ''}">${gap === null ? '' : escapeHtml(humanDuration(gap))}</td>
+          <td>${escapeHtml(message.from)}</td>
+          <td>${escapeHtml(message.kind)}</td>
+          <td>${grenze}</td>
+        </tr>`;
+      }).join('');
+      const offen = seamList.filter((seam) => seam.annotationGap && seam.gapSeconds > 3600);
+      const startOrd = ordinals.get(target.start_message_id) ?? null;
+      const endOrd = ordinals.get(target.end_message_id) ?? null;
+      return diagnosePage(`Situation ${target.id} · Diagnose`, `
+        <h1>Situation ${target.id}</h1>
+        <p class="sub">Runde ${target.round} · Situation-Index ${target.situation_index}
+          · Grenze ${startOrd ?? '–'} bis ${endOrd ?? '–'} · ${msgList.length} Nachrichten
+          · ${target.in_validation_sample === 1 ? 'in der Stichprobe' : 'nicht in der Stichprobe'}</p>
+        <div class="card">
+          <div class="big">${escapeHtml(humanDuration(analyzedTarget?.maxGapSeconds ?? null))}
+            <small>größte Lücke innerhalb dieser Situation</small></div>
+        </div>
+        <div class="card">
+          <b>${offen.length === 0
+            ? '<span class="ok">Keine unmarkierte Lücke über 1 Stunde.</span>'
+            : `<span class="flag">${offen.length} Lücke(n) über 1 Stunde, an denen niemand eine Grenze gesetzt hat.</span>`}</b>
+          <p class="note">„niemand" in der Spalte Grenze heißt: an dieser Naht steht weder eine Markierung
+            (review_boundary_marks) noch eine Streitfall-Auflösung (review_boundary_resolutions) —
+            also eine Annotationslücke, kein Parameterfehler.</p>
+        </div>
+        <h2>Nachrichten dieser Situation</h2>
+        <div class="wrap"><table>
+          <thead><tr><th class="num">Grenze</th><th>Zeit (Berlin)</th><th class="num">Abstand davor</th>
+            <th>Von</th><th>Art</th><th>Grenze gesetzt?</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <p class="note"><a href="/api/admin/segment-diagnose">← zur Übersicht</a>
+          · <a href="?situation=${target.id}&amp;format=json">Rohdaten</a></p>
+      `);
+    }
+    return json({
+      ok: true, mode: 'situation', dataset: dataset.id,
+      situation: {
+        id: target.id, round: target.round, situationIndex: target.situation_index,
+        inValidationSample: target.in_validation_sample,
+        startOrdinal: ordinals.get(target.start_message_id) ?? null,
+        endOrdinal: ordinals.get(target.end_message_id) ?? null,
+        maxGapSeconds: analyzedTarget?.maxGapSeconds ?? null,
+      },
+      messages,
+      seams,
+    });
+  }
+
+  // ---- Übersicht: Verteilung der internen Maximallücken -------------------
+  const distribution = (subset: Analyzed[]) => {
+    const resolvable = subset.filter((entry) => entry.resolvable);
+    const over60 = resolvable.filter((entry) => (entry.maxGapSeconds ?? 0) > OVER60).length;
+    const over180 = resolvable.filter((entry) => (entry.maxGapSeconds ?? 0) > OVER180).length;
+    const n = resolvable.length;
+    return {
+      prepared: subset.length,
+      resolvable: n,
+      unresolvable: subset.length - n,
+      over60min: over60,
+      over60minShare: n ? over60 / n : null,
+      over180min: over180,
+      over180minShare: n ? over180 / n : null,
+    };
+  };
+
+  const worst = analyzed
+    .filter((entry) => entry.resolvable)
+    .sort((a, b) => (b.maxGapSeconds ?? 0) - (a.maxGapSeconds ?? 0))
+    .slice(0, 25)
+    .map((entry) => ({
+      id: entry.id, round: entry.round, situationIndex: entry.situationIndex,
+      inValidationSample: entry.inValidationSample,
+      startOrdinal: entry.startOrdinal, endOrdinal: entry.endOrdinal,
+      messageCount: entry.messageCount,
+      startIso: entry.startUnix ? new Date(entry.startUnix * 1000).toISOString() : null,
+      endIso: entry.endUnix ? new Date(entry.endUnix * 1000).toISOString() : null,
+      maxGapSeconds: entry.maxGapSeconds,
+      maxGapMinutes: entry.maxGapSeconds !== null ? Math.round(entry.maxGapSeconds / 60) : null,
+      maxGapAfterOrdinal: entry.maxGapAfterOrdinal,
+    }));
+
+  // ---- 2.3: Segmentlängen + Lücken zwischen aufeinanderfolgenden Segmenten -
+  const quantiles = (values: number[]) => {
+    if (!values.length) return { n: 0, min: null, q1: null, median: null, q3: null, max: null };
+    const sorted = [...values].sort((a, b) => a - b);
+    const at = (p: number) => {
+      const idx = (sorted.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      if (lo === hi) return sorted[lo];
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+    };
+    return { n: sorted.length, min: sorted[0], q1: at(0.25), median: at(0.5), q3: at(0.75), max: sorted[sorted.length - 1] };
+  };
+  const countOver = (values: number[], threshold: number) => values.filter((value) => value > threshold).length;
+  const shareOver = (values: number[], threshold: number) => (values.length ? countOver(values, threshold) / values.length : null);
+
+  const resolvableSegs = analyzed.filter((entry) => entry.resolvable);
+  const lengthMessages = resolvableSegs.map((entry) => entry.messageCount as number);
+  const lengthSeconds = resolvableSegs.map((entry) => (entry.endUnix as number) - (entry.startUnix as number));
+
+  // Lücke zwischen zwei aufeinanderfolgenden Segmenten DERSELBEN Runde = der
+  // Zeitabstand an der von den Prüfern gesetzten Grenze (die Segmente einer
+  // Runde partitionieren sie zusammenhängend). So misst die Verteilung genau
+  // die Abstände AN den gezogenen Schnitten.
+  const byRound = new Map<number, Analyzed[]>();
+  for (const entry of resolvableSegs) {
+    const list = byRound.get(entry.round) || [];
+    list.push(entry);
+    byRound.set(entry.round, list);
+  }
+  const interSegmentGaps: number[] = [];
+  for (const list of byRound.values()) {
+    list.sort((a, b) => a.situationIndex - b.situationIndex);
+    for (let i = 1; i < list.length; i += 1) {
+      interSegmentGaps.push((list[i].startUnix as number) - (list[i - 1].endUnix as number));
+    }
+  }
+  const H6 = 21600;
+  const H12 = 43200;
+  const H24 = 86400;
+  const H72 = 259200;
+
+  if (wantsHtml) {
+    const allDist = distribution(analyzed);
+    const sampleDist = distribution(analyzed.filter((entry) => entry.inValidationSample === 1));
+    const q = (stats: ReturnType<typeof quantiles>, asDuration: boolean) => {
+      const f = (value: number | null) => (value === null
+        ? '–'
+        : (asDuration ? humanDuration(value) : String(Math.round(value))));
+      return `<tr><td>${asDuration ? 'Dauer' : 'Nachrichten'}</td>
+        <td class="num">${escapeHtml(f(stats.min))}</td>
+        <td class="num">${escapeHtml(f(stats.q1))}</td>
+        <td class="num"><b>${escapeHtml(f(stats.median))}</b></td>
+        <td class="num">${escapeHtml(f(stats.q3))}</td>
+        <td class="num">${escapeHtml(f(stats.max))}</td></tr>`;
+    };
+    const gapStats = quantiles(interSegmentGaps);
+    const worstRows = worst.map((entry) => `<tr>
+      <td class="num"><a href="?situation=${entry.id}">${entry.id}</a></td>
+      <td class="num">${entry.round}</td>
+      <td class="num">${entry.startOrdinal ?? '–'}</td>
+      <td class="num">${entry.messageCount ?? '–'}</td>
+      <td class="num flag">${escapeHtml(humanDuration(entry.maxGapSeconds))}</td>
+      <td>${entry.inValidationSample === 1 ? 'ja' : '—'}</td>
+    </tr>`).join('');
+
+    return diagnosePage('Segment-Diagnose', `
+      <h1>Segment-Diagnose</h1>
+      <p class="sub">Datensatz ${escapeHtml(dataset.id)} · ${sequence.length} Nachrichten in der Folge
+        · ${allDist.prepared} vorbereitete Situationen</p>
+
+      <div class="card">
+        <b>Herkunft der Situationen: Annotationslücke, kein Parameterfehler.</b>
+        <p class="note">review_situations entstehen in deriveSituationsForRound aus
+          combinedBoundaryForRound — also aus den Markierungen von Philipp und Lena plus den
+          beidseitig aufgelösten Streitfällen. deriveSituations teilt danach nur noch nach
+          Positionen; es gibt in diesem Pfad keine Zeit- oder Schwellwertlogik. Große Lücken
+          innerhalb einer Situation heißen deshalb: dort hat niemand geschnitten.</p>
+      </div>
+
+      <h2>Interne Lücken — wie oft bleibt eine große Pause ungeschnitten?</h2>
+      <div class="grid">
+        <div class="card"><div class="big">${allDist.over60min}
+          <small>Situationen mit Lücke &gt; 60 min<br>${escapeHtml(humanShare(allDist.over60minShare))} von ${allDist.resolvable}</small></div></div>
+        <div class="card"><div class="big">${allDist.over180min}
+          <small>davon &gt; 180 min<br>${escapeHtml(humanShare(allDist.over180minShare))} von ${allDist.resolvable}</small></div></div>
+      </div>
+      <div class="card">
+        <b>Nur die Validierungsstichprobe</b>
+        <p class="note">${sampleDist.resolvable} Situationen ·
+          &gt; 60 min: ${sampleDist.over60min} (${escapeHtml(humanShare(sampleDist.over60minShare))}) ·
+          &gt; 180 min: ${sampleDist.over180min} (${escapeHtml(humanShare(sampleDist.over180minShare))})</p>
+        ${allDist.unresolvable > 0
+          ? `<p class="note">${allDist.unresolvable} Situationen nicht auswertbar (Start-/End-Nachricht nicht in der aktuellen Folge, z. B. übertragene Runden).</p>`
+          : ''}
+      </div>
+
+      <h2>Segmentlängen</h2>
+      <div class="wrap"><table>
+        <thead><tr><th></th><th class="num">Min</th><th class="num">25 %</th><th class="num">Median</th><th class="num">75 %</th><th class="num">Max</th></tr></thead>
+        <tbody>${q(quantiles(lengthMessages), false)}${q(quantiles(lengthSeconds), true)}</tbody>
+      </table></div>
+
+      <h2>Lücken zwischen aufeinanderfolgenden Segmenten</h2>
+      <p class="note">Gemessen an den gesetzten Schnitten innerhalb einer Runde
+        (${interSegmentGaps.length} Übergänge). Über Rundengrenzen hinweg gibt es keinen
+        definierten Abstand — die Runden sind Fenster, keine lückenlose Zerlegung.</p>
+      <div class="wrap"><table>
+        <thead><tr><th></th><th class="num">Min</th><th class="num">25 %</th><th class="num">Median</th><th class="num">75 %</th><th class="num">Max</th></tr></thead>
+        <tbody><tr><td>Abstand</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.min))}</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.q1))}</td>
+          <td class="num"><b>${escapeHtml(humanDuration(gapStats.median))}</b></td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.q3))}</td>
+          <td class="num">${escapeHtml(humanDuration(gapStats.max))}</td></tr></tbody>
+      </table></div>
+      <div class="wrap"><table>
+        <thead><tr><th>Schwelle</th><th class="num">Anzahl</th><th class="num">Anteil</th></tr></thead>
+        <tbody>
+          <tr><td>&gt; 6 h</td><td class="num">${countOver(interSegmentGaps, H6)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H6)))}</td></tr>
+          <tr><td>&gt; 12 h</td><td class="num">${countOver(interSegmentGaps, H12)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H12)))}</td></tr>
+          <tr><td>&gt; 24 h</td><td class="num">${countOver(interSegmentGaps, H24)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H24)))}</td></tr>
+          <tr><td>&gt; 72 h</td><td class="num">${countOver(interSegmentGaps, H72)}</td><td class="num">${escapeHtml(humanShare(shareOver(interSegmentGaps, H72)))}</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Die 25 Situationen mit der größten internen Lücke</h2>
+      <p class="note">Nummer antippen öffnet die Situation mit allen Nachrichten und dem
+        Grenzstatus je Naht.</p>
+      <div class="wrap"><table>
+        <thead><tr><th class="num">Situation</th><th class="num">Runde</th><th class="num">ab Grenze</th>
+          <th class="num">Nachr.</th><th class="num">größte Lücke</th><th>Stichprobe</th></tr></thead>
+        <tbody>${worstRows}</tbody>
+      </table></div>
+
+      <p class="note"><a href="?format=json">Rohdaten als JSON</a></p>
+    `);
+  }
+
+  return json({
+    ok: true, mode: 'overview', dataset: dataset.id,
+    sequenceLength: sequence.length,
+    origin:
+      'review_situations stammen aus combinedBoundaryForRound → compareReviewers(review_boundary_marks) '
+      + '+ agreeResolutions(review_boundary_resolutions); deriveSituations ist ein reiner Positions-Split '
+      + 'ohne Zeit-/Schwellwertlogik. Große interne Lücken sind daher Annotationslücken (menschliche Grenzen), '
+      + 'kein Parameterfehler eines Algorithmus.',
+    internalGap: {
+      all: distribution(analyzed),
+      validationSample: distribution(analyzed.filter((entry) => entry.inValidationSample === 1)),
+      worst,
+    },
+    // 2.3 — Grundlage für die Ketten-Schwellen in Block 3 (rein informativ).
+    segments: {
+      count: resolvableSegs.length,
+      lengthMessages: quantiles(lengthMessages),
+      lengthSeconds: quantiles(lengthSeconds),
+      interSegmentGapSeconds: {
+        ...quantiles(interSegmentGaps),
+        over6h: countOver(interSegmentGaps, H6),
+        over6hShare: shareOver(interSegmentGaps, H6),
+        over12h: countOver(interSegmentGaps, H12),
+        over12hShare: shareOver(interSegmentGaps, H12),
+        over24h: countOver(interSegmentGaps, H24),
+        over24hShare: shareOver(interSegmentGaps, H24),
+        over72h: countOver(interSegmentGaps, H72),
+        over72hShare: shareOver(interSegmentGaps, H72),
+      },
+    },
+  });
+}
+
+
+// ---- Δt-Mischverteilung ----------------------------------------------------
+//
+// GET /api/admin/gap-mixture — Read-only. Nimmt alle Abstände zwischen
+// benachbarten Nachrichten der gefilterten Folge, rechnet log₁₀(Δt in
+// Sekunden) und passt Gauß-Mischungen mit k = 1…4 an. Zweck: prüfen, ob die
+// Pausenverteilung überhaupt eine natürliche Struktur hat. Wählt BIC k = 1,
+// gibt es keine datengestützte Zeitschwelle — dann ist jede Schwelle gesetzt,
+// nicht gefunden.
+//
+// Ausschließlich Aggregate: Gewichte, Mittelwerte, Streuungen, Grenzen,
+// Histogrammzählungen. Keine Nachricht, kein Zeitstempel, kein Text.
+
+/** Eine Sekundenzahl in mehreren Einheiten, plus lesbare Form. */
+function describeSeconds(seconds: number): {
+  seconds: number; minutes: number; hours: number; human: string;
+} {
+  return {
+    seconds: Math.round(seconds * 1000) / 1000,
+    minutes: Math.round((seconds / 60) * 1000) / 1000,
+    hours: Math.round((seconds / 3600) * 1000) / 1000,
+    human: humanDuration(seconds),
+  };
+}
+
+type MixtureBlock = ReturnType<typeof mixtureBlock>;
+
+type GapMixturePayload = {
+  ok: boolean; dataset: string; messages: number; gaps: number;
+  clampedToOneSecond: number; minSeconds: number; maxSeconds: number;
+  bins: number; maxK: number; maxIterations: number;
+  scope: string; computedAt: string;
+  overall: MixtureBlock;
+  byYear: Array<{ year: string } & MixtureBlock>;
+  // Tagesrhythmus (Nachrichten je Stunde pro Sender, Startstunden der Pausen).
+  // Optional: vor dieser Erweiterung abgelegte Dokumente tragen das Feld nicht.
+  dailyRhythm?: ReturnType<typeof hourlyAggregates>;
+};
+
+// Schlüssel, unter dem das fertig gerechnete kanonische Ergebnis (Standard-
+// Parameter, alle Jahre) je Datensatz in app_settings liegt. Die öffentliche
+// Route liest NUR diesen Eintrag — sie rechnet nie selbst.
+function gapMixtureStoreKey(datasetId: string): string {
+  return `gap_mixture_result:${datasetId}`;
+}
+
+/** Fit + Kennzahlen für eine Wertemenge (alle Jahre oder ein Kalenderjahr). */
+function mixtureBlock(values: number[], bins: number, maxK: number, maxIterations: number) {
+  const { fits, bestK } = fitRange(values, { maxK, maxIterations });
+  const best = fits.find((fit) => fit.k === bestK) || fits[0];
+  const boundaries = best ? decisionBoundaries(best) : [];
+  const hist = histogram(values, bins);
+  return {
+    n: values.length,
+    bicByK: fits.map((fit) => ({
+      k: fit.k,
+      logLikelihood: fit.logLikelihood,
+      bic: fit.bic,
+      aic: fit.aic,
+      iterations: fit.iterations,
+      converged: fit.converged,
+    })),
+    bestK,
+    // Komponenten aufsteigend nach Mittelwert (Komponente 1 = die schnellste).
+    components: (best ? best.means : []).map((mean, index) => {
+      const sd = best.sigmas[index];
+      return {
+        index: index + 1,
+        weight: best.weights[index],
+        meanLog10: mean,
+        sdLog10: sd,
+        center: describeSeconds(10 ** mean),
+        // ±1 Streuung, zurückgerechnet — im Logarithmus symmetrisch, in
+        // Sekunden ein multiplikatives Intervall.
+        low1Sd: describeSeconds(10 ** (mean - sd)),
+        high1Sd: describeSeconds(10 ** (mean + sd)),
+      };
+    }),
+    boundaries: boundaries.map((boundary) => ({
+      between: boundary.between.map((index) => index + 1) as [number, number],
+      log10: boundary.log10,
+      ...(boundary.log10 === null ? { value: null } : { value: describeSeconds(10 ** boundary.log10) }),
+    })),
+    histogram: {
+      bins: hist.bins,
+      minLog10: hist.min,
+      maxLog10: hist.max,
+      widthLog10: hist.width,
+      counts: hist.counts,
+      edgesLog10: hist.edges,
+      edgesSeconds: hist.edges.map((edge) => 10 ** edge),
+    },
+  };
+}
+
+// Fertige Antworten je (Datenstand, Parameter, Format) — die Rechnung ist mit
+// Abstand das Teuerste an der Route; für die öffentliche Variante zugleich die
+// Missbrauchsbremse. Invalidiert sich selbst über den Sequenz-Fingerprint.
+const gapMixtureCache = new Map<string, { fingerprint: string; body: string; html: boolean }>();
+const GAP_MIXTURE_CACHE_MAX = 12;
+
+async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request, publicLimits = false): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  // Öffentlich gelten engere Klemmen — die Route ist ohne Login erreichbar.
+  const maxBins = publicLimits ? 120 : 300;
+  const maxKCap = publicLimits ? 4 : 8;
+  const maxIterCap = publicLimits ? 300 : 1000;
+  const requestedBins = Number(url.searchParams.get('bins'));
+  const bins = Number.isFinite(requestedBins) && requestedBins >= 5 && requestedBins <= maxBins
+    ? Math.floor(requestedBins) : 60;
+  const requestedMaxK = Number(url.searchParams.get('maxK'));
+  const maxK = Number.isFinite(requestedMaxK) && requestedMaxK >= 1 && requestedMaxK <= maxKCap
+    ? Math.floor(requestedMaxK) : 4;
+  const requestedIterations = Number(url.searchParams.get('maxIterations'));
+  const maxIterations = Number.isFinite(requestedIterations) && requestedIterations >= 10 && requestedIterations <= maxIterCap
+    ? Math.floor(requestedIterations) : 300;
+
+  const scopeParam = url.searchParams.get('scope');
+  const yearParam = url.searchParams.get('year');
+  const onlyYear = yearParam && /^\d{4}$/u.test(yearParam) ? yearParam : null;
+  const overallOnly = scopeParam === 'overall';
+
+  const fingerprint = await sequenceFingerprint(env, dataset.id);
+  const cacheKey = `${dataset.id}|${bins}|${maxK}|${maxIterations}|${overallOnly ? 'overall' : (onlyYear || 'all')}|${wantsHtml ? 'html' : 'json'}`;
+  const cached = gapMixtureCache.get(cacheKey);
+  if (cached && cached.fingerprint === fingerprint) {
+    return new Response(cached.body, { status: 200, headers: cached.html ? HTML_HEADERS : JSON_HEADERS });
+  }
+
+  const sequence = await filteredSequence(env, dataset.id);
+  const seconds = sequence.map((message) => messageSeconds(message));
+
+  const overallGaps = logGapsFromTimestamps(seconds);
+
+  // Jahresweise: ein Abstand zählt zu dem Kalenderjahr, in dem er BEGINNT
+  // (Zeitzone Europe/Berlin, wie überall in der Auswertung).
+  const yearFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric' });
+  const byYearValues = new Map<string, number[]>();
+  for (let index = 1; index < seconds.length; index += 1) {
+    const previous = seconds[index - 1];
+    const current = seconds[index];
+    if (!Number.isFinite(previous) || !Number.isFinite(current)) continue;
+    const delta = Math.max(1, current - previous);
+    const year = yearFormat.format(new Date(previous * 1000));
+    const list = byYearValues.get(year) || [];
+    list.push(Math.log10(delta));
+    byYearValues.set(year, list);
+  }
+
+  // Zuschnitt: nur ein Jahr → Gesamtblock überspringen; nur Gesamt → Jahre
+  // überspringen. So bleibt auch ein Lauf mit hohem Iterationslimit im
+  // CPU-Budget eines einzelnen Worker-Aufrufs.
+  const overall = onlyYear
+    ? mixtureBlock([], bins, 1, 1)
+    : mixtureBlock(overallGaps.values, bins, maxK, maxIterations);
+  const years = overallOnly ? [] : [...byYearValues.keys()].sort().filter((year) => !onlyYear || year === onlyYear);
+  const byYear = years.map((year) => ({
+    year,
+    ...mixtureBlock(byYearValues.get(year) || [], bins, maxK, maxIterations),
+  }));
+
+  // Tagesrhythmus: ein Durchlauf über die Folge, reine Zählungen. Sender ist
+  // der Absendername aus dem Export (gleiche Ableitung wie toView).
+  const dailyRhythm = hourlyAggregates(sequence.map((message) => ({
+    t: messageSeconds(message),
+    from: String(message.from || message.actor || message.sender || '?'),
+  })));
+
+  const payload: GapMixturePayload = {
+    ok: true,
+    dataset: dataset.id,
+    messages: sequence.length,
+    gaps: overallGaps.values.length,
+    clampedToOneSecond: overallGaps.clamped,
+    minSeconds: overallGaps.minSeconds,
+    maxSeconds: overallGaps.maxSeconds,
+    bins,
+    maxK,
+    maxIterations,
+    scope: overallOnly ? 'overall' : (onlyYear || 'all'),
+    computedAt: new Date().toISOString(),
+    overall,
+    byYear,
+    dailyRhythm,
+  };
+
+  // Kanonisches Ergebnis (Standardparameter, alle Jahre) einmal gerechnet →
+  // fertig in D1 ablegen. Die Daten sind statisch (4 Jahre Historie); die
+  // öffentliche Route liefert danach nur noch dieses gespeicherte Dokument.
+  // Nicht-fatal: schlägt das Schreiben fehl, funktioniert die Antwort trotzdem.
+  if (payload.scope === 'all' && bins === 60 && maxK === 4 && maxIterations === 300) {
+    try {
+      await env.DB.prepare(`
+        INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, ?3)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).bind(gapMixtureStoreKey(dataset.id), JSON.stringify(payload), payload.computedAt).run();
+    } catch (caught) {
+      console.error('gap-mixture: Ablage in app_settings fehlgeschlagen — nicht fatal', caught);
+    }
+  }
+
+  const remember = (body: string, html: boolean): void => {
+    if (!gapMixtureCache.has(cacheKey) && gapMixtureCache.size >= GAP_MIXTURE_CACHE_MAX) {
+      const oldest = gapMixtureCache.keys().next().value;
+      if (oldest !== undefined) gapMixtureCache.delete(oldest);
+    }
+    gapMixtureCache.set(cacheKey, { fingerprint, body, html });
+  };
+
+  if (!wantsHtml) {
+    const body = JSON.stringify(payload);
+    remember(body, false);
+    return new Response(body, { status: 200, headers: JSON_HEADERS });
+  }
+
+  const page = renderGapMixturePage(payload);
+  const body = await page.text();
+  remember(body, true);
+  return new Response(body, { status: 200, headers: HTML_HEADERS });
+}
+
+
+/** Tagesrhythmus als Tabelle — genutzt von der Gesamtseite UND /api/public/hourly. */
+function dailyRhythmSectionHtml(rhythm: NonNullable<GapMixturePayload['dailyRhythm']>): string {
+  const senders = Object.keys(rhythm.msgPerHourBySender).sort();
+  const classes = rhythm.gapStartHour.classes;
+  const rows = Array.from({ length: 24 }, (_, hour) => `<tr>
+    <td class="num">${String(hour).padStart(2, '0')}</td>
+    ${senders.map((sender) => `<td class="num">${rhythm.msgPerHourBySender[sender][hour]}</td>`).join('')}
+    <td class="num">${classes['1-4h'].counts[hour]}</td>
+    <td class="num">${classes['4-12h'].counts[hour]}</td>
+    <td class="num">${classes.over12h.counts[hour]}</td>
+  </tr>`).join('');
+  return `<h2>Tagesrhythmus</h2>
+  <p class="note">${escapeHtml(rhythm.timezoneNote)} Pausen zählen ab &gt; 1 h,
+    eingetragen bei der Stunde, in der die Pause beginnt (letzte Nachricht davor).</p>
+  <div class="wrap"><table>
+    <thead><tr><th class="num">Stunde</th>
+      ${senders.map((sender) => `<th class="num">${escapeHtml(sender)}</th>`).join('')}
+      <th class="num">Pausen 1–4 h</th><th class="num">4–12 h</th><th class="num">&gt; 12 h</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+/**
+ * GET /api/public/hourly — nur der Tagesrhythmus-Ausschnitt des abgelegten
+ * Dokuments (msgPerHourBySender + gapStartHour). Reiner D1-Read, kein Login,
+ * reine Zählungen. Rechnet nie selbst; fehlt die Ablage (oder stammt sie von
+ * vor der Tagesrhythmus-Erweiterung), sagt die Antwort, wie sie erneuert wird.
+ */
+async function publicHourly(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?1')
+    .bind(gapMixtureStoreKey(dataset.id)).first<{ value: string }>();
+  const stored = row?.value ? JSON.parse(row.value) as GapMixturePayload : null;
+  if (!stored?.dailyRhythm) {
+    const hint = stored
+      ? 'Die Ablage stammt von vor der Tagesrhythmus-Erweiterung — /api/admin/gap-mixture einmal als Admin neu aufrufen.'
+      : 'Noch kein Ergebnis abgelegt — /api/admin/gap-mixture einmal als Admin aufrufen.';
+    if (wantsHtml) {
+      return diagnosePage('Tagesrhythmus', `
+        <h1>Tagesrhythmus</h1>
+        <p class="sub">Datensatz ${escapeHtml(dataset.id)}</p>
+        <div class="card"><b class="flag">Noch keine Tagesrhythmus-Daten abgelegt.</b>
+          <p class="note">${escapeHtml(hint)}</p></div>
+      `);
+    }
+    return error(hint, 503);
+  }
+
+  if (!wantsHtml) {
+    return json({
+      ok: true,
+      dataset: stored.dataset,
+      computedAt: stored.computedAt,
+      messages: stored.messages,
+      ...stored.dailyRhythm,
+    });
+  }
+  return diagnosePage('Tagesrhythmus', `
+    <h1>Tagesrhythmus</h1>
+    <p class="sub">Datensatz ${escapeHtml(stored.dataset)} · ${stored.messages} Nachrichten ·
+      berechnet ${escapeHtml(humanTime(Math.floor(Date.parse(stored.computedAt) / 1000)))}</p>
+    ${dailyRhythmSectionHtml(stored.dailyRhythm)}
+    <p class="note"><a href="?format=json">Rohdaten als JSON</a>
+      · <a href="/api/public/gap-mixture">Gesamtanalyse</a></p>
+  `);
+}
+
+/**
+ * Öffentliche Auslieferung des gespeicherten Ergebnisses — reiner D1-Read.
+ * Kein Fit, kein Chunk-Parsing; Query-Parameter außer ?dataset= und ?format=
+ * werden ignoriert (das Dokument ist fix). Liegt noch nichts vor, sagt die
+ * Antwort, wie es erzeugt wird, statt selbst zu rechnen.
+ */
+async function publicGapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?1')
+    .bind(gapMixtureStoreKey(dataset.id)).first<{ value: string }>();
+  if (!row?.value) {
+    if (wantsHtml) {
+      return diagnosePage('Δt-Mischverteilung', `
+        <h1>Δt-Mischverteilung</h1>
+        <p class="sub">Datensatz ${escapeHtml(dataset.id)}</p>
+        <div class="card"><b class="flag">Noch kein Ergebnis abgelegt.</b>
+          <p class="note">Das Ergebnis wird einmalig erzeugt, indem Philipp (angemeldet)
+            /api/admin/gap-mixture aufruft — dabei wird es gespeichert und liegt danach
+            hier dauerhaft bereit.</p></div>
+      `);
+    }
+    return error('Noch kein Ergebnis abgelegt — /api/admin/gap-mixture einmal als Admin aufrufen.', 503);
+  }
+
+  if (!wantsHtml) {
+    return new Response(row.value, { status: 200, headers: JSON_HEADERS });
+  }
+  const payload = JSON.parse(row.value) as GapMixturePayload;
+  return renderGapMixturePage(payload);
+}
+
+/**
+ * Lesbare Seite aus einem (frisch gerechneten ODER gespeicherten) Ergebnis.
+ * Bewusst von der Berechnung getrennt: die öffentliche Route rendert damit
+ * das in app_settings abgelegte Dokument, ohne je selbst zu fitten.
+ */
+function renderGapMixturePage(payload: GapMixturePayload): Response {
+  const isYearScope = payload.scope !== 'all' && payload.scope !== 'overall';
+  const bicTable = (block: MixtureBlock) => `<div class="wrap"><table>
+    <thead><tr><th class="num">k</th><th class="num">log L</th><th class="num">BIC</th>
+      <th class="num">ΔBIC</th><th class="num">Iter.</th></tr></thead>
+    <tbody>${block.bicByK.map((entry) => {
+      const bestBic = Math.min(...block.bicByK.map((other) => other.bic));
+      const isBest = entry.k === block.bestK;
+      return `<tr>
+        <td class="num">${isBest ? `<b class="ok">${entry.k}</b>` : entry.k}</td>
+        <td class="num">${escapeHtml(entry.logLikelihood.toFixed(1))}</td>
+        <td class="num">${isBest ? `<b class="ok">${escapeHtml(entry.bic.toFixed(1))}</b>` : escapeHtml(entry.bic.toFixed(1))}</td>
+        <td class="num">${escapeHtml((entry.bic - bestBic).toFixed(1))}</td>
+        <td class="num">${entry.iterations}${entry.converged ? '' : ' <span class="flag">!</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+
+  const componentTable = (block: MixtureBlock) => `<div class="wrap"><table>
+    <thead><tr><th class="num">#</th><th class="num">Gewicht</th><th>Zentrum</th>
+      <th>±1 s (von–bis)</th><th class="num">µ log₁₀</th><th class="num">σ log₁₀</th></tr></thead>
+    <tbody>${block.components.map((component) => `<tr>
+      <td class="num">${component.index}</td>
+      <td class="num">${escapeHtml(humanShare(component.weight))}</td>
+      <td><b>${escapeHtml(component.center.human)}</b></td>
+      <td>${escapeHtml(component.low1Sd.human)} – ${escapeHtml(component.high1Sd.human)}</td>
+      <td class="num">${escapeHtml(component.meanLog10.toFixed(3))}</td>
+      <td class="num">${escapeHtml(component.sdLog10.toFixed(3))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+
+  const boundaryList = (block: MixtureBlock) => (block.boundaries.length === 0
+    ? '<p class="note">Keine Grenze — das Modell hat nur eine Komponente.</p>'
+    : `<div class="wrap"><table>
+        <thead><tr><th>zwischen</th><th>Grenze</th><th class="num">log₁₀</th></tr></thead>
+        <tbody>${block.boundaries.map((boundary) => `<tr>
+          <td>Komponente ${boundary.between[0]} / ${boundary.between[1]}</td>
+          <td><b>${boundary.value ? escapeHtml(boundary.value.human) : '—'}</b></td>
+          <td class="num">${boundary.log10 === null ? '—' : escapeHtml(boundary.log10.toFixed(3))}</td>
+        </tr>`).join('')}</tbody></table></div>`);
+
+  const histogramBars = (block: MixtureBlock) => {
+    const max = Math.max(1, ...block.histogram.counts);
+    return `<div class="hist">${block.histogram.counts.map((count, index) => {
+      const from = block.histogram.edgesSeconds[index];
+      return `<div class="hrow">
+        <span class="hlabel">${escapeHtml(humanDuration(from))}</span>
+        <span class="hbar"><i style="width:${(count / max) * 100}%"></i></span>
+        <span class="hcount">${count}</span>
+      </div>`;
+    }).join('')}</div>`;
+  };
+
+  const section = (title: string, block: MixtureBlock) => `
+    <h2>${escapeHtml(title)}</h2>
+    <div class="card"><div class="big">k = ${block.bestK}
+      <small>bestes Modell nach BIC · ${block.n} Abstände</small></div></div>
+    ${bicTable(block)}
+    <h3>Komponenten</h3>
+    ${componentTable(block)}
+    <h3>Entscheidungsgrenzen</h3>
+    ${boundaryList(block)}`;
+
+  const page = diagnosePage('Δt-Mischverteilung', `
+    <style>
+      h3 { font-size: 15px; margin: 18px 0 6px; color: #cfd6de; }
+      .hist { margin: 8px 0 0; }
+      .hrow { display: grid; grid-template-columns: 78px 1fr 52px; gap: 8px; align-items: center; font-size: 12px; }
+      .hlabel { color: #9aa3ad; text-align: right; font-variant-numeric: tabular-nums; }
+      .hbar { background: #232833; border-radius: 3px; height: 12px; overflow: hidden; }
+      .hbar i { display: block; height: 100%; background: #4fb3a4; }
+      .hcount { text-align: right; color: #9aa3ad; font-variant-numeric: tabular-nums; }
+    </style>
+    <h1>Δt-Mischverteilung</h1>
+    <p class="sub">Datensatz ${escapeHtml(payload.dataset)} · ${payload.messages} Nachrichten ·
+      ${payload.gaps} Abstände · kleinster ${escapeHtml(humanDuration(payload.minSeconds))} ·
+      größter ${escapeHtml(humanDuration(payload.maxSeconds))} ·
+      ${payload.clampedToOneSecond} Abstände unter 1 s auf 1 s angehoben · berechnet ${escapeHtml(humanTime(Math.floor(Date.parse(payload.computedAt) / 1000)))}</p>
+
+    <div class="card">
+      <b>Was hier gerechnet wird.</b>
+      <p class="note">Alle Abstände zwischen benachbarten Nachrichten, logarithmiert
+        (log₁₀ der Sekunden), angepasst mit Gauß-Mischungen für k = 1…${payload.maxK}. Gewählt wird
+        das k mit dem kleinsten BIC. Wählt BIC k = 1, hat die Pausenverteilung keine
+        natürliche Struktur — dann gibt es keine datengestützte Zeitschwelle, und jede
+        Schwelle wäre gesetzt statt gefunden. Bei k &gt; 1 sind die Entscheidungsgrenzen
+        die einzigen Schwellen, die aus den Daten selbst kommen.</p>
+    </div>
+
+    ${isYearScope ? '' : `${section('Alle Jahre', payload.overall)}
+
+    <h3>Histogramm (${payload.bins} Bins über log₁₀, Beschriftung = Beginn des Bins)</h3>
+    ${histogramBars(payload.overall)}`}
+
+    ${payload.byYear.map((entry) => section(`Kalenderjahr ${entry.year}`, entry)).join('')}
+
+    ${!payload.dailyRhythm ? '' : dailyRhythmSectionHtml(payload.dailyRhythm)}
+
+    <p class="note"><a href="?format=json">Rohdaten als JSON</a>
+      · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
+  `);
+  return page;
 }
 
 export default {

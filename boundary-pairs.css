@@ -25,9 +25,24 @@ body.dp {
   flex-wrap: wrap;
 }
 /* Punkt 13: Titel horizontal + vertikal zentriert, prominenter. */
-.dp-brand { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.dp-brand { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 100%; }
 .dp-brand strong { font-size: 20px; line-height: 1.25; }
 .dp-brand span { font-size: 13.5px; color: var(--tw-text-muted); margin-top: 2px; }
+/* Punkt 8: Kopf-Unterzeile (Prüfer · Runde bzw. Situation ab Grenze N) auf
+   schmalen Geräten (~380px) EINZEILIG halten — kein Umbruch, kein horizontales
+   Scrollen. Ellipsis nur als äußerste Notbremse; die Grenz-Nummer passt bei
+   kleinerer Schrift regulär hinein. */
+#dp-sub, #cl-sub {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 400px) {
+  .dp-brand strong { font-size: 18px; }
+  .dp-brand span { font-size: 12px; }
+}
 
 .dp-wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 80px; }
 
@@ -70,7 +85,10 @@ body.dp {
 .dp-round-field span {
   font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--tw-text-muted);
 }
-.dp-round-field input[type="number"] {
+/* Punkt 6 hat das Feld auf type="text" + inputmode="numeric" umgestellt —
+   der Selektor darf daher NICHT mehr an type="number" hängen, sonst
+   verliert das Sprungfeld seine Gestaltung. */
+.dp-round-field input {
   width: 88px;
   height: 44px;
   text-align: center;
@@ -115,50 +133,9 @@ body.dp {
 .dp-message.dim { opacity: .58; filter: saturate(.7); }
 .dp-message.dim .dp-message-text { font-size: 14px; }
 
-.dp-seam {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  height: 40px;
-  position: relative;
-  cursor: pointer;
-  text-align: center;
-}
-.dp-readonly .dp-seam { cursor: default; }
-.dp-seam .line {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-  background: var(--tw-border);
-}
-.dp-seam .label {
-  position: relative;
-  display: inline-block;
-  background: var(--tw-surface);
-  padding: 3px 10px;
-  font-size: 11.5px;
-  color: var(--tw-text-muted);
-  top: 8px;
-}
-[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] { background: var(--tw-philipp-surface); }
-[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .line { background: var(--tw-philipp); height: 2px; }
-[data-reviewer="Philipp"] .dp-seam[data-mark="cut"] .label { background: var(--tw-philipp-surface); color: var(--tw-philipp-text); font-weight: 700; }
-[data-reviewer="Lena"] .dp-seam[data-mark="cut"] { background: var(--tw-lena-surface); }
-[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .line { background: var(--tw-lena); height: 2px; }
-[data-reviewer="Lena"] .dp-seam[data-mark="cut"] .label { background: var(--tw-lena-surface); color: var(--tw-lena-text); font-weight: 700; }
-/* Agreement lines: dashed pattern with alternating Philipp (Türkis) and Lena (Rosa) */
-.dp-seam[data-agreement="true"] .line {
-  height: 2px;
-  background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
-}
-.dp-seam[data-mark="doubt"] { background: var(--tw-status-open-surface); }
-.dp-seam[data-mark="doubt"] .line { background: var(--tw-status-open); height: 2px; border-top: 1px dashed var(--tw-status-open); }
-.dp-seam[data-mark="doubt"] .label { background: var(--tw-status-open-surface); color: var(--tw-status-open); font-weight: 700; }
+/* Die Grenzlinien-Optik (Naht) liegt gemeinsam in seam.css — von der
+   Runden-Ansicht, der Streitfall-Ansicht UND dem Situationstrenner der
+   Klassifizierung genutzt. Hier bewusst KEINE zweite Fassung. */
 
 .dp-submit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
 .dp-hint { margin: 0; font-size: 13px; color: var(--tw-text-muted); }
@@ -182,7 +159,9 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
   padding: 14px;
   margin-bottom: 12px;
 }
-.dp-dispute-number { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 2px; }
+/* Punkt 8: Streitfall-Kopf („Streitfall an Grenze N") einzeilig, kein Umbruch. */
+.dp-dispute-number { font-size: 13px; font-weight: 700; color: var(--tw-text); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 400px) { .dp-dispute-number { font-size: 12px; } }
 .dp-dispute-meta { font-size: 12.5px; color: var(--tw-text-muted); margin-bottom: 8px; }
 .dp-dispute-badge {
   display: inline-block; padding: 1px 8px; border-radius: 999px;
@@ -207,47 +186,6 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .dp-dispute-messages .dp-message-text { font-size: 15.5px; }
 .dp-dispute-messages .dp-message.dim .dp-message-text { font-size: 15.5px; }
 
-.dp-dispute-seam { position: relative; height: 30px; margin: 2px 0; text-align: center; }
-.dp-dispute-seam .line {
-  position: absolute; left: 4px; right: 4px; top: 50%; height: 1px;
-  transform: translateY(-50%); background: var(--tw-border);
-}
-.dp-dispute-seam .label {
-  position: relative; display: inline-block; background: var(--tw-surface);
-  padding: 2px 8px; font-size: 11px; color: var(--tw-text-muted); top: 7px;
-}
-.dp-dispute-seam.central .line { height: 2px; background: var(--tw-status-unclear); }
-.dp-dispute-seam.central .label {
-  color: var(--tw-status-unclear); font-weight: 700; background: var(--tw-status-unclear-surface);
-}
-.dp-dispute-seam.marked-philipp .line { background: var(--tw-philipp); }
-.dp-dispute-seam.marked-philipp .label { color: var(--tw-philipp-text); background: var(--tw-philipp-surface); }
-.dp-dispute-seam.marked-lena .line { background: var(--tw-lena); }
-.dp-dispute-seam.marked-lena .label { color: var(--tw-lena-text); background: var(--tw-lena-surface); }
-.dp-dispute-seam.marked-both .line {
-  height: 2px;
-  background: repeating-linear-gradient(90deg, var(--tw-philipp) 0px, var(--tw-philipp) 4px, transparent 4px, transparent 6px, var(--tw-lena) 6px, var(--tw-lena) 10px, transparent 10px, transparent 12px);
-}
-.dp-dispute-seam.marked-both .label { color: var(--tw-status-open); background: var(--tw-status-open-surface); }
-.dp-dispute-seam.central.marked-philipp .line,
-.dp-dispute-seam.central.marked-lena .line,
-.dp-dispute-seam.central.marked-both .line { background: var(--tw-status-unclear); }
-
-/* Die strittige Naht ist antippbar — wie die Nähte im Prüfstand. */
-button.dp-dispute-seam {
-  display: block; width: 100%; padding: 0; border: 0; background: none;
-  cursor: pointer; font: inherit; text-align: center;
-}
-button.dp-dispute-seam:hover .label { text-decoration: underline; }
-button.dp-dispute-seam:focus-visible { outline: 2px solid var(--tw-status-unclear); outline-offset: 2px; }
-button.dp-dispute-seam[data-decision-state="cut"] .line { height: 2px; background: var(--tw-status-unclear); }
-button.dp-dispute-seam[data-decision-state="cut"] .label {
-  color: var(--tw-status-unclear); background: var(--tw-status-unclear-surface); font-weight: 700;
-}
-button.dp-dispute-seam[data-decision-state="no_cut"] .line { height: 1px; background: var(--tw-border); }
-button.dp-dispute-seam[data-decision-state="no_cut"] .label {
-  color: var(--tw-text-muted); background: var(--tw-surface); font-weight: 400; text-decoration: line-through;
-}
 .dp-dispute-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .dp-dispute-actions button {
   border: 1px solid var(--tw-button-border);
@@ -327,6 +265,11 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 .tw-set legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
 .tw-switch { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
 .tw-device { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+/* Hauptschalter steht optisch über den Anlass-Schaltern des Moduls. */
+.tw-switch-master { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--tw-border, rgba(255,255,255,.12)); }
+/* Begründung, warum der Testknopf aus ist — gleiche Optik wie die Gerätezeile. */
+.tw-test-hint { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+.tw-test-hint[hidden] { display: none; }
 
 /* Aufgabe 4: Live-F1-Leiste im Kopf der Doppelprüfung */
 .dp-live-f1 {
@@ -416,105 +359,7 @@ button.dp-dispute-seam[data-decision-state="no_cut"] .label {
 }
 .tw-optimizer-log-table th { color: var(--tw-text-muted); font-weight: 600; }
 
-/* --- Übersicht (Aufgabe 10) ------------------------------------------- */
-.ov-stats {
-  display: flex; gap: 12px; margin: 0 0 16px; flex-wrap: wrap;
-}
-.ov-stat {
-  flex: 1 1 0; min-width: 100px; text-align: center; padding: 14px 8px;
-  background: var(--tw-surface-raised, var(--tw-surface)); border: 1px solid var(--tw-border);
-  border-radius: 10px;
-}
-.ov-stat-num { display: block; font-size: 28px; font-weight: 700; color: var(--tw-text); }
-.ov-stat-label { font-size: 12px; color: var(--tw-text-muted); }
-
-/* Div-basiertes Grid statt <table>: gleiches Markup auf allen Größen, nur die
-   Spaltenaufteilung ändert sich per Media Query — kein horizontales Scrollen,
-   keine getrennten Mobile-/Desktop-Codepfade. */
-.ov-table-wrap { border: 1px solid var(--tw-border); border-radius: 10px; background: var(--tw-surface-raised, var(--tw-surface)); overflow: hidden; }
-.ov-table { width: 100%; font-size: 14px; }
-.ov-row {
-  display: grid;
-  grid-template-columns: 56px 1fr 1fr 52px 96px 52px 56px;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--tw-border);
-  /* Punkt 3: ganze Zeile ist der Tap-/Klick-Ziel, kein separater Link mehr. */
-  -webkit-tap-highlight-color: rgba(0, 0, 0, .06);
-}
-.ov-row:last-child { border-bottom: none; }
-.ov-row:not(.ov-head):hover { background: var(--tw-surface-secondary, rgba(0,0,0,.03)); cursor: pointer; }
-.ov-row.ov-head {
-  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .02em;
-  color: var(--tw-text-muted); border-bottom: 2px solid var(--tw-border);
-}
-.ov-row.ov-head .ov-cell { white-space: normal; overflow: visible; text-overflow: unset; line-height: 1.25; }
-.ov-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-/* Punkt 15: Spalten-Alignment — Runde links, Philipp/Lena/Streitfälle
-   zentriert, F0/GT/F1 rechtsbündig (Zahlen). Zellen sind über
-   align-items:center im Grid bereits vertikal zentriert. */
-.ov-c-round { font-weight: 600; text-align: left; }
-.ov-c-philipp, .ov-c-lena, .ov-c-disputes { text-align: center; }
-.ov-c-f0, .ov-c-gt, .ov-c-f1 { text-align: right; font-variant-numeric: tabular-nums; }
-
-.ov-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-.ov-badge.done { background: var(--tw-status-confirmed-surface); color: var(--tw-status-confirmed); }
-.ov-badge.open { background: var(--tw-status-open-surface); color: var(--tw-status-open); }
-
-.ov-disputes-open { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--tw-status-unclear-surface); color: var(--tw-status-unclear); }
-.ov-c-disputes { font-size: 13px; color: var(--tw-text-muted); }
-.ov-c-f0, .ov-c-gt, .ov-c-f1 { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--tw-text); }
-
-.ov-row.ov-philipp-open { border-left: 3px solid var(--tw-philipp, #3f918a); }
-.ov-row.ov-lena-open { border-left: 3px solid var(--tw-lena, #b8758c); }
-.ov-row.ov-both-open { border-left: 3px solid var(--tw-status-open, #b78b43); }
-.ov-row.ov-done { border-left: 3px solid transparent; }
-
-.ov-empty { text-align: center; padding: 24px; color: var(--tw-text-muted); }
-
-/* Punkt 3: Umschalter + Pagination der Vollansicht — rein clientseitig. */
-.ov-toggle-row { display: flex; justify-content: flex-end; margin: 0 0 10px; }
-.ov-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tw-text-muted); cursor: pointer; }
-.ov-toggle input { cursor: pointer; }
-
-.ov-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--tw-text-muted); }
-.ov-pagination button {
-  border: 1px solid var(--tw-button-border);
-  background: var(--tw-button-bg);
-  color: var(--tw-button-text);
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.ov-pagination button:disabled { opacity: .5; cursor: default; }
-
-/* Mobile: dreizeiliges Karten-Layout je Runde statt 7 Spalten in einer Zeile.
-   Zeile 1: Runde · Philipp · Lena — Zeile 2: F0 · Streitfälle · GT —
-   Zeile 3: F1 über volle Breite (Automatik vs. GT, die "Ziel"-Kennzahl).
-   Ganze Karte ist Tap-Ziel, kein separates "öffnen" mehr nötig. */
-@media (max-width: 560px) {
-  .ov-row.ov-head { display: none; }
-  .ov-row {
-    grid-template-columns: auto 1fr 1fr;
-    grid-template-areas:
-      "round philipp lena"
-      "f0 disputes gt"
-      "f1 f1 f1";
-    row-gap: 6px;
-    padding: 10px;
-  }
-  .ov-c-round { grid-area: round; }
-  .ov-c-philipp { grid-area: philipp; }
-  .ov-c-lena { grid-area: lena; }
-  .ov-c-f0 { grid-area: f0; font-size: 11px; }
-  .ov-c-disputes { grid-area: disputes; font-size: 11px; text-align: center; }
-  .ov-c-gt { grid-area: gt; font-size: 11px; }
-  .ov-c-f1 { grid-area: f1; font-size: 11px; text-align: left; border-top: 1px dotted var(--tw-border); padding-top: 6px; margin-top: 2px; }
-  .ov-c-f0::before, .ov-c-disputes::before, .ov-c-gt::before, .ov-c-f1::before {
-    content: attr(data-label) ": "; color: var(--tw-text-muted); font-weight: 400;
-  }
-}
+/* Die Übersichts-/Tabellen-Optik beider Werkzeuge liegt gemeinsam in
+   overview.css (von doppelpruefung.html UND klassifizierung.html geladen) —
+   hier bewusst KEINE zweite Fassung pflegen. */
 
