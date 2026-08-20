@@ -175,83 +175,87 @@ Ereignisstrom gespeichert wird.
 
 ## Aktueller Fokus
 
-_Stand: 2026-08-19_
+_Stand: 2026-08-20_
 
-**Stand heute:** Alles von heute ist **live** — letzter Deploy `1f27c58` (GitHub
-Actions Run #97, alle 12 Schritte grün, inkl. D1-Migration 0016 und
-Health-Check). Branch `claude/klassifizierung-musterklassen-plplo4`,
-Arbeitsverzeichnis sauber, lokal = origin. Der Tag hatte drei Blöcke: den
-Sammel-Handoff Bugfixes (9 Punkte, u. a. der D1-Blocker, der die
-Klassifizierungs-Übersicht komplett lahmgelegt hatte), die Vereinheitlichung
-von Navigation und Übersichten, und den UI-Nachtrag inkl. Grenznummer am Ort.
+**Stand heute:** Alles live — letzter Deploy `bf99ae8` (GitHub Actions Runs
+#98–#106 sämtlich grün, inkl. D1-Migration 0017). Branch
+`claude/klassifizierung-musterklassen-plplo4`, Arbeitsverzeichnis sauber,
+lokal = origin, kein PR. Der Tag: Handoff-Blöcke 1+2 komplett, dazu die
+Analyse-Infrastruktur (Diagnose-/Mischverteilungs-/Tagesrhythmus-Seiten und
+die vorberechneten öffentlichen Aggregat-Routen).
 
-1. **Sammel-Handoff Bugfixes** (`26d544a` … `7b0152c`, 9 Punkte):
-   - **P4 (Blocker):** `situation_id IN (?1…?N)` sprengte ab >100
-     Validierungssituationen D1s 100-Bind-Limit → Übersicht lud gar nicht.
-     Fix: Helper `selectBySituationIds` chunkt auf 90 Binds (4 Funktionen in
-     `worker-classification.ts`). Kein Zwilling im Grenzen-Tool.
-   - **P1:** global stabile Grenz-Nummern (Option B) — Migration `0016`,
-     `review_message_ordinals`, append-only; Anzeige „Grenze N", Situationen
-     über ihre Start-Grenze. Später gehärtet (Multi-Row-INSERT, nicht-fatal),
-     damit der Erst-Backfill den 4-Jahres-Chat in einem Durchgang schafft.
-   - **P2:** `filteredSequence`-Cache (Fingerprint aus Chunk-Anzahl + Bytelänge)
-     + inkrementelles `putMarks` (Diff statt DELETE-all). Indizes geprüft: keine
-     fehlenden.
-   - **P3/P3b:** F1 bei GT=0 und κ/α bei degenerierter Klasse sind jetzt
-     **n/a (null)**, nicht 0 bzw. 1; solche Fälle fließen nicht in die Aggregate.
-   - **P9:** feste Klassencodes N1–N10 / P1–P9 / E1 / Z1–Z3, an `pattern_key`
-     gebunden. **P7:** Polling eines billigen Zustands-Stempels (`/state`),
-     Blindheit gewahrt. **P8/P5/P6:** mobile Kopfzeile, dicke Grenzlinien,
-     iPad-Tastatur (`inputmode="numeric"`).
-2. **Vereinheitlichung Navigation & Übersichten** (`946c280`): Nav auf
-   `Segmentierung · Klassifizierung · Upload · Settings`; beide Werkzeuge mit
-   identischem Muster (Nav → Übersicht → Einheit → „Zur Übersicht"); neue
-   gemeinsame `overview.css`; Klassifizierungs-Übersicht mit
-   offene-zuerst-Filter, 25/Seite, Σ/Ø-Aggregatkopf; klebende Kopfzeilen;
-   Spaltengruppen; mobil ohne Querscrollen (bei 360/375/393px nachgemessen).
-   Dabei gefunden: `body.cl .ov-row` in `classification.css` überschrieb wegen
-   höherer Spezifität die gemeinsame Komponente — entfernt.
-3. **UI-Nachtrag + Grenznummer am Ort** (`af2e3c0`, `1f27c58`): Gruppen heißen
-   Negativ-/Positiv-Marker (passend zu N/P), Gruppentitel groß und kräftig
-   (drei Regeln zu einer zusammengeführt), selbstimplizierend überall als
-   gelbes ⚠. Grenznummer steht jetzt dort, wo die Grenze liegt: Trenner
-   „Grenze N" über der ersten Nachricht einer Situation, Nummer an jeder
-   gesetzten Grenzlinie der Runden-Ansicht, Nummer an der strittigen Linie im
-   Streitfall. Dafür neue **gemeinsame** `seam.css`; `.dp-seam` und
-   `.dp-dispute-seam` sind ersatzlos entfallen. Beim Zusammenführen behoben:
-   die Prüferfarb-Regel war spezifischer als die Streitfall-Regel — eine
-   strittige Naht wäre türkis statt rot geblieben. `dashboard.html/.css/.js`
-   entfernt (verwaist); die Weiterleitung `/dashboard.html` bleibt für alte
-   Lesezeichen.
+1. **B1.2:** Playwright-Visual-Snapshots ersatzlos entfernt (`292b178`) —
+   `tests/visual/`, Config, Workflow, devDependency; kein nicht-visueller
+   Playwright-Test blieb übrig.
+2. **B1.1 Hauptschalter** (`217228c`, `3dbcaf2`): Befund war „es gibt keinen" —
+   „Benachrichtigungen X aktiv" schaltete nur die Cron-Erinnerung, der Test
+   umging alles. Nach Philipps Entscheid: Migration `0017`
+   (`push_enabled_philipp`/`_lena`), genau EINE Durchsetzung in
+   `notifyReviewer` (Gate `pushAllowedFor`), Test läuft durch dieselbe
+   Funktion (`sent:false` + Grund bei „aus"), Dedup erst nach erfolgreicher
+   Zustellung, dritter Erinnerungs-Schalter entfällt (leere Zeit = aus, die
+   Migration leerte die Zeiten der Abgeschalteten), Testknopf mit Begründung
+   gesperrt. Tests in `tests/push-send` für alle vier Anlässe an/aus.
+3. **B2 vollständig beantwortet** (Endpunkt `63663b9`, lesbare Seite
+   `9ce097e`): **Antwort A — Annotationslücke.** `prepare-sample` →
+   `combinedBoundaryForRound` (nur menschliche Marks + Auflösungen),
+   `deriveSituations` reiner Positions-Split; `segmentConversationWindow` nur
+   in Anzeige-/Optimizer-Pfaden. **Zahlen (Live-D1):** 273 Situationen, 144
+   (52,7 %) mit interner Lücke > 60 min, 37 (13,6 %) > 180 min; Stichprobe
+   praktisch identisch (52,8 %/15,6 %). Segmentlängen Median 8 Nachrichten /
+   2 h 02; Abstände zwischen Segmenten Median 5 h 24, > 6 h 44,6 %, > 12 h
+   15,0 %, > 24 h 4,3 %, > 72 h 2,1 % (233 Übergänge). **Kernschluss:** die
+   Verteilungen „innerhalb" und „zwischen" überlappen massiv — keine
+   Zeitschwelle kann trennen; Beleg für die Vorgangsebene. Situation 69 =
+   Runde 11/Index 1, Grenzen 66639–66642: 3× Philipp 22:12, Lena-Anruf 23:44
+   (1 h 31), alle Nähte ohne Markierung/Auflösung. Anrufe: mitgezählt, kein
+   Auto-Grenzsignal, nicht verworfen (`isService`/`isCallAction`). Achtung:
+   Klassifizierungs-UI nummeriert anders als die DB-IDs — Einheiten über
+   Runde+Index oder Diagnose-ID benennen.
+4. **Analyse-Seiten + öffentliche Aggregat-Routen** (`31781c2` … `bf99ae8`):
+   `GET /api/admin/segment-diagnose` (Lückenverteilung, 2.3, Drill-down je
+   Situation mit Naht-Status), `GET /api/admin/gap-mixture` (GMM k=1–4 über
+   log₁₀(Δt), BIC, Grenzen, 60-Bin-Histogramm, je Kalenderjahr; Modul
+   `gap-mixture.mjs` + Tests; CPU-Fix: relative Konvergenz, `?scope=`/`?year=`)
+   und Tagesrhythmus (`daily-rhythm.mjs` + Tests: Nachrichten/Stunde je
+   Sender, Pausen-Startstunden 1–4/4–12/>12 h, Europe/Berlin inkl.
+   Sommerzeit). Der Admin-Aufruf legt das kanonische Ergebnis in
+   `app_settings` (`gap_mixture_result:<dataset>`) ab;
+   `GET /api/public/gap-mixture` und `GET /api/public/hourly` liefern OHNE
+   Login nur dieses gespeicherte Dokument (reine Aggregate, <1 s, nie live
+   rechnen; 503 mit Anleitung solange leer). Öffentlich = bewusste
+   Entscheidung Philipps; ?key= wäre bei öffentlichem Repo Scheinsicherheit.
+5. **Neue verbindliche Konventionen** (oben verankert): Auswertungen als
+   lesbare Seiten statt JSON (`diagnosePage()`-Muster); Links immer
+   vollständig im Markdown-Codeblock.
 
 **Morgen zuerst:**
-1. **Live-Durchgang auf den echten Geräten** (nur Philipp/Lena können das, ich
-   habe keine Session): App öffnen (ggf. zweimal — der Service Worker liefert
-   stale-while-revalidate) und prüfen: (a) Klassifizierungs-Übersicht **lädt**
-   überhaupt wieder (das war der Blocker), (b) Trenner „Grenze N" über der
-   ersten Nachricht einer Situation, (c) Nummern an den Grenzlinien in Runden-
-   und Streitfall-Ansicht, (d) Übersichten auf dem iPhone ohne Querscrollen mit
-   klebender Kopfzeile, (e) eine Runde öffnen, Grenze setzen/zurücknehmen,
-   Streitfall ansehen — nichts kaputt.
-2. **Ordinal-Backfill gegenprüfen:** läuft automatisch beim ersten Laden der
-   Übersicht. Falls Nummern fehlen, in der Browser-Konsole als Philipp:
-   `fetch('/api/admin/backfill-ordinals',{method:'POST',credentials:'same-origin'}).then(r=>r.json()).then(console.log)`
-   → `numbered` sollte ≈ `sequenceLength` sein.
-3. **Danach erst der eigentliche Klassifizierungs-Start:** `prepare-sample` auf
-   echten Daten (Klassifizierung → „Stichprobe vorbereiten", nur Philipp).
+1. **Ablage füllen + Zahlen ansehen:** Als Philipp einmal
+   `/api/admin/gap-mixture` aufrufen (rechnet neu und persistiert, danach
+   liefern `/api/public/gap-mixture` und `/api/public/hourly` sofort).
+   Interessant: bestes k nach BIC, Lage der Entscheidungsgrenzen, ob sie über
+   die Jahre wandern, Tagesrhythmus-Tabelle (Nachtstunden sollten bei
+   >12-h-Pausen dominieren).
+2. **Block-2-Freigabe entscheiden.** Danach — und erst danach — Block 3
+   (Vorgangsebene, Handoff 2026-08-20): additive Migration `review_cases`/
+   `review_case_members` (Muster 0008/0013), Verkettungs-Ansicht in
+   lückenloser Ordinal-Reihenfolge, Blind-Teilmenge ~40 Segmente, Ziehung auf
+   Blockebene. Für die 3.2-Entscheidungen liegen die Zahlen vor: Schwelle
+   < 12 h zerschnitte die Über-Nacht-Brücken (15 %), Woche wirkungslos
+   (2,1 %); ~3 Segmente/Tag → Kalenderwoche ≈ 20 Segmente, 40er-Teilmenge ≈
+   2 Wochenblöcke. Beide Fragen bleiben Philipps Entscheid, notfalls als
+   Konfigurationswert anlegen und melden.
 
 **Offene Punkte:**
-- Zwei Design-Entscheidungen warten auf Philipps Urteil (beides Einzeiler):
-  Situationstrenner nutzt `data-owner="both"` (Türkis/Rosa-Wechselmuster statt
-  einzelner Prüferfarbe); der „Öffnen"-Knopf der Segmentierung ist entfallen,
-  das Sprungfeld öffnet per Enter/Verlassen.
-- 14 offene Streitfälle in Runden 13–17 warten weiterhin auf Lenas Votes
-  (`GET /api/admin/dispute-check?rounds=13-17` zum Nachzählen).
-- Validierungs-Split und Optimizer-Neutraining weiterhin nicht ausgeführt
-  (Settings-Seite).
+- Block 3 GESPERRT bis Philipps Freigabe der Block-2-Diagnose.
+- Hauptschalter-Zustelltest auf echten Geräten (aus → Testknopf gesperrt,
+  direkter POST liefert `sent:false`; an + Gerät → Test kommt an).
+- Situation 42 (Runde 6) = 100 Nachrichten ohne einzigen Schnitt (Lücke
+  9 h 05) — größter Annotationslücken-Fall, bei Gelegenheit ansehen.
+- 14 offene Streitfälle in Runden 13–17 warten auf Lenas Votes.
+- Validierungs-Split + Optimizer-Neutraining nicht ausgeführt (Settings).
 - Push-Opt-in beider Geräte + Zustell-Test weiterhin offen.
-- LLM-Dritt-Rater ist gebaut, aber noch nie auf echten Daten gelaufen
-  (`ANTHROPIC_API_KEY` als Secret nötig).
-- Kein PR offen; alles liegt auf `claude/klassifizierung-musterklassen-plplo4`.
-- Backlog (kein Auftrag): adaptives Segmentierungstool, Konzept in
-  `KONZEPT_Adaptive_Segmentierung.md`.
+- LLM-Dritt-Rater nie auf echten Daten gelaufen (`ANTHROPIC_API_KEY` nötig).
+- Kein PR offen; alles auf `claude/klassifizierung-musterklassen-plplo4`.
+- Backlog (kein Auftrag): adaptives Segmentierungstool
+  (`KONZEPT_Adaptive_Segmentierung.md`).
