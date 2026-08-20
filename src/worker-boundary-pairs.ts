@@ -15,6 +15,7 @@ import {
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
 import { logGapsFromTimestamps, fitRange, decisionBoundaries, histogram } from '../gap-mixture.mjs';
+import { hourlyAggregates } from '../daily-rhythm.mjs';
 import type { SegmentationOptions } from '../segmentation-v4.d.mts';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
 
@@ -3828,6 +3829,9 @@ type GapMixturePayload = {
   scope: string; computedAt: string;
   overall: MixtureBlock;
   byYear: Array<{ year: string } & MixtureBlock>;
+  // Tagesrhythmus (Nachrichten je Stunde pro Sender, Startstunden der Pausen).
+  // Optional: vor dieser Erweiterung abgelegte Dokumente tragen das Feld nicht.
+  dailyRhythm?: ReturnType<typeof hourlyAggregates>;
 };
 
 // Schlüssel, unter dem das fertig gerechnete kanonische Ergebnis (Standard-
@@ -3955,6 +3959,13 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     ...mixtureBlock(byYearValues.get(year) || [], bins, maxK, maxIterations),
   }));
 
+  // Tagesrhythmus: ein Durchlauf über die Folge, reine Zählungen. Sender ist
+  // der Absendername aus dem Export (gleiche Ableitung wie toView).
+  const dailyRhythm = hourlyAggregates(sequence.map((message) => ({
+    t: messageSeconds(message),
+    from: String(message.from || message.actor || message.sender || '?'),
+  })));
+
   const payload: GapMixturePayload = {
     ok: true,
     dataset: dataset.id,
@@ -3970,6 +3981,7 @@ async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Requ
     computedAt: new Date().toISOString(),
     overall,
     byYear,
+    dailyRhythm,
   };
 
   // Kanonisches Ergebnis (Standardparameter, alle Jahre) einmal gerechnet →
@@ -4140,6 +4152,28 @@ function renderGapMixturePage(payload: GapMixturePayload): Response {
     ${histogramBars(payload.overall)}`}
 
     ${payload.byYear.map((entry) => section(`Kalenderjahr ${entry.year}`, entry)).join('')}
+
+    ${!payload.dailyRhythm ? '' : (() => {
+      const rhythm = payload.dailyRhythm;
+      const senders = Object.keys(rhythm.msgPerHourBySender).sort();
+      const classes = rhythm.gapStartHour.classes;
+      const rows = Array.from({ length: 24 }, (_, hour) => `<tr>
+        <td class="num">${String(hour).padStart(2, '0')}</td>
+        ${senders.map((sender) => `<td class="num">${rhythm.msgPerHourBySender[sender][hour]}</td>`).join('')}
+        <td class="num">${classes['1-4h'].counts[hour]}</td>
+        <td class="num">${classes['4-12h'].counts[hour]}</td>
+        <td class="num">${classes.over12h.counts[hour]}</td>
+      </tr>`).join('');
+      return `<h2>Tagesrhythmus</h2>
+      <p class="note">${escapeHtml(rhythm.timezoneNote)} Pausen zählen ab &gt; 1 h,
+        eingetragen bei der Stunde, in der die Pause beginnt (letzte Nachricht davor).</p>
+      <div class="wrap"><table>
+        <thead><tr><th class="num">Stunde</th>
+          ${senders.map((sender) => `<th class="num">${escapeHtml(sender)}</th>`).join('')}
+          <th class="num">Pausen 1–4 h</th><th class="num">4–12 h</th><th class="num">&gt; 12 h</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+    })()}
 
     <p class="note"><a href="?format=json">Rohdaten als JSON</a>
       · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
