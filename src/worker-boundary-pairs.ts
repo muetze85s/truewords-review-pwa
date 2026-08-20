@@ -14,6 +14,7 @@ import {
   agreeResolutions,
 } from '../boundary-pairs-logic.mjs';
 import { segmentConversationWindow } from '../segmentation-v4.mjs';
+import { logGapsFromTimestamps, fitRange, decisionBoundaries, histogram } from '../gap-mixture.mjs';
 import type { SegmentationOptions } from '../segmentation-v4.d.mts';
 import type { BoundaryMark, DoubtMode } from '../boundary-pairs-logic.d.mts';
 
@@ -2836,6 +2837,7 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     && url.pathname !== '/api/admin/marks-backfill-apply'
     && url.pathname !== '/api/admin/backfill-ordinals'
     && url.pathname !== '/api/admin/segment-diagnose'
+    && url.pathname !== '/api/admin/gap-mixture'
   ) return null;
 
   // Admin-getokte Schreiboperationen: eigener Gate, nicht die Prüfer-Session.
@@ -2920,6 +2922,11 @@ async function boundaryPairsApi(request: Request, env: Env): Promise<Response | 
     if (url.pathname === '/api/admin/segment-diagnose' && request.method === 'GET') {
       if (!user.canUpload) return error('Nur der Admin darf die Segment-Diagnose sehen.', 403);
       return await segmentDiagnose(env, dataset, url, request);
+    }
+
+    if (url.pathname === '/api/admin/gap-mixture' && request.method === 'GET') {
+      if (!user.canUpload) return error('Nur der Admin darf die Abstandsanalyse sehen.', 403);
+      return await gapMixture(env, dataset, url, request);
     }
 
     const match = url.pathname.match(/^\/api\/rounds\/(\d+)(\/marks|\/submit|\/agreement|\/resolve|\/state)?$/u);
@@ -3766,6 +3773,238 @@ async function segmentDiagnose(env: Env, dataset: DatasetRow, url: URL, request:
       },
     },
   });
+}
+
+
+// ---- Δt-Mischverteilung ----------------------------------------------------
+//
+// GET /api/admin/gap-mixture — Read-only. Nimmt alle Abstände zwischen
+// benachbarten Nachrichten der gefilterten Folge, rechnet log₁₀(Δt in
+// Sekunden) und passt Gauß-Mischungen mit k = 1…4 an. Zweck: prüfen, ob die
+// Pausenverteilung überhaupt eine natürliche Struktur hat. Wählt BIC k = 1,
+// gibt es keine datengestützte Zeitschwelle — dann ist jede Schwelle gesetzt,
+// nicht gefunden.
+//
+// Ausschließlich Aggregate: Gewichte, Mittelwerte, Streuungen, Grenzen,
+// Histogrammzählungen. Keine Nachricht, kein Zeitstempel, kein Text.
+
+/** Eine Sekundenzahl in mehreren Einheiten, plus lesbare Form. */
+function describeSeconds(seconds: number): {
+  seconds: number; minutes: number; hours: number; human: string;
+} {
+  return {
+    seconds: Math.round(seconds * 1000) / 1000,
+    minutes: Math.round((seconds / 60) * 1000) / 1000,
+    hours: Math.round((seconds / 3600) * 1000) / 1000,
+    human: humanDuration(seconds),
+  };
+}
+
+type MixtureBlock = ReturnType<typeof mixtureBlock>;
+
+/** Fit + Kennzahlen für eine Wertemenge (alle Jahre oder ein Kalenderjahr). */
+function mixtureBlock(values: number[], bins: number, maxK: number, maxIterations: number) {
+  const { fits, bestK } = fitRange(values, { maxK, maxIterations });
+  const best = fits.find((fit) => fit.k === bestK) || fits[0];
+  const boundaries = best ? decisionBoundaries(best) : [];
+  const hist = histogram(values, bins);
+  return {
+    n: values.length,
+    bicByK: fits.map((fit) => ({
+      k: fit.k,
+      logLikelihood: fit.logLikelihood,
+      bic: fit.bic,
+      aic: fit.aic,
+      iterations: fit.iterations,
+      converged: fit.converged,
+    })),
+    bestK,
+    // Komponenten aufsteigend nach Mittelwert (Komponente 1 = die schnellste).
+    components: (best ? best.means : []).map((mean, index) => {
+      const sd = best.sigmas[index];
+      return {
+        index: index + 1,
+        weight: best.weights[index],
+        meanLog10: mean,
+        sdLog10: sd,
+        center: describeSeconds(10 ** mean),
+        // ±1 Streuung, zurückgerechnet — im Logarithmus symmetrisch, in
+        // Sekunden ein multiplikatives Intervall.
+        low1Sd: describeSeconds(10 ** (mean - sd)),
+        high1Sd: describeSeconds(10 ** (mean + sd)),
+      };
+    }),
+    boundaries: boundaries.map((boundary) => ({
+      between: boundary.between.map((index) => index + 1) as [number, number],
+      log10: boundary.log10,
+      ...(boundary.log10 === null ? { value: null } : { value: describeSeconds(10 ** boundary.log10) }),
+    })),
+    histogram: {
+      bins: hist.bins,
+      minLog10: hist.min,
+      maxLog10: hist.max,
+      widthLog10: hist.width,
+      counts: hist.counts,
+      edgesLog10: hist.edges,
+      edgesSeconds: hist.edges.map((edge) => 10 ** edge),
+    },
+  };
+}
+
+async function gapMixture(env: Env, dataset: DatasetRow, url: URL, request: Request): Promise<Response> {
+  const format = url.searchParams.get('format');
+  const wantsHtml = format === 'html'
+    || (format !== 'json' && (request.headers.get('accept') || '').includes('text/html'));
+
+  const requestedBins = Number(url.searchParams.get('bins'));
+  const bins = Number.isFinite(requestedBins) && requestedBins >= 5 && requestedBins <= 300
+    ? Math.floor(requestedBins) : 60;
+  const requestedMaxK = Number(url.searchParams.get('maxK'));
+  const maxK = Number.isFinite(requestedMaxK) && requestedMaxK >= 1 && requestedMaxK <= 8
+    ? Math.floor(requestedMaxK) : 4;
+  const requestedIterations = Number(url.searchParams.get('maxIterations'));
+  const maxIterations = Number.isFinite(requestedIterations) && requestedIterations >= 10 && requestedIterations <= 2000
+    ? Math.floor(requestedIterations) : 300;
+
+  const sequence = await filteredSequence(env, dataset.id);
+  const seconds = sequence.map((message) => messageSeconds(message));
+
+  const overallGaps = logGapsFromTimestamps(seconds);
+
+  // Jahresweise: ein Abstand zählt zu dem Kalenderjahr, in dem er BEGINNT
+  // (Zeitzone Europe/Berlin, wie überall in der Auswertung).
+  const yearFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric' });
+  const byYearValues = new Map<string, number[]>();
+  for (let index = 1; index < seconds.length; index += 1) {
+    const previous = seconds[index - 1];
+    const current = seconds[index];
+    if (!Number.isFinite(previous) || !Number.isFinite(current)) continue;
+    const delta = Math.max(1, current - previous);
+    const year = yearFormat.format(new Date(previous * 1000));
+    const list = byYearValues.get(year) || [];
+    list.push(Math.log10(delta));
+    byYearValues.set(year, list);
+  }
+
+  const overall = mixtureBlock(overallGaps.values, bins, maxK, maxIterations);
+  const years = [...byYearValues.keys()].sort();
+  const byYear = years.map((year) => ({
+    year,
+    ...mixtureBlock(byYearValues.get(year) || [], bins, maxK, maxIterations),
+  }));
+
+  const payload = {
+    ok: true,
+    dataset: dataset.id,
+    messages: sequence.length,
+    gaps: overallGaps.values.length,
+    clampedToOneSecond: overallGaps.clamped,
+    minSeconds: overallGaps.minSeconds,
+    maxSeconds: overallGaps.maxSeconds,
+    bins,
+    maxK,
+    maxIterations,
+    overall,
+    byYear,
+  };
+
+  if (!wantsHtml) return json(payload);
+
+  const bicTable = (block: MixtureBlock) => `<div class="wrap"><table>
+    <thead><tr><th class="num">k</th><th class="num">log L</th><th class="num">BIC</th>
+      <th class="num">ΔBIC</th><th class="num">Iter.</th></tr></thead>
+    <tbody>${block.bicByK.map((entry) => {
+      const bestBic = Math.min(...block.bicByK.map((other) => other.bic));
+      const isBest = entry.k === block.bestK;
+      return `<tr>
+        <td class="num">${isBest ? `<b class="ok">${entry.k}</b>` : entry.k}</td>
+        <td class="num">${escapeHtml(entry.logLikelihood.toFixed(1))}</td>
+        <td class="num">${isBest ? `<b class="ok">${escapeHtml(entry.bic.toFixed(1))}</b>` : escapeHtml(entry.bic.toFixed(1))}</td>
+        <td class="num">${escapeHtml((entry.bic - bestBic).toFixed(1))}</td>
+        <td class="num">${entry.iterations}${entry.converged ? '' : ' <span class="flag">!</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+
+  const componentTable = (block: MixtureBlock) => `<div class="wrap"><table>
+    <thead><tr><th class="num">#</th><th class="num">Gewicht</th><th>Zentrum</th>
+      <th>±1 s (von–bis)</th><th class="num">µ log₁₀</th><th class="num">σ log₁₀</th></tr></thead>
+    <tbody>${block.components.map((component) => `<tr>
+      <td class="num">${component.index}</td>
+      <td class="num">${escapeHtml(humanShare(component.weight))}</td>
+      <td><b>${escapeHtml(component.center.human)}</b></td>
+      <td>${escapeHtml(component.low1Sd.human)} – ${escapeHtml(component.high1Sd.human)}</td>
+      <td class="num">${escapeHtml(component.meanLog10.toFixed(3))}</td>
+      <td class="num">${escapeHtml(component.sdLog10.toFixed(3))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+
+  const boundaryList = (block: MixtureBlock) => (block.boundaries.length === 0
+    ? '<p class="note">Keine Grenze — das Modell hat nur eine Komponente.</p>'
+    : `<div class="wrap"><table>
+        <thead><tr><th>zwischen</th><th>Grenze</th><th class="num">log₁₀</th></tr></thead>
+        <tbody>${block.boundaries.map((boundary) => `<tr>
+          <td>Komponente ${boundary.between[0]} / ${boundary.between[1]}</td>
+          <td><b>${boundary.value ? escapeHtml(boundary.value.human) : '—'}</b></td>
+          <td class="num">${boundary.log10 === null ? '—' : escapeHtml(boundary.log10.toFixed(3))}</td>
+        </tr>`).join('')}</tbody></table></div>`);
+
+  const histogramBars = (block: MixtureBlock) => {
+    const max = Math.max(1, ...block.histogram.counts);
+    return `<div class="hist">${block.histogram.counts.map((count, index) => {
+      const from = block.histogram.edgesSeconds[index];
+      return `<div class="hrow">
+        <span class="hlabel">${escapeHtml(humanDuration(from))}</span>
+        <span class="hbar"><i style="width:${(count / max) * 100}%"></i></span>
+        <span class="hcount">${count}</span>
+      </div>`;
+    }).join('')}</div>`;
+  };
+
+  const section = (title: string, block: MixtureBlock) => `
+    <h2>${escapeHtml(title)}</h2>
+    <div class="card"><div class="big">k = ${block.bestK}
+      <small>bestes Modell nach BIC · ${block.n} Abstände</small></div></div>
+    ${bicTable(block)}
+    <h3>Komponenten</h3>
+    ${componentTable(block)}
+    <h3>Entscheidungsgrenzen</h3>
+    ${boundaryList(block)}`;
+
+  return diagnosePage('Δt-Mischverteilung', `
+    <style>
+      h3 { font-size: 15px; margin: 18px 0 6px; color: #cfd6de; }
+      .hist { margin: 8px 0 0; }
+      .hrow { display: grid; grid-template-columns: 78px 1fr 52px; gap: 8px; align-items: center; font-size: 12px; }
+      .hlabel { color: #9aa3ad; text-align: right; font-variant-numeric: tabular-nums; }
+      .hbar { background: #232833; border-radius: 3px; height: 12px; overflow: hidden; }
+      .hbar i { display: block; height: 100%; background: #4fb3a4; }
+      .hcount { text-align: right; color: #9aa3ad; font-variant-numeric: tabular-nums; }
+    </style>
+    <h1>Δt-Mischverteilung</h1>
+    <p class="sub">Datensatz ${escapeHtml(dataset.id)} · ${sequence.length} Nachrichten ·
+      ${overallGaps.values.length} Abstände · kleinster ${escapeHtml(humanDuration(overallGaps.minSeconds))} ·
+      größter ${escapeHtml(humanDuration(overallGaps.maxSeconds))} ·
+      ${overallGaps.clamped} Abstände unter 1 s auf 1 s angehoben</p>
+
+    <div class="card">
+      <b>Was hier gerechnet wird.</b>
+      <p class="note">Alle Abstände zwischen benachbarten Nachrichten, logarithmiert
+        (log₁₀ der Sekunden), angepasst mit Gauß-Mischungen für k = 1…${maxK}. Gewählt wird
+        das k mit dem kleinsten BIC. Wählt BIC k = 1, hat die Pausenverteilung keine
+        natürliche Struktur — dann gibt es keine datengestützte Zeitschwelle, und jede
+        Schwelle wäre gesetzt statt gefunden. Bei k &gt; 1 sind die Entscheidungsgrenzen
+        die einzigen Schwellen, die aus den Daten selbst kommen.</p>
+    </div>
+
+    ${section('Alle Jahre', overall)}
+
+    <h3>Histogramm (${bins} Bins über log₁₀, Beschriftung = Beginn des Bins)</h3>
+    ${histogramBars(overall)}
+
+    ${byYear.map((block) => section(`Kalenderjahr ${block.year}`, block)).join('')}
+
+    <p class="note"><a href="?format=json">Rohdaten als JSON</a>
+      · <a href="/api/admin/segment-diagnose">Segment-Diagnose</a></p>
+  `);
 }
 
 export default {
