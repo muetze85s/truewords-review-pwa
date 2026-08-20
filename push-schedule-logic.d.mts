@@ -19,3 +19,7 @@ export declare function disputeAlertDue(input: {
   nowMinutesOfDay?: number;
   earliestMinutes?: number;
 }): boolean;
+export declare function pushAllowedFor(
+  settings: Record<string, unknown> | null | undefined,
+  reviewer: 'Philipp' | 'Lena',
+): boolean;

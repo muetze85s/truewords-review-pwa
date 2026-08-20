@@ -87,3 +87,26 @@ export function disputeAlertDue({ enabled, openCount, threshold, sentToday, nowM
   if (Number.isFinite(nowMin) && Number.isFinite(earliest) && nowMin < earliest) return false;
   return true;
 }
+
+/**
+ * Hauptschalter je Person: Darf an diese Person überhaupt etwas zugestellt
+ * werden? Gilt ausnahmslos für ALLE Anlässe — Test, Zeit 1, Zeit 2,
+ * Streitfall-Alarm und die Abgabe des Partners.
+ *
+ * Reine Entscheidung ohne Seiteneffekte, damit sie testbar ist; durchgesetzt
+ * wird sie an genau einer Stelle im Sendepfad (notifyReviewer in
+ * worker-push.ts). Fehlt die Spalte (alte Zeile vor Migration 0017), gilt
+ * „an" — Migration und Default setzen 1, und ein fehlender Wert darf keine
+ * stillschweigende Abschaltung bedeuten.
+ *
+ * @param {Record<string, unknown>} settings  Zeile aus push_settings.
+ * @param {'Philipp'|'Lena'} reviewer
+ * @returns {boolean} true = zustellen erlaubt.
+ */
+export function pushAllowedFor(settings, reviewer) {
+  const source = settings || {};
+  const key = reviewer === 'Lena' ? 'push_enabled_lena' : 'push_enabled_philipp';
+  const value = source[key];
+  if (value === undefined || value === null) return true;
+  return Number(value) === 1;
+}

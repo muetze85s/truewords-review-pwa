@@ -6,7 +6,8 @@
   const setStatus = (text, state = 'idle') => { status.textContent = text; status.classList.toggle('error', state === 'error'); };
 
   const CHECKS = [
-    'reminders_lena_enabled', 'reminders_philipp_enabled',
+    // Hauptschalter je Person — steht über allen Anlässen (Migration 0017).
+    'push_enabled_philipp', 'push_enabled_lena',
     'notify_philipp_on_lena_submit', 'notify_lena_on_philipp_submit',
     'dispute_alert_philipp_enabled', 'dispute_alert_lena_enabled',
   ];
@@ -51,23 +52,28 @@
     // angemeldeten Person (die Seite steuert nur Philipp). Ist kein Gerät
     // registriert, kann nichts ankommen — dann ist der Knopf aus und sagt,
     // warum, statt einen Klick anzunehmen, der folgenlos bleibt.
-    setTestAvailability(Boolean(dev.philippSubscribed));
+    setTestAvailability(Boolean(dev.philippSubscribed), Number(s.push_enabled_philipp) === 1);
   }
 
   // Ob überhaupt ein Gerät registriert ist — der Testknopf richtet sich danach.
   let testAvailable = false;
+  let hasDeviceRegistered = false;
 
   /** Testknopf an/aus + Begründung. Eine Stelle, damit Knopf und Text nie auseinanderlaufen. */
-  function setTestAvailability(hasDevice) {
-    testAvailable = Boolean(hasDevice);
+  function setTestAvailability(hasDevice, masterOn) {
+    hasDeviceRegistered = Boolean(hasDevice);
+    testAvailable = Boolean(hasDevice) && Boolean(masterOn);
     const btn = $('test-push');
     const hint = $('test-unavailable');
     if (!btn || !hint) return;
-    btn.disabled = !hasDevice;
-    hint.hidden = hasDevice;
-    hint.textContent = hasDevice
-      ? ''
-      : 'Für dieses Konto ist noch kein Gerät für Push eingerichtet — zum Testen zuerst oben unter „Gerät-Einstellungen" die Benachrichtigungen auf diesem Gerät erlauben.';
+    btn.disabled = !testAvailable;
+    hint.hidden = testAvailable;
+    // Der Hauptschalter ist der stärkere Grund — er wird zuerst genannt.
+    hint.textContent = !masterOn
+      ? 'Benachrichtigungen sind für diese Person ausgeschaltet — zum Testen zuerst einschalten.'
+      : (hasDevice
+        ? ''
+        : 'Für dieses Konto ist noch kein Gerät für Push eingerichtet — zum Testen zuerst oben unter „Gerät-Einstellungen" die Benachrichtigungen auf diesem Gerät erlauben.');
   }
 
   async function load() {
@@ -91,6 +97,12 @@
       syncTimeField(id);
       if (box.checked && !$(id).value) $(id).focus();
     });
+  });
+
+  // Der Hauptschalter wirkt sofort auf den Testknopf, damit der Knopf nie
+  // aktiv aussieht, während der Server ohnehin nichts zustellen würde.
+  $('push_enabled_philipp').addEventListener('change', () => {
+    setTestAvailability(hasDeviceRegistered, $('push_enabled_philipp').checked);
   });
 
   // Beide Schwellwert-Felder spiegeln denselben Wert.
@@ -238,6 +250,12 @@
       const res = await fetch('/api/push/test', { method: 'POST', credentials: 'same-origin' });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Fehlgeschlagen.');
+      if (data.sent === false) {
+        // Serverseitig unterdrückt (Hauptschalter aus) — als solches anzeigen.
+        result.textContent = data.reason || 'Nicht zugestellt.';
+        result.style.color = 'var(--tw-status-unclear)';
+        return;
+      }
       result.textContent = 'Gesendet — die Benachrichtigung sollte gleich erscheinen.';
       result.style.color = 'var(--tw-status-confirmed)';
     } catch (err) {

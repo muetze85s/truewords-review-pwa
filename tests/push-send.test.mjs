@@ -5,6 +5,7 @@ import {
   bytesToBase64url,
   base64urlToBytes,
 } from '../push-send.mjs';
+import { pushAllowedFor, dueReminderSlots, disputeAlertDue } from '../push-schedule-logic.mjs';
 
 const te = (value) => new TextEncoder().encode(value);
 const td = (bytes) => new TextDecoder().decode(bytes);
@@ -92,5 +93,119 @@ async function expand(prk, info, length) {
   );
   assert.ok(ok, 'JWT-Signatur ist mit dem VAPID-Public-Key gültig');
 }
+
+// --- Hauptschalter: aus = keinerlei Zustellung, ausnahmslos ---------------
+//
+// Der Hauptschalter (push_enabled_<person>, Migration 0017) wird an genau
+// einer Stelle durchgesetzt: notifyReviewer in worker-push.ts fragt
+// pushAllowedFor() und bricht bei „aus" ab, bevor irgendein Abo geladen wird.
+// Alle vier Anlässe — Abgabe des Partners, Streitfall-Alarm, Cron-Erinnerung
+// und der Test-Push — laufen durch dieselbe Funktion. Getestet wird deshalb
+// hier die Entscheidung, die alle vier gemeinsam gatet, plus die Zusicherung,
+// dass sie unabhängig vom jeweiligen Anlass-Schalter greift.
+
+// Die vier Anlässe, wie sie in worker-push.ts vor notifyReviewer geprüft werden.
+const ANLAESSE = ['abgabe', 'streitfall', 'cron', 'test'];
+
+// Nachbildung der Aufrufkette: erst der Anlass-Schalter (sofern es einen gibt),
+// dann — immer — der Hauptschalter in notifyReviewer.
+function zustellung(settings, reviewer, anlass) {
+  const anlassSchalter = {
+    abgabe: reviewer === 'Philipp'
+      ? Number(settings.notify_philipp_on_lena_submit) === 1
+      : Number(settings.notify_lena_on_philipp_submit) === 1,
+    streitfall: reviewer === 'Philipp'
+      ? Number(settings.dispute_alert_philipp_enabled) === 1
+      : Number(settings.dispute_alert_lena_enabled) === 1,
+    // Cron-Erinnerung: die Zeit selbst ist der Anlass-Schalter (leer = aus).
+    cron: Boolean(reviewer === 'Philipp' ? settings.philipp_time_1 : settings.lena_time_1),
+    // Der Test hat bewusst keinen eigenen Schalter — nur den Hauptschalter.
+    test: true,
+  }[anlass];
+  if (!anlassSchalter) return false;
+  return pushAllowedFor(settings, reviewer);
+}
+
+const alleAn = (master) => ({
+  push_enabled_philipp: master,
+  push_enabled_lena: master,
+  notify_philipp_on_lena_submit: 1,
+  notify_lena_on_philipp_submit: 1,
+  dispute_alert_philipp_enabled: 1,
+  dispute_alert_lena_enabled: 1,
+  philipp_time_1: '09:00',
+  lena_time_1: '09:00',
+});
+
+for (const reviewer of ['Philipp', 'Lena']) {
+  // Hauptschalter aus → nichts geht raus, für jeden der vier Anlässe.
+  const aus = alleAn(1);
+  aus[reviewer === 'Philipp' ? 'push_enabled_philipp' : 'push_enabled_lena'] = 0;
+  for (const anlass of ANLAESSE) {
+    assert.equal(
+      zustellung(aus, reviewer, anlass), false,
+      `Hauptschalter aus (${reviewer}): ${anlass} darf nicht zugestellt werden`,
+    );
+  }
+
+  // Hauptschalter an → alle vier stellen zu, sofern der Anlass-Schalter an ist.
+  const an = alleAn(1);
+  for (const anlass of ANLAESSE) {
+    assert.equal(
+      zustellung(an, reviewer, anlass), true,
+      `Hauptschalter an (${reviewer}): ${anlass} wird zugestellt`,
+    );
+  }
+}
+
+// Symmetrie: die Schalter sind voneinander unabhängig — Philipp aus lässt Lena
+// unberührt und umgekehrt.
+{
+  const nurPhilippAus = alleAn(1);
+  nurPhilippAus.push_enabled_philipp = 0;
+  assert.equal(pushAllowedFor(nurPhilippAus, 'Philipp'), false, 'Philipp aus');
+  assert.equal(pushAllowedFor(nurPhilippAus, 'Lena'), true, 'Lena bleibt an');
+
+  const nurLenaAus = alleAn(1);
+  nurLenaAus.push_enabled_lena = 0;
+  assert.equal(pushAllowedFor(nurLenaAus, 'Lena'), false, 'Lena aus');
+  assert.equal(pushAllowedFor(nurLenaAus, 'Philipp'), true, 'Philipp bleibt an');
+}
+
+// Alte Zeile ohne die Spalten (vor Migration 0017): „an" — ein fehlender Wert
+// darf keine stillschweigende Abschaltung sein.
+assert.equal(pushAllowedFor({}, 'Philipp'), true, 'fehlende Spalte gilt als an');
+assert.equal(pushAllowedFor(null, 'Lena'), true, 'fehlende Zeile gilt als an');
+
+// Der Hauptschalter ersetzt keinen Anlass-Schalter: an, aber Anlass aus → nichts.
+{
+  const anlassAus = alleAn(1);
+  anlassAus.dispute_alert_philipp_enabled = 0;
+  assert.equal(zustellung(anlassAus, 'Philipp', 'streitfall'), false, 'Streitfall-Schalter aus wirkt weiterhin');
+  assert.equal(zustellung(anlassAus, 'Philipp', 'abgabe'), true, 'andere Anlässe bleiben davon unberührt');
+}
+
+// Die Erinnerung hat keinen eigenen dritten Schalter mehr: eine leere Zeit ist
+// die Abschaltung dieser Zeit (dueReminderSlots überspringt sie), der
+// Hauptschalter greift zentral im Versand.
+{
+  const slots = dueReminderSlots({
+    now: new Date('2026-08-20T07:05:00Z'),
+    timeZone: 'Europe/Berlin',
+    times: ['', ''],
+    enabled: true,
+    submittedToday: false,
+    sentSlotsToday: [],
+  });
+  assert.deepEqual(slots, [], 'leere Zeiten lösen keine Erinnerung aus');
+}
+
+// Streitfall-Alarm bleibt an seinen Anlass-Bedingungen hängen (Schwelle),
+// unabhängig vom Hauptschalter — der wirkt eine Ebene später.
+assert.equal(
+  disputeAlertDue({ enabled: true, openCount: 2, threshold: 5, sentToday: false, nowMinutesOfDay: 800, earliestMinutes: 780 }),
+  false,
+  'unter der Schwelle kein Alarm',
+);
 
 console.log('push-send tests: PASS');

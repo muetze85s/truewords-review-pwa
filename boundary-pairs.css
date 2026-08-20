@@ -265,6 +265,8 @@ button.primary:hover:not(:disabled) { background: var(--tw-philipp-strong) !impo
 .tw-set legend { font-weight: 700; font-size: 13px; padding: 0 6px; }
 .tw-switch { display: flex; gap: 8px; align-items: center; margin: 6px 0; font-size: 14px; }
 .tw-device { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
+/* Hauptschalter steht optisch über den Anlass-Schaltern des Moduls. */
+.tw-switch-master { padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--tw-border, rgba(255,255,255,.12)); }
 /* Begründung, warum der Testknopf aus ist — gleiche Optik wie die Gerätezeile. */
 .tw-test-hint { font-size: 12px; color: var(--tw-text-muted); margin: 6px 0 0; }
 .tw-test-hint[hidden] { display: none; }

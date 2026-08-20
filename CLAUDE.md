@@ -84,6 +84,7 @@ worker-push               Web-Push: /api/push/*, Einstellungsseite-Gate, Sofort-
 - `0014` LLM-Dritt-Rater: `review_classification_marks` neu (reviewer `'LLM'` großgeschrieben + Spalte `rater_model`), Kosten-Ledger `ai_llm_budget`/`ai_llm_reservations`/`ai_llm_usage_events` (Zwei-Phasen-Commit, Mikro-Dollar, keine Inhalte), `review_classification_auto` (Freigabe je `pattern_key`). LLM = Anthropic/Claude über `anthropic-gateway.ts`; Secret `ANTHROPIC_API_KEY` (getrennt), Modell per `ANTHROPIC_MODEL` (Default `claude-haiku-4-5`), Deckel `ANTHROPIC_MAX_TOTAL_USD`/`ANTHROPIC_MAX_COST_PER_REQUEST_USD`.
 - `0015` `review_codebook_signoff` — Freigabe-Häkchen je Definition (Philipp/Lena) auf der Nachschlage-Seite
 - `0016` `review_message_ordinals` — global stabile Positions-Ordinalzahl je Nachricht (dataset-scoped, append-only). Basis der Grenz-Nummern in BEIDEN Werkzeugen; Vergabe/Lookup in `worker-boundary-pairs.ts` (`ensureMessageOrdinals`/`messageOrdinals`), Backfill zusätzlich über `POST /api/admin/backfill-ordinals`
+- `0017` Push-Hauptschalter je Person (`push_enabled_philipp`/`push_enabled_lena`): steht er auf 0, geht an diese Person **keinerlei** Web-Push — Test, Zeit 1, Zeit 2, Streitfall, Abgabe des Partners. Durchgesetzt an genau einer Stelle (`notifyReviewer` in `worker-push.ts`, Gate `pushAllowedFor` aus `push-schedule-logic.mjs`). Der frühere Erinnerungs-Schalter `reminders_*_enabled` ist entfallen (die beiden Zeit-Häkchen sind die Schalter); die Spalte bleibt additiv stehen, wird aber nicht mehr gelesen.
 
 ### PWA (Browser)
 
