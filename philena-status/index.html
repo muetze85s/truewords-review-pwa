@@ -5,45 +5,55 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PHILENA Live Status</title>
 <style>
-:root{color-scheme:light dark;--bg:#0f1115;--card:#171a21;--line:#2a2f3a;--text:#f4f6f8;--muted:#9ca6b4;--ok:#46c37b;--run:#e6b34a;--wait:#7f8a99;--accent:#20B8B5}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}main{max-width:1180px;margin:auto;padding:20px}.head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.pill{border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted)}h1{font-size:28px;margin:0 0 4px}.sub{color:var(--muted)}.bottleneck{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.package{margin:18px 0}.package h2{font-size:20px;margin:0 0 10px}.grid{display:grid;grid-template-columns:190px 135px 190px 1fr;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}.cell{padding:11px 12px;border-bottom:1px solid var(--line)}.grid>.cell:nth-last-child(-n+4){border-bottom:0}.headcell{font-weight:700;background:rgba(255,255,255,.03)}.status{font-weight:700}.ok{color:var(--ok)}.run{color:var(--run)}.wait{color:var(--wait)}.changed{animation:flash 1.2s ease}@keyframes flash{0%{background:rgba(32,184,181,.18)}100%{background:transparent}}.foot{margin-top:22px;color:var(--muted);font-size:12px}.error{color:#ff8c8c}
-@media(max-width:760px){main{padding:14px}.grid{display:block}.headcell{display:none}.cell{border-bottom:0;padding:7px 12px}.cell.station{font-weight:700;padding-top:13px;border-top:1px solid var(--line)}.grid>.cell.station:first-child{border-top:0}.cell.when:before{content:"Wann: ";color:var(--muted)}.cell.detail{padding-bottom:13px}.cell.detail:before{content:"Was / Warum: ";color:var(--muted)}}
+:root{color-scheme:light dark;--bg:#0f1115;--card:#171a21;--line:#2a2f3a;--text:#f4f6f8;--muted:#9ca6b4;--ok:#46c37b;--run:#e6b34a;--wait:#7f8a99;--accent:#20B8B5;--pkg-wait:rgba(127,138,153,.07);--pkg-run:rgba(230,179,74,.10);--pkg-done:rgba(70,195,123,.11);--row-wait:rgba(127,138,153,.045);--row-run:rgba(230,179,74,.10);--row-done:rgba(70,195,123,.075)}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}main{max-width:1180px;margin:auto;padding:20px}.head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}.head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pill,.refresh{border:1px solid var(--line);border-radius:999px;padding:7px 11px}.pill{color:var(--muted)}.refresh{appearance:none;background:var(--card);color:var(--text);font:inherit;font-weight:700;cursor:pointer}.refresh:active{transform:translateY(1px)}.refresh[disabled]{opacity:.55;cursor:default}h1{font-size:28px;margin:0 0 4px}.sub{color:var(--muted)}.bottleneck{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}.legend{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px;color:var(--muted);font-size:12px}.legend span{display:inline-flex;align-items:center;gap:6px}.dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--line)}.dot.wait{background:var(--pkg-wait)}.dot.run{background:var(--pkg-run)}.dot.done{background:var(--pkg-done)}.package{margin:18px 0;border:1px solid var(--line);border-radius:16px;padding:12px;transition:background .18s,border-color .18s,opacity .18s}.package.pkg-wait{background:var(--pkg-wait);opacity:.68}.package.pkg-run{background:var(--pkg-run);border-color:rgba(230,179,74,.34)}.package.pkg-done{background:var(--pkg-done);border-color:rgba(70,195,123,.38)}.package h2{font-size:20px;margin:0 0 10px;display:flex;align-items:center;gap:8px}.pkg-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}.pkg-run .pkg-badge{color:var(--run);border-color:rgba(230,179,74,.35)}.pkg-done .pkg-badge{color:var(--ok);border-color:rgba(70,195,123,.35)}.grid{display:grid;grid-template-columns:190px 135px 190px 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:rgba(23,26,33,.72)}.cell{padding:11px 12px;border-bottom:1px solid var(--line)}.grid>.cell:nth-last-child(-n+4){border-bottom:0}.headcell{font-weight:700;background:rgba(255,255,255,.03)}.status{font-weight:700}.ok{color:var(--ok)}.run{color:var(--run)}.wait{color:var(--wait)}.row-wait{background:var(--row-wait)}.row-run{background:var(--row-run)}.row-done{background:var(--row-done)}.changed{animation:flash 1.2s ease}@keyframes flash{0%{background:rgba(32,184,181,.18)}100%{background:transparent}}.foot{margin-top:22px;color:var(--muted);font-size:12px}.error{color:#ff8c8c}
+@media(max-width:760px){main{padding:14px}.head-actions{width:100%;justify-content:space-between}.grid{display:block}.headcell{display:none}.cell{border-bottom:0;padding:7px 12px}.cell.station{font-weight:700;padding-top:13px;border-top:1px solid var(--line)}.grid>.cell.station:first-of-type{border-top:0}.cell.when:before{content:"Wann: ";color:var(--muted)}.cell.detail{padding-bottom:13px}.cell.detail:before{content:"Was / Warum: ";color:var(--muted)}.package{padding:10px}}
 </style>
 </head>
 <body>
 <main>
-<div class="head"><div><h1>PHILENA Live Status</h1><div class="sub">Globales Situationsinventar</div></div><div class="pill" id="updated">lädt…</div></div>
+<div class="head"><div><h1>PHILENA Live Status</h1><div class="sub">Globales Situationsinventar</div></div><div class="head-actions"><button class="refresh" id="refresh" type="button">↻ Aktualisieren</button><div class="pill" id="updated">lädt…</div></div></div>
 <div class="bottleneck"><strong>Engpass auf einen Blick</strong><div id="bottleneck">lädt…</div></div>
+<div class="legend"><span><i class="dot wait"></i>blass: noch nicht begonnen</span><span><i class="dot run"></i>gelb: in Arbeit / Paket teilweise fortgeschritten</span><span><i class="dot done"></i>grün: alle Stationen erledigt</span></div>
 <div id="packages"></div>
-<div class="foot">Live-Quelle: GitHub · Aktualisierung alle 5 Sekunden · Zeitzone Asia/Bangkok</div>
+<div class="foot">Live-Quelle: GitHub · Auto-Aktualisierung alle 5 Sekunden · Zeitzone Asia/Bangkok</div>
 </main>
 <script>
 const DATA_URL='https://raw.githubusercontent.com/muetze85s/truewords-review-pwa/main/philena-status/status.json';
+const TOTAL_PACKAGES=31;
 const stationNames={claude_generator:'Claude Generator',codex_qa:'Codex QA',work_qa:'Work-QA',chatgpt_endadjudikation:'ChatGPT-Endadjudikation',materialisierung:'Materialisierung'};
-let lastStamp=null;
+const defaultOrder=Object.keys(stationNames);
+let lastStamp=null, loading=false;
 function cls(s){return s==='erledigt!'?'ok':s==='wird bearbeitet'?'run':'wait'}
+function rowCls(s){return s==='erledigt!'?'row-done':s==='wird bearbeitet'?'row-run':'row-wait'}
 function localTime(utc){if(!utc)return 'Stand: unbekannt';try{return 'Stand: '+new Intl.DateTimeFormat('de-DE',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(utc))+' Uhr'}catch{return 'Stand: '+utc}}
-async function load(){
- const r=await fetch(DATA_URL+'?ts='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error('Live-Status nicht erreichbar');
- const d=await r.json(); const changed=lastStamp!==null&&lastStamp!==d.updated_at_utc; lastStamp=d.updated_at_utc;
- const up=document.getElementById('updated'); up.textContent=localTime(d.updated_at_utc); up.className='pill'+(changed?' changed':'');
- document.getElementById('bottleneck').textContent=d.bottleneck||'—';
- const root=document.getElementById('packages'); root.innerHTML='';
- Object.keys(d.packages||{}).sort().forEach(p=>{
-  const sec=document.createElement('section'); sec.className='package';
-  const h=document.createElement('h2'); h.textContent='P'+p; sec.appendChild(h);
-  const g=document.createElement('div'); g.className='grid';
-  ['Station','Status','Wann','Was / Warum'].forEach(x=>{const c=document.createElement('div');c.className='cell headcell';c.textContent=x;g.appendChild(c)});
-  (d.station_order||Object.keys(stationNames)).forEach(k=>{const s=d.packages[p]?.[k]; if(!s)return;
-   const a=document.createElement('div');a.className='cell station';a.textContent=stationNames[k]||k;g.appendChild(a);
-   const b=document.createElement('div');b.className='cell status '+cls(s.status);b.textContent=s.status;g.appendChild(b);
-   const c=document.createElement('div');c.className='cell when';c.textContent=s.when||'—';g.appendChild(c);
-   const e=document.createElement('div');e.className='cell detail';e.textContent=s.what_why||'—';g.appendChild(e);
-  }); sec.appendChild(g); root.appendChild(sec);
- });
+function emptyStation(){return {status:'noch nicht begonnen',when:'—',what_why:'Noch kein Start persistent gemeldet.',evidence:null}}
+function packageState(stations){const vals=Object.values(stations);if(vals.every(s=>s.status==='erledigt!'))return {cls:'pkg-done',label:'erledigt!'};if(vals.every(s=>s.status==='noch nicht begonnen'))return {cls:'pkg-wait',label:'noch nicht begonnen'};return {cls:'pkg-run',label:'wird bearbeitet / teilweise fortgeschritten'}}
+async function load(manual=false){
+ if(loading)return;loading=true;const btn=document.getElementById('refresh');btn.disabled=true;btn.textContent='↻ Lädt…';
+ try{
+  const r=await fetch(DATA_URL+'?ts='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('Live-Status nicht erreichbar');
+  const d=await r.json();const changed=lastStamp!==null&&lastStamp!==d.updated_at_utc;lastStamp=d.updated_at_utc;
+  const up=document.getElementById('updated');up.textContent=localTime(d.updated_at_utc);up.className='pill'+((changed||manual)?' changed':'');
+  document.getElementById('bottleneck').textContent=d.bottleneck||'—';document.getElementById('bottleneck').classList.remove('error');
+  const root=document.getElementById('packages');root.innerHTML='';const order=d.station_order||defaultOrder;
+  for(let i=1;i<=TOTAL_PACKAGES;i++){
+   const p=String(i).padStart(2,'0');const source=d.packages?.[p]||{};const stations={};order.forEach(k=>stations[k]=source[k]||emptyStation());
+   const ps=packageState(stations);const sec=document.createElement('section');sec.className='package '+ps.cls;
+   const h=document.createElement('h2');h.append(document.createTextNode('P'+p));const badge=document.createElement('span');badge.className='pkg-badge';badge.textContent=ps.label;h.appendChild(badge);sec.appendChild(h);
+   const g=document.createElement('div');g.className='grid';['Station','Status','Wann','Was / Warum'].forEach(x=>{const c=document.createElement('div');c.className='cell headcell';c.textContent=x;g.appendChild(c)});
+   order.forEach(k=>{const s=stations[k];const rc=rowCls(s.status);
+    const a=document.createElement('div');a.className='cell station '+rc;a.textContent=stationNames[k]||k;g.appendChild(a);
+    const b=document.createElement('div');b.className='cell status '+cls(s.status)+' '+rc;b.textContent=s.status;g.appendChild(b);
+    const c=document.createElement('div');c.className='cell when '+rc;c.textContent=s.when||'—';g.appendChild(c);
+    const e=document.createElement('div');e.className='cell detail '+rc;e.textContent=s.what_why||'—';g.appendChild(e);
+   });sec.appendChild(g);root.appendChild(sec);
+  }
+ }catch(e){const b=document.getElementById('bottleneck');b.textContent=e.message;b.classList.add('error')}
+ finally{loading=false;btn.disabled=false;btn.textContent='↻ Aktualisieren'}
 }
-async function tick(){try{await load()}catch(e){const b=document.getElementById('bottleneck');b.textContent=e.message;b.classList.add('error')}}
-tick(); setInterval(tick,5000); document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()}); window.addEventListener('focus',tick);
+document.getElementById('refresh').addEventListener('click',()=>load(true));
+load();setInterval(()=>load(false),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)load(false)});window.addEventListener('focus',()=>load(false));
 </script>
 </body>
 </html>
