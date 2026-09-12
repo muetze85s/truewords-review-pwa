@@ -3,6 +3,8 @@ name: Validate and deploy Review PWA
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'philena-status/status.json'
   workflow_dispatch:
 
 permissions:
@@ -31,19 +33,25 @@ jobs:
           test -f enhancements.js
           test -f coordination.css
           test -f coordination.js
+          test -f philena-status/index.html
+          test -f philena-status/status.json
           python -m json.tool manifest.webmanifest >/dev/null
+          python -m json.tool philena-status/status.json >/dev/null
           node --check sw.js
           node --check enhancements.js
           node --check coordination.js
           awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html > /tmp/review-app.js
           node --check /tmp/review-app.js
           ! grep -H "Philena_chat" index.html manifest.webmanifest icon.svg sw.js enhancements.css enhancements.js coordination.css coordination.js README.md
+          ! grep -R "Philena_chat" philena-status
 
       - name: Prepare public site
         run: |
           rm -rf site
           mkdir site
           cp index.html manifest.webmanifest icon.svg sw.js enhancements.css enhancements.js coordination.css coordination.js .nojekyll site/
+          mkdir -p site/philena-status
+          cp philena-status/index.html site/philena-status/index.html
           python - <<'PY'
           from pathlib import Path
           path = Path('site/index.html')
@@ -56,6 +64,7 @@ jobs:
           grep -q 'enhancements.js' site/index.html
           grep -q 'coordination.css' site/index.html
           grep -q 'coordination.js' site/index.html
+          test -f site/philena-status/index.html
           ! grep -R "Philena_chat" site
 
       - name: Configure Pages
