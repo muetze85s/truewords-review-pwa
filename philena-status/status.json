@@ -75,7 +75,7 @@
     "09": {
       "claude_generator": {"status": "erledigt!", "when": "05:27:47 Uhr", "what_why": "P09 vollständig erzeugt und persistent integriert."},
       "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Recovery-Lauf lief fachlich vollständig, aber Completion-Gate ist nicht erfüllt: Commit 9f57f6cbb44cdc874cb05693161ab752aa3e9adf ist im Repository nicht auflösbar und philena-audit/qa/global-situations-dual-v1/package-09/technical-qa.json fehlt auf codex/global-situation-matcher-v1. Persistenz-Recovery erforderlich."},
-      "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Darf erst nach physisch persistentem P09-Codex-QA beginnen."},
+      "work_qa": {"status": "noch nicht begonnen", "when": "18:20 Uhr", "what_why": "Wartet auf Codex QA: P09-Codex-QA ist nicht vollständig persistent; philena-audit/qa/global-situations-dual-v1/package-09/technical-qa.json fehlt auf codex/global-situation-matcher-v1."},
       "chatgpt_endadjudikation": {"status": "erledigt!", "when": "09:31 Uhr", "what_why": "Historische P09-Endadjudikation liegt vor: 165 Situationen, G001290–G001454. Sie muss nach P09 Codex und gültiger Work-QA nachvalidiert werden; nicht blind verwerfen."},
       "materialisierung": {"status": "erledigt!", "when": "09:39:45 Uhr", "what_why": "Historische P09-Materialisierung physisch vorhanden: 165 Situationen, G001290–G001454. Nachvalidierung darf IDs nicht wiederverwenden."}
     },
