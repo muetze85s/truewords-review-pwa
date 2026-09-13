@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "project": "PHILENA global situations",
-  "updated_at_utc": "2026-09-13T08:03:06Z",
+  "updated_at_utc": "2026-09-13T08:07:10Z",
   "pipeline_order": [
     "claude_generator",
     "codex_qa",
@@ -10,7 +10,7 @@
     "materialisierung"
   ],
   "strict_serial_gate": true,
-  "current_started_package": "10",
+  "current_started_package": "11",
   "next_generator_package": "11",
   "next_canonical_package": "09",
   "next_global_id": "G001661",
@@ -87,7 +87,7 @@
       "materialisierung": {"status": "erledigt!", "when": "09:46:46 Uhr", "what_why": "206 Situationen materialisiert; nächste freie ID G001661."}
     },
     "11": {
-      "claude_generator": {"status": "noch nicht begonnen", "when": "—", "what_why": "P11 ist noch nicht begonnen. Vor dem Start ist ein frischer/geleerter Claude-Kontext erforderlich; persistenter Claude-State steht auf PACKAGE_10_COMPLETE."},
+      "claude_generator": {"status": "wird bearbeitet", "when": "spätestens 08:44 Uhr", "what_why": "P11 läuft tatsächlich: BW0501–BW0550 identifiziert, Quelle geprüft und Kernbereich vollständig gelesen; aktiver Claude-Lauf war nachgewiesen."},
       "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Wartet auf vollständigen P11-Claude-Abschluss und die seriellen P09/P10-Gates."},
       "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "P11 Codex-QA fehlt."},
       "chatgpt_endadjudikation": {"status": "noch nicht begonnen", "when": "—", "what_why": "Vorgelagerte P11-Schritte fehlen."},
