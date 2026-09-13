@@ -1,7 +1,7 @@
 {
   "schema_version": "1.1",
   "project": "PHILENA global situations",
-  "updated_at_utc": "2026-09-13T08:07:10Z",
+  "updated_at_utc": "2026-09-13T04:34:07Z",
   "pipeline_order": [
     "claude_generator",
     "codex_qa",
@@ -14,77 +14,77 @@
   "next_generator_package": "11",
   "next_canonical_package": "09",
   "next_global_id": "G001661",
-  "bottleneck": "P09 Codex Recovery hat eine vollständige Bot-Summary erzeugt, aber der gemeldete Commit ist im Repository nicht auflösbar und die erwarteten P09-QA-Artefakte fehlen auf dem Codex-Branch. Codex-Persistenz muss repariert werden, bevor Work-QA beginnen darf.",
+  "bottleneck": "P09 Codex Recovery hat eine vollständige Bot-Summary erzeugt, aber der gemeldete Commit 9f57f6cbb44cdc874cb05693161ab752aa3e9adf ist im Repository nicht auflösbar und die erwarteten P09-QA-Artefakte fehlen auf codex/global-situation-matcher-v1. Codex-Persistenz muss repariert werden, bevor Work-QA beginnen darf.",
   "packages": {
     "01": {
       "claude_generator": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P01 vollständig erzeugt."},
-      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P01 historisch nicht eingesetzt; historische Ausnahme."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P01 historisch nicht eingesetzt; historische Ausnahme bleibt bestehen, sofern kein konkreter Widerspruch eine Nachvalidierung erzwingt."},
       "work_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P01 QA-Vorbereitung vollständig."},
       "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "114 kanonische Situationen, G000001–G000114."},
-      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P01 physisch materialisiert."}
+      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Physische P01-Datei vorhanden."}
     },
     "02": {
       "claude_generator": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P02 vollständig erzeugt."},
-      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P02 historisch nicht eingesetzt; historische Ausnahme."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P02 historisch nicht eingesetzt; historische Ausnahme bleibt bestehen, sofern kein konkreter Widerspruch eine Nachvalidierung erzwingt."},
       "work_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P02 vollständig vorbereitet."},
       "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "191 Situationen, G000115–G000305."},
-      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P02 physisch materialisiert."}
+      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Physische P02-Datei vorhanden."}
     },
     "03": {
       "claude_generator": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P03 vollständig erzeugt."},
-      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P03 historisch nicht eingesetzt; historische Ausnahme."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex wurde für P03 historisch nicht eingesetzt; historische Ausnahme bleibt bestehen, sofern kein konkreter Widerspruch eine Nachvalidierung erzwingt."},
       "work_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P03 QA vollständig."},
       "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "191 Situationen, G000306–G000496."},
-      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P03 physisch materialisiert."}
+      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Physische P03-Datei vorhanden."}
     },
     "04": {
       "claude_generator": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P04 vollständig erzeugt."},
-      "codex_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "39 technische Cluster geprüft."},
+      "codex_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "39 technische Cluster geprüft; Commit d419cf9."},
       "work_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P04 QA-Vorbereitung vollständig."},
       "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "75 Situationen, G000497–G000571."},
-      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P04 physisch materialisiert."}
+      "materialisierung": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Physische P04-Datei vorhanden."}
     },
     "05": {
       "claude_generator": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "P05 vollständig erzeugt."},
-      "codex_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Technische P05-QA abgeschlossen."},
+      "codex_qa": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "Technische P05-QA abgeschlossen; Commit 29736a37."},
       "work_qa": {"status": "erledigt!", "when": "spätestens vor 05:00 Uhr", "what_why": "P05 QA-Vorbereitung vollständig."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "135 Situationen, G000572–G000706."},
-      "materialisierung": {"status": "erledigt!", "when": "05:55:53 Uhr", "what_why": "135 Situationen materialisiert; nächste ID G000707."}
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "Zeit nicht separat nachweisbar", "what_why": "135 Situationen final entschieden, G000572–G000706."},
+      "materialisierung": {"status": "erledigt!", "when": "05:55:53 Uhr", "what_why": "135 Situationen physisch materialisiert; nächste ID G000707."}
     },
     "06": {
       "claude_generator": {"status": "erledigt!", "when": "vor 04:42 Uhr", "what_why": "Vollständige Claude-Ausgabe liegt vor."},
       "codex_qa": {"status": "erledigt!", "when": "04:42 Uhr", "what_why": "82 Cluster, 50/50 BWs, 0 unread; technische QA abgeschlossen."},
       "work_qa": {"status": "erledigt!", "when": "05:00 Uhr", "what_why": "P06 QA-Vorbereitung abgeschlossen; 82 Cluster geprüft."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "zwischen 05:55:53 und spätestens 06:03:16 Uhr", "what_why": "157 Situationen, G000707–G000863."},
-      "materialisierung": {"status": "erledigt!", "when": "spätestens 06:03:16 Uhr", "what_why": "157 Situationen materialisiert; nächste ID G000864."}
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "zwischen 05:55:53 und spätestens 06:03:16 Uhr", "what_why": "157 Situationen final entschieden, G000707–G000863."},
+      "materialisierung": {"status": "erledigt!", "when": "spätestens 06:03:16 Uhr", "what_why": "157 Situationen physisch materialisiert; nächste ID G000864."}
     },
     "07": {
       "claude_generator": {"status": "erledigt!", "when": "04:39 Uhr", "what_why": "P07 vollständig persistent integriert."},
-      "codex_qa": {"status": "erledigt!", "when": "06:33:21 Uhr", "what_why": "P07 technische Dual-Output-QA vollständig: 142 Cluster, 140 ORANGE, 2 RED."},
-      "work_qa": {"status": "erledigt!", "when": "07:04 Uhr", "what_why": "P07 Work-QA vollständig: 142/142 Cluster geprüft."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "08:06:41 Uhr", "what_why": "215 kanonische Situationen, G000864–G001078."},
-      "materialisierung": {"status": "erledigt!", "when": "08:08:19 Uhr", "what_why": "215 Situationen materialisiert; nächste freie ID G001079."}
+      "codex_qa": {"status": "erledigt!", "when": "06:33:21 Uhr", "what_why": "P07 technische Dual-Output-QA vollständig: 142 Cluster, 140 ORANGE, 2 RED; Commit 5a13aa5."},
+      "work_qa": {"status": "erledigt!", "when": "07:04 Uhr", "what_why": "P07 Work-QA vollständig: 142/142 Cluster am Rohchat geprüft; 11 ORANGE, 131 RED; State auf P08 fortgeschrieben."},
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "08:06:41 Uhr", "what_why": "P07 final semantisch adjudiziert: 215 kanonische Situationen, G000864–G001078; 134 LOW-Einheiten bleiben Coverage-only."},
+      "materialisierung": {"status": "erledigt!", "when": "08:08:19 Uhr", "what_why": "215 Situationen physisch materialisiert und validiert; G000864–G001078, nächste freie ID G001079."}
     },
     "08": {
       "claude_generator": {"status": "erledigt!", "when": "04:39 Uhr", "what_why": "P08 vollständig persistent integriert."},
-      "codex_qa": {"status": "erledigt!", "when": "06:54:06 Uhr", "what_why": "P08 technische Dual-Output-QA vollständig: 156 Cluster, 154 ORANGE, 2 RED."},
-      "work_qa": {"status": "erledigt!", "when": "09:08 Uhr", "what_why": "P08 Pflicht-Nachvalidierung gegen Codex abgeschlossen; seriell freigegeben."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "08:10:55 Uhr", "what_why": "Historische Endadjudikation liegt vor; nachträglich seriell validiert."},
-      "materialisierung": {"status": "erledigt!", "when": "08:12:04 Uhr", "what_why": "Historische Materialisierung G001079–G001289 liegt vor."}
+      "codex_qa": {"status": "erledigt!", "when": "06:54:06 Uhr", "what_why": "P08 technische Dual-Output-QA vollständig: 156 Cluster, 154 ORANGE, 2 RED; Commit b307425208b92e9e56d62f472d2f81f7f0b07f72."},
+      "work_qa": {"status": "erledigt!", "when": "09:08 Uhr", "what_why": "P08 Pflicht-Nachvalidierung gegen Codex abgeschlossen: technische Topologie identisch (156 Cluster; 16×1↔n; 140 Claude-only); Codex-RED-Fälle P08-C146/P08-C155 sind in Work-QA vollständig abgedeckt. Seriell freigegeben."},
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "08:10:55 Uhr", "what_why": "Historische Endadjudikation liegt vor; P08 ist nachträglich seriell gegen Codex validiert."},
+      "materialisierung": {"status": "erledigt!", "when": "08:12:04 Uhr", "what_why": "Historische Materialisierung G001079–G001289 liegt vor; Work-QA-Nachvalidierung ergab keinen Änderungsbedarf an der QA-Vorstrukturierung."}
     },
     "09": {
       "claude_generator": {"status": "erledigt!", "when": "05:27:47 Uhr", "what_why": "P09 vollständig erzeugt und persistent integriert."},
-      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Recovery-Lauf war fachlich vollständig, aber das Persistenz-Gate ist nicht erfüllt; QA-Artefakte fehlen auf dem Codex-Branch."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Recovery-Lauf lief fachlich vollständig, aber Completion-Gate ist nicht erfüllt: Commit 9f57f6cbb44cdc874cb05693161ab752aa3e9adf ist im Repository nicht auflösbar und philena-audit/qa/global-situations-dual-v1/package-09/technical-qa.json fehlt auf codex/global-situation-matcher-v1. Persistenz-Recovery erforderlich."},
       "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Darf erst nach physisch persistentem P09-Codex-QA beginnen."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "09:31 Uhr", "what_why": "Historische P09-Endadjudikation: 165 Situationen, G001290–G001454; nach Codex/Work-QA nachvalidieren."},
-      "materialisierung": {"status": "erledigt!", "when": "09:39:45 Uhr", "what_why": "Historische P09-Materialisierung: 165 Situationen, G001290–G001454."}
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "09:31 Uhr", "what_why": "Historische P09-Endadjudikation liegt vor: 165 Situationen, G001290–G001454. Sie muss nach P09 Codex und gültiger Work-QA nachvalidiert werden; nicht blind verwerfen."},
+      "materialisierung": {"status": "erledigt!", "when": "09:39:45 Uhr", "what_why": "Historische P09-Materialisierung physisch vorhanden: 165 Situationen, G001290–G001454. Nachvalidierung darf IDs nicht wiederverwenden."}
     },
     "10": {
       "claude_generator": {"status": "erledigt!", "when": "07:00:39 Uhr", "what_why": "P10 Generatorartefakte sind vollständig persistent."},
       "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "P10 wartet auf den seriellen Abschluss der P09-Codex-/Work-QA-Nachvalidierung."},
       "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Historischer Work-QA-Lauf liegt vor; gültige Nachvalidierung erst nach P10 Codex-QA."},
-      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "09:44:46 Uhr", "what_why": "Historische P10-Endadjudikation: 206 Situationen, G001455–G001660; nach Codex/Work-QA nachvalidieren."},
-      "materialisierung": {"status": "erledigt!", "when": "09:46:46 Uhr", "what_why": "206 Situationen materialisiert; nächste freie ID G001661."}
+      "chatgpt_endadjudikation": {"status": "erledigt!", "when": "09:44:46 Uhr", "what_why": "Historische P10-Endadjudikation liegt vor: 206 Situationen, G001455–G001660; CL-G002460 wurde auf NON_CONFLICT korrigiert. Nach P10 Codex/Work-QA gezielt nachvalidieren."},
+      "materialisierung": {"status": "erledigt!", "when": "09:46:46 Uhr", "what_why": "206 Situationen physisch materialisiert und validiert; G001455–G001660. Physisch nächste freie ID ist G001661."}
     },
     "11": {
       "claude_generator": {"status": "wird bearbeitet", "when": "spätestens 08:44 Uhr", "what_why": "P11 läuft tatsächlich: BW0501–BW0550 identifiziert, Quelle geprüft und Kernbereich vollständig gelesen; aktiver Claude-Lauf war nachgewiesen."},
