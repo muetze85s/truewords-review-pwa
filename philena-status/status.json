@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "project": "PHILENA global situations",
+  "updated_at_utc": "2026-09-13T03:01:42Z",
+  "pipeline_order": [
+    "claude_generator",
+    "codex_qa",
+    "work_qa",
+    "chatgpt_endadjudikation",
+    "materialisierung"
+  ],
+  "strict_serial_gate": true,
+  "packages": {
+    "08": {
+      "codex_qa": {"status": "erledigt!", "when": "06:54:06 Uhr", "what_why": "Technische Dual-Output-QA vollständig."},
+      "work_qa": {"status": "erledigt!", "when": "09:08 Uhr", "what_why": "Pflicht-Nachvalidierung gegen Codex abgeschlossen; seriell freigegeben."}
+    },
+    "09": {
+      "claude_generator": {"status": "erledigt!", "when": "05:27:47 Uhr", "what_why": "Generatorausgabe vollständig persistent."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Codex QA für P09 ist noch nicht vollständig persistent abgeschlossen."},
+      "work_qa": {"status": "noch nicht begonnen", "when": "10:01 Uhr", "what_why": "Wartet auf Codex QA. Historischer Work-QA-Lauf ist unter der strikt seriellen Pipeline erst nach P09-Codex-QA und Nachvalidierung gültig."}
+    },
+    "10": {
+      "claude_generator": {"status": "erledigt!", "when": "07:00:39 Uhr", "what_why": "Generatorausgabe vollständig persistent."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "P09 liegt in der seriellen Pipeline davor."},
+      "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Historischer Work-QA-Lauf muss nach P10-Codex-QA nachvalidiert werden."}
+    },
+    "11": {
+      "claude_generator": {"status": "wird bearbeitet", "when": "spätestens 08:44 Uhr", "what_why": "Generatorlauf noch nicht vollständig persistent abgeschlossen."},
+      "codex_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Wartet auf vollständigen Generatorabschluss und frühere Pipeline-Packages."},
+      "work_qa": {"status": "noch nicht begonnen", "when": "—", "what_why": "Vorgelagerte Gates fehlen."}
+    }
+  },
+  "current_work_qa_gate": "P09 Codex QA"
+}
