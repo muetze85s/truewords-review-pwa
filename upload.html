@@ -36,6 +36,19 @@
         </div>
       </section>
 
+      <!-- PHILENA: Einstieg in die anderen Werkzeuge. Nur auf dieser Seite, die der Worker allein Konten mit Upload-Recht
+           (Philipp) ausliefert; Dashboard und Analyse liegen hinter Cloudflare Access, die Pruefseite hinter der TrueWords-Anmeldung. -->
+      <section class="card" id="philena" aria-labelledby="philena-titel">
+        <div class="eyebrow">PHILENA</div>
+        <h2 id="philena-titel">Weitere Werkzeuge</h2>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px">
+          <a class="button primary" style="padding:.8rem .4rem;border-radius:999px" href="https://philena-orchestrator-v1.das-sind-meine.workers.dev/" target="_blank" rel="noopener">Dashboard</a>
+          <a class="button secondary" style="padding:.8rem .4rem;border-radius:999px;border:1px solid var(--portal-line)" href="https://philena-orchestrator-v1.das-sind-meine.workers.dev/analyse/" target="_blank" rel="noopener">Analyse</a>
+          <a class="button secondary" style="padding:.8rem .4rem;border-radius:999px;border:1px solid var(--portal-line)" href="https://pruefen.truewords-paaruebersetzer.online/pruefen" target="_blank" rel="noopener">Prüfseite</a>
+        </div>
+        <p class="intro">Dashboard und Analyse fragen die Cloudflare-Anmeldung ab, die Prüfseite dein TrueWords-Konto.</p>
+      </section>
+
       <form id="upload-form">
         <div class="upload-bento">
           <div class="upload-stack">
